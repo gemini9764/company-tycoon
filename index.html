@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>컴퍼니 타이쿤</title>
+<link href="https://cdn.jsdelivr.net/gh/quiple/galmuri/dist/Galmuri11.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/gh/quiple/galmuri/dist/Galmuri9.css" rel="stylesheet">
+<link rel="stylesheet" href="src/styles/main.css">
+</head>
+<body>
+<div id="app">
+  <div id="hud"></div>
+  <div id="stage">
+    <div class="panel" id="left">
+      <div class="panel-head"><span>회사 현황</span><span id="left-date" class="c-dim"></span></div>
+      <div class="panel-body" id="left-body"></div>
+    </div>
+    <div id="board">
+      <div id="modebar">
+        <button class="mode-tab on" data-mode="city">M&amp;A 모드</button>
+        <button class="mode-tab" data-mode="store">경영 모드</button>
+        <span class="hint" id="board-hint"></span>
+      </div>
+      <div id="canvas-wrap"><canvas id="cv"></canvas></div>
+    </div>
+    <div class="panel" id="right">
+      <div id="tabs"></div>
+      <div class="panel-body" id="right-body"></div>
+    </div>
+  </div>
+  <div id="news"><span class="tag">속보</span><span id="news-line">시장이 개장했습니다.</span></div>
+</div>
+<div id="modal-layer"><div class="modal" id="modal"></div></div>
+<div id="toasts"></div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

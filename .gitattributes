@@ -1,0 +1,10 @@
+* text=auto eol=lf
+
+# cmd.exe 는 배치 파일을 실행 중 다시 읽는다. LF 로 저장되면 파싱이 깨지므로
+# .bat 은 반드시 CRLF 로 체크아웃한다.
+*.bat text eol=crlf
+
+# macOS 더블클릭 실행기. LF 고정.
+*.command text eol=lf
+
+*.png binary

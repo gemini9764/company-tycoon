@@ -1,0 +1,17 @@
+{
+  "name": "company-tycoon",
+  "version": "0.3.0",
+  "description": "경영 시뮬레이션 프로토타입 — 구멍가게에서 시작해 M&A로 그룹을 키운다",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node tools/serve.mjs",
+    "build": "node tools/build.mjs",
+    "smoke": "npm run build && node tools/smoke.mjs",
+    "sim": "npm run build && node tools/sim.mjs",
+    "test": "npm run smoke"
+  },
+  "devDependencies": {
+    "jsdom": "^27.0.0"
+  }
+}
