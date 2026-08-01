@@ -11,7 +11,7 @@ function setS(next) { S = next; return S; }
 
 function newState(companyName) {
   const s = {
-    v: 3,
+    v: 5,          // 맵이 7×7 블록으로 커져 구버전 세이브의 lot 좌표를 못 쓴다
     day: 1, speed: 1, mode: 'city',
     co: {
       name: companyName || '한별상사',
@@ -45,21 +45,24 @@ function newState(companyName) {
   return s;
 }
 
-/* NPC 회사 23개 — 도시 맵 격자에 배치. 규모는 셔플해 위치와 무관하게 흩뿌린다. */
+/* NPC 회사 23개 — 도시 맵 격자에 배치. 규모는 셔플해 위치와 무관하게 흩뿌린다.
+   블록은 7×7=49칸이고 그중 24칸만 회사가 쓴다. 남는 칸은 렌더가 도심 오피스·
+   아파트·상가·공원·논밭으로 채운다. 회사 수는 그대로라 밸런스에는 영향이 없다. */
 function seedMarket(s) {
   const lots = [];
-  for (let j = 0; j < 4; j++) for (let i = 0; i < 6; i++) lots.push({ tx: 1 + i * 3, ty: 1 + j * 3 });
+  for (let j = 0; j < 7; j++) for (let i = 0; i < 7; i++) lots.push({ tx: 1 + i * 3, ty: 1 + j * 3 });
   for (let i = lots.length - 1; i > 0; i--) { const j = rint(0, i); [lots[i], lots[j]] = [lots[j], lots[i]]; }
   s.co.lot = lots.pop();   // 기획서: 초기 설립 위치 랜덤
 
+  const seats = lots.slice(0, 23);
   const used = new Set();
-  s.market = lots.map((lot, i) => {
+  s.market = seats.map((lot, i) => {
     const sector = pick(SECTOR_KEYS);
     let nm;
     do { nm = pick(NAME_A) + pick(SECTORS[sector].suf); } while (used.has(nm));
     used.add(nm);
     // 6천만 ~ 15조. 등급 상한과 맞물려 초반엔 소형사만 손댈 수 있다.
-    const t = i / (lots.length - 1);
+    const t = i / (seats.length - 1);
     const cap = Math.round(6e7 * Math.pow(250000, t) * rnd(0.7, 1.45));
     const diff = cap > 2e12 ? 3 : cap > 1e11 ? 2 : cap > 3e9 ? 1 : 0;
     const listed = cap > 2e9 && chance(0.78);
