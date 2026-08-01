@@ -9,9 +9,11 @@
     "build": "node tools/build.mjs",
     "smoke": "npm run build && node tools/smoke.mjs",
     "sim": "npm run build && node tools/sim.mjs",
-    "test": "npm run smoke"
+    "test": "npm run smoke",
+    "shot": "npm run build && node tools/shot.mjs"
   },
   "devDependencies": {
+    "@napi-rs/canvas": "^1.0.3",
     "jsdom": "^27.0.0"
   }
 }
