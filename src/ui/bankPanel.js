@@ -34,7 +34,7 @@ function tabBank() {
     </div></div>`;
 
   if (s.bank.loans.length) h += s.bank.loans.map((l, i) => `<div class="row tight">
-    <h4>${l.kind === 'acq' ? '인수금융' : '운영자금'}<span style="font-size:9px" class="c-dim">${l.months}개월 남음</span></h4>
+    <h4>${l.kind === 'acq' ? '인수금융' : '운영자금'}<span style="font-size:10px;font-family:var(--f-sm)" class="c-dim">${l.months}개월 남음</span></h4>
     <div class="kv"><span>잔액</span><b class="c-blood">${won(l.left)}</b></div>
     <div class="kv"><span>월 상환액</span><b>${won(l.due)} · ${l.rate.toFixed(2)}%</b></div>
     ${l.collateral ? `<div class="meta">담보 — ${esc(l.collateral)} (상환 실패 시 압류)</div>` : ''}
@@ -49,8 +49,8 @@ function tabBank() {
     <div class="btn-row"><button class="btn ${s.bank.insured ? 'blood' : 'jade'}" id="ins">${s.bank.insured ? '해지' : '가입'}</button></div>
   </div>`;
 
-  $('right-body').innerHTML = h;
-  const R = $('right-body');
+  $('panel-body').innerHTML = h;
+  const R = $('panel-body');
   R.querySelectorAll('[data-loan]').forEach(b => b.onclick = () => { takeLoan(s, 'op', +b.dataset.loan); renderAll(); });
   R.querySelectorAll('[data-repay]').forEach(b => b.onclick = () => { repayLoan(s, s.bank.loans[+b.dataset.repay]); renderAll(); });
   $('ins').onclick = () => { s.bank.insured = !s.bank.insured; renderRight(); };
@@ -74,7 +74,7 @@ function openAcqLoan(tgt, price) {
       <div class="kv"><span>부족액</span><b class="c-blood">${won(need)}</b></div>
       <div class="kv"><span>대출 한도</span><b class="c-gold">${won(limit)}</b></div>
       <div class="kv"><span>금리 / 기간</span><b>${rate.toFixed(2)}% / ${BAL.loanTermMonths}개월</b></div>
-      <p style="margin-top:10px;font-size:11px" class="c-dim">인수 기업이 담보로 설정됩니다. 상환에 실패하면 해당 계열사가 압류됩니다.</p>`,
+      <p style="margin-top:10px;font-size:12px" class="c-dim">인수 기업이 담보로 설정됩니다. 상환에 실패하면 해당 계열사가 압류됩니다.</p>`,
     choices: [
       { label: `${won(need)} 대출받고 인수 완료`, dis: need > limit,
         sub: need > limit ? `한도 ${won(limit)} 초과 — 인수 불가` : `월 상환액 약 ${won(monthlyDue(need, rate))}`,

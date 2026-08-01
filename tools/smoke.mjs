@@ -4,6 +4,12 @@
  */
 import { boot, startGame, resolveModals } from './harness.mjs';
 
+/* 독 버튼은 토글이다. 이미 열려 있으면 다시 눌러 닫히므로 상태를 맞춘다. */
+const openTab = (doc, id) => {
+  if (!doc.getElementById('panel-layer').classList.contains('on')) doc.querySelector(`[data-t="${id}"]`).click();
+  else if (!doc.querySelector(`[data-t="${id}"]`).classList.contains('on')) doc.querySelector(`[data-t="${id}"]`).click();
+};
+
 const pass = [], fail = [];
 const check = (name, ok, detail = '') =>
   (ok ? pass : fail).push(`${ok ? '✓' : '✗'} ${name}${detail ? ' — ' + detail : ''}`);
@@ -19,28 +25,29 @@ try {
   win.eval('for (let i = 0; i < 300; i++) game.tickDay();');
   check('300일 진행', game.S.day >= 300, `${game.S.day}일차 · 자금 ${game.won(game.S.co.cash)}`);
 
-  for (const t of ['staff', 'stock', 'bank', 'rumor', 'inbox']) {
+  for (const t of ['co', 'staff', 'stock', 'bank', 'rumor', 'inbox']) {
     const b = doc.querySelector(`[data-t="${t}"]`);
-    if (b.disabled) { check(`탭 ${t}`, true, '잠김(정상)'); continue; }
+    if (b.disabled) { check(`창 ${t}`, true, '잠김(정상)'); continue; }
     b.click();
-    const html = doc.getElementById('right-body').innerHTML;
-    check(`탭 ${t}`, html.length > 50 && !/undefined|NaN/.test(html), `${html.length}b`);
+    const html = doc.getElementById('panel-body').innerHTML;
+    const open = doc.getElementById('panel-layer').classList.contains('on');
+    check(`창 ${t}`, open && html.length > 50 && !/undefined|NaN/.test(html), `${html.length}b`);
   }
-  win.eval('game.S.shaman.unlocked = true; game.renderRight();');
+  win.eval('game.S.shaman.unlocked = true; game.renderDock();');
   doc.querySelector('[data-t="shaman"]').click();
-  check('탭 shaman', doc.getElementById('right-body').innerHTML.length > 50);
+  check('창 shaman', doc.getElementById('panel-body').innerHTML.length > 50);
 
-  doc.querySelector('[data-t="staff"]').click();
+  openTab(doc, 'staff');
   doc.querySelector('[data-team]').click();
   check('협상단 편성', game.teamOf(game.S).length > 0);
 
   win.eval('game.S.co.cash = 1e9;');
-  doc.querySelector('[data-t="staff"]').click();
+  openTab(doc, 'staff');
   const before = game.S.staff.length;
   doc.querySelector('[data-hire]').click();
   check('직원 영입', game.S.staff.length === before + 1);
 
-  doc.querySelector('[data-t="bank"]').click();
+  openTab(doc, 'bank');
   const loan = doc.querySelector('[data-loan]:not([disabled])');
   if (loan) loan.click();
   check('대출 실행', game.debtTotal(game.S) > 0, game.won(game.debtTotal(game.S)));
@@ -69,11 +76,11 @@ try {
   check('캔버스 2모드 드로우', true);
 
   win.eval('game.S.co.cash = 1e11;');
-  doc.querySelector('[data-t="stock"]').click();
+  openTab(doc, 'stock');
   const buy = doc.querySelector('[data-buy]:not([disabled])');
   if (buy) buy.click();
   check('주식 매수', Object.keys(game.S.stock.holds).length > 0);
-  doc.querySelector('[data-t="stock"]').click();
+  openTab(doc, 'stock');
   const sell = doc.querySelector('[data-sell]');
   if (sell) sell.click();
   check('주식 매도', true);
@@ -85,7 +92,8 @@ try {
   win.eval('game.saveGame(true)');
   check('저장', ['artifact', 'local', 'memory'].includes(game.Store.mode), game.Store.mode);
 
-  const all = ['hud', 'left-body', 'right-body'].map(text).join(' ');
+  doc.querySelector('[data-t="co"]').click();          // 회사 창 내용까지 훑는다
+  const all = ['hud', 'dock', 'panel-body'].map(text).join(' ');
   check('출력 무결성', !/NaN|undefined|Infinity/.test(all),
         (all.match(/.{0,30}(NaN|undefined|Infinity)/) || [''])[0]);
 } catch (e) {

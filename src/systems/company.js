@@ -52,12 +52,12 @@ function checkTier(s) {
     openModal({
       title: '등급 상승',
       body: `<div style="text-align:center;padding:8px 0">
-        <div style="font-size:11px" class="c-dim">${cur.name}</div>
-        <div style="font-size:26px;margin:10px 0" class="c-gold">▼</div>
-        <div style="font-size:22px">${nt.name}</div>
-        <div style="margin-top:14px;font-size:11px">다음 목표 — ${nt.goal}</div>
-        ${nt.unlock ? `<div style="margin-top:6px;font-size:11px" class="c-sky">${nt.unlock} 해금</div>` : ''}
-        <div style="margin-top:10px;font-size:10px" class="c-dim">인수 가능한 기업 규모 상한이 올라갑니다.</div>
+        <div style="font-size:12px" class="c-dim">${cur.name}</div>
+        <div style="font-size:24px;margin:10px 0" class="c-gold">▼</div>
+        <div style="font-size:24px">${nt.name}</div>
+        <div style="margin-top:14px;font-size:12px">다음 목표 — ${nt.goal}</div>
+        ${nt.unlock ? `<div style="margin-top:6px;font-size:12px" class="c-sky">${nt.unlock} 해금</div>` : ''}
+        <div style="margin-top:10px;font-size:10px;font-family:var(--f-sm)" class="c-dim">인수 가능한 기업 규모 상한이 올라갑니다.</div>
       </div>`,
       actions: [{ label: '계속', cls: 'gold' }],
     });

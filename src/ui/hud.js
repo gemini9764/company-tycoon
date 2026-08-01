@@ -6,7 +6,6 @@ import { $, esc, won } from '../core/util.js';
 import { creditIdx, creditName } from '../systems/company.js';
 import { HELP_HTML } from './help.js';
 import { openModal } from './modal.js';
-import { setTab, TAB } from './tabs.js';
 
 /* ── HUD ─────────────────────────────────────────────────── */
 function renderHud() {
@@ -22,14 +21,12 @@ function renderHud() {
     <div class="hud-stat"><i>부채</i><b class="${debt ? 'c-blood' : 'c-dim'}">${debt ? won(debt) : '없음'}</b></div>
     <div class="hud-spacer"></div>
     <div class="hud-ctrl">
-      <span style="font-size:10px;color:#8F9BC4;margin-right:6px">${Math.floor(s.day / 30) + 1}년차 ${s.day % 30 || 30}일</span>
+      <span class="hud-day">${Math.floor(s.day / 30) + 1}년차 ${s.day % 30 || 30}일</span>
       ${[0, 1, 2, 4].map(v => `<button class="spd ${s.speed === v ? 'on' : ''}" data-spd="${v}">${v ? v + 'x' : '❚❚'}</button>`).join('')}
-      <button class="bell ${s.inbox.some(i => !i.read) ? 'has' : ''}" id="bell">✉</button>
       <button class="mini-btn" id="btn-help">?</button>
       <button class="mini-btn" id="btn-save">저장</button>
     </div>`;
   $('hud').querySelectorAll('[data-spd]').forEach(b => b.onclick = () => { S.speed = +b.dataset.spd; renderHud(); });
-  $('bell').onclick = () => { setTab('inbox'); };
   $('btn-save').onclick = () => saveGame();
   $('btn-help').onclick = () => openModal({ title: '조작 · 핵심 루프', body: HELP_HTML });
 }

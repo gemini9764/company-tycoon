@@ -28,6 +28,8 @@ import * as shamanMod from './systems/shaman.js';
 import * as stockMod from './systems/stock.js';
 import * as bankPanelMod from './ui/bankPanel.js';
 import * as companyPopupMod from './ui/companyPopup.js';
+import * as dockMod from './ui/dock.js';
+import * as iconsMod from './ui/icons.js';
 import * as hudMod from './ui/hud.js';
 import * as panelLeftMod from './ui/panelLeft.js';
 import * as toastMod from './ui/toast.js';
@@ -39,7 +41,7 @@ const api = {
   ...balanceMod, ...clockMod, ...dataMod, ...deriveMod, ...loopMod, ...stateMod, ...storageMod, ...utilMod,
   ...canvasMod, ...bankMod, ...companyMod, ...economyMod, ...endingMod, ...eventsMod, ...mnaMod,
   ...rumorMod, ...shamanMod, ...stockMod,
-  ...bankPanelMod, ...companyPopupMod, ...hudMod, ...panelLeftMod, ...toastMod, ...uiMod, ...modalMod, ...tabsMod,
+  ...bankPanelMod, ...companyPopupMod, ...dockMod, ...iconsMod, ...hudMod, ...panelLeftMod, ...toastMod, ...uiMod, ...modalMod, ...tabsMod,
 };
 
 // S 는 교체되는 라이브 바인딩이라 스프레드로는 최신값이 안 잡힌다. getter로 노출한다.

@@ -6,15 +6,17 @@ import { capCeiling } from '../systems/company.js';
 import { dailyRetail, managersHave, managersNeeded, pmi, synergyParts } from '../systems/economy.js';
 import { renderHud } from './hud.js';
 import { toast } from './toast.js';
+import { TAB } from './tabs.js';
 
-/* ── 좌측: 회사 현황 ─────────────────────────────────────── */
+/* ── 회사 현황 창 ────────────────────────────────────────── */
 function renderLeft() {
+  if (TAB !== 'co') return;                 // 회사 창이 닫혀 있으면 그릴 곳이 없다
   const s = S, t = TIERS[s.co.tier], next = TIERS[s.co.tier + 1];
   const net = s.co.revToday - s.co.costToday;
   let h = '';
 
   h += `<div class="row">
-    <h4>${t.name}<span class="c-dim" style="font-size:9px">${s.co.tier + 1}/${TIERS.length}</span></h4>
+    <h4>${t.name}<span class="c-dim" style="font-size:10px;font-family:var(--f-sm)">${s.co.tier + 1}/${TIERS.length}</span></h4>
     <div class="gauge sm" style="margin-top:5px"><i style="width:${(s.co.tier + 1) / TIERS.length * 100}%;background:var(--gold)"></i></div>
     <div class="meta">다음 목표 — ${next ? t.goal : '최종 등급 · 순위 경쟁 지속'}</div>
     <div class="meta">인수 가능 규모 상한 ${capCeiling(s) === Infinity ? '무제한' : won(capCeiling(s))}</div>
@@ -39,9 +41,9 @@ function renderLeft() {
       <h4 class="c-sky">진행 중 M&amp;A</h4>
       <div style="font-size:12px;margin:3px 0">${esc(n.name)}</div>
       <div class="meta">난이도 ${DIFFS[n.diff].name} · 협상단 ${n.team.length}명 · 예상 프리미엄 +${Math.round(n.prem * 100)}%</div>
-      <div style="margin-top:6px;font-size:9px">진행도</div>
+      <div style="margin-top:6px;font-size:10px;font-family:var(--f-sm)">진행도</div>
       <div class="gauge"><i style="width:${n.progress}%;background:var(--sky)"></i><span>${pct(n.progress)}</span></div>
-      <div style="margin-top:5px;font-size:9px">성공도</div>
+      <div style="margin-top:5px;font-size:10px;font-family:var(--f-sm)">성공도</div>
       <div class="gauge"><i style="width:${n.success}%;background:${n.success > 60 ? 'var(--jade)' : n.success > 30 ? 'var(--gold)' : 'var(--blood)'}"></i><span>${pct(n.success)}</span></div>
       <div class="meta">진행도 100% 도달 시 성공도 확률로 인수 여부가 결정됩니다.</div>
     </div>`;
@@ -52,9 +54,9 @@ function renderLeft() {
 
   h += `<div class="row">
     <h4>리스크</h4>
-    <div style="font-size:9px;margin-top:4px">미신지수 ${Math.round(s.co.mistrust)}/100</div>
+    <div style="font-size:10px;font-family:var(--f-sm);margin-top:4px">미신지수 ${Math.round(s.co.mistrust)}/100</div>
     <div class="gauge sm"><i style="width:${s.co.mistrust}%;background:var(--mauve)"></i></div>
-    <div style="font-size:9px;margin-top:5px">수사 압박 ${Math.round(s.co.probe)}/100</div>
+    <div style="font-size:10px;font-family:var(--f-sm);margin-top:5px">수사 압박 ${Math.round(s.co.probe)}/100</div>
     <div class="gauge sm"><i style="width:${s.co.probe}%;background:var(--blood)"></i></div>
     <div class="meta">${s.co.mistrust > BAL.mistrustPenaltyAt ? '<b class="c-mauve">미신지수 과다 — 협상 성공도 증가율 -22%</b>' : '두 수치가 100에 닿으면 배드 엔딩으로 직행합니다.'}</div>
   </div>`;
@@ -82,8 +84,7 @@ function renderLeft() {
       }).join('')}</div>`;
   }
 
-  $('left-body').innerHTML = h;
-  $('left-date').textContent = `${s.day}일차`;
+  $('panel-body').innerHTML = h;
   const ad = (mul) => { const c = adCost(s, mul); if (s.co.cash < c) return toast('자금이 부족합니다', 'bad');
     s.co.cash -= c; s.co.marketing = Math.min(BAL.marketingCap, s.co.marketing + 0.12 * mul);
     toast(`인지도 +${(0.12 * mul).toFixed(2)}`, 'good'); renderLeft(); renderHud(); };

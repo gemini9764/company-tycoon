@@ -10,34 +10,27 @@ import { doGut, shamanFee } from '../systems/shaman.js';
 import { buyStock, sellStock } from '../systems/stock.js';
 import { tabBank } from './bankPanel.js';
 import { renderHud } from './hud.js';
-import { renderAll } from './index.js';
+import { renderAll, renderPanel } from './index.js';
 import { renderLeft } from './panelLeft.js';
+import { renderDock } from './dock.js';
 import { toast } from './toast.js';
 
-let TAB = 'staff';
+/* 하단 버튼으로 여는 창이 하나뿐이라, 지금 열려 있는 창의 id 를 여기서 쥔다.
+   null 이면 닫힌 상태다. */
+let TAB = null;
 
-/** 우측 패널 활성 탭. 외부에서는 이 함수로만 바꾼다. */
-function setTab(id) { TAB = id; renderRight(); }
+const TABS = ['staff', 'stock', 'bank', 'shaman', 'rumor', 'inbox'];
 
-/* ── 우측 탭 ─────────────────────────────────────────────── */
-const TABS = [
-  { id:'staff',  n:'직원' },
-  { id:'stock',  n:'주식' },
-  { id:'bank',   n:'은행' },
-  { id:'shaman', n:'무당' },
-  { id:'rumor',  n:'찌라시' },
-  { id:'inbox',  n:'알림' },
-];
+let STOCK_VIEW = 'all';   // 주식 창 안의 서브탭: 시장 전체 / 관심
+
+/** 창을 열고 닫는 유일한 통로. 같은 버튼을 다시 누르면 닫힌다. */
+function setTab(id) {
+  TAB = (TAB === id) ? null : id;
+  renderDock(); renderPanel();
+}
 
 function renderRight() {
-  const s = S;
-  $('tabs').innerHTML = TABS.map(t => {
-    const locked = t.id === 'shaman' && !s.shaman.unlocked;
-    const dot = t.id === 'inbox' && s.inbox.some(i => !i.read) ? '<span class="dot"></span>'
-              : t.id === 'rumor' && s.rumors.some(r => !r.used) ? '<span class="dot"></span>' : '';
-    return `<button class="tab ${TAB === t.id ? 'on' : ''}" data-t="${t.id}" ${locked ? 'disabled style="opacity:.4"' : ''}>${t.n}${dot}</button>`;
-  }).join('');
-  $('tabs').querySelectorAll('[data-t]').forEach(b => b.onclick = () => { TAB = b.dataset.t; renderRight(); });
+  if (!TABS.includes(TAB)) return;          // 닫혀 있거나 회사 창이면 할 일 없음
   ({ staff: tabStaff, stock: tabStock, bank: tabBank, shaman: tabShaman, rumor: tabRumor, inbox: tabInbox })[TAB]();
 }
 
@@ -56,9 +49,9 @@ function tabStaff() {
     <div class="meta">협상단에 넣지 않은 직원이 계열사를 관리합니다. 계열사 ${BAL.subsPerManager}개당 1명이 필요하고, 모자라면 그룹 운영 효율이 계열사 수익 전체에서 깎입니다. 협상단에 몰아넣을수록 인수는 빨라지지만 그룹은 새어나갑니다.</div>
   </div>`;
 
-  h += `<div class="row"><h4>사원 ${s.staff.length}명<span class="c-dim" style="font-size:9px">월 급여 ${won(s.staff.reduce((a, e) => a + e.salary, 0))}</span></h4></div>`;
+  h += `<div class="row"><h4>사원 ${s.staff.length}명<span class="c-dim" style="font-size:10px;font-family:var(--f-sm)">월 급여 ${won(s.staff.reduce((a, e) => a + e.salary, 0))}</span></h4></div>`;
   h += s.staff.map(e => `<div class="row tight">
-      <h4>${esc(e.name)} <span style="font-size:9px" class="${e.onTeam ? 'c-sky' : 'c-dim'}">${e.onTeam ? '협상단' : 'Lv.' + e.lv}</span></h4>
+      <h4>${esc(e.name)} <span style="font-size:10px;font-family:var(--f-sm)" class="${e.onTeam ? 'c-sky' : 'c-dim'}">${e.onTeam ? '협상단' : 'Lv.' + e.lv}</span></h4>
       <div>${chip(e)}</div>
       <div class="meta">${e.trait.name} — ${e.trait.desc} · 월급 ${won(e.salary)}</div>
       <div class="btn-row">
@@ -70,7 +63,7 @@ function tabStaff() {
   h += `<div class="row" style="margin-top:10px"><h4>스카웃 시장</h4>
     <div class="meta">능력치가 높을수록 연봉 요구치가 올라갑니다.</div></div>`;
   h += s.recruits.map((e, i) => `<div class="row tight">
-      <h4>${esc(e.name)} <span class="c-dim" style="font-size:9px">${e.grade}급</span></h4>
+      <h4>${esc(e.name)} <span class="c-dim" style="font-size:10px;font-family:var(--f-sm)">${e.grade}급</span></h4>
       <div>${chip(e)}</div>
       <div class="meta">${e.trait.name} — ${e.trait.desc}</div>
       <div class="btn-row">
@@ -78,8 +71,8 @@ function tabStaff() {
       </div></div>`).join('');
   h += `<button class="btn wide" id="reroll" style="margin-top:4px">시장 새로고침 ${won(rerollCost(s))}</button>`;
 
-  $('right-body').innerHTML = h;
-  const R = $('right-body');
+  $('panel-body').innerHTML = h;
+  const R = $('panel-body');
   R.querySelectorAll('[data-team]').forEach(b => b.onclick = () => {
     const e = s.staff.find(x => x.id === b.dataset.team);
     if (s.nego && e.onTeam) return toast('협상 중에는 협상단을 뺄 수 없습니다', 'bad');
@@ -132,7 +125,7 @@ function tabStock() {
     if (!c) return '';
     const pl = (c.price - hd.avg) * hd.qty;
     return `<div class="row tight">
-      <h4>${esc(c.name)}<span class="${pl >= 0 ? 'c-jade' : 'c-blood'}" style="font-size:10px">${pl >= 0 ? '+' : ''}${won(pl)}</span></h4>
+      <h4>${esc(c.name)}<span class="${pl >= 0 ? 'c-jade' : 'c-blood'}" style="font-size:10px;font-family:var(--f-sm)">${pl >= 0 ? '+' : ''}${won(pl)}</span></h4>
       <div class="meta">${hd.qty.toLocaleString()}주 · 평단 ${Math.round(hd.avg).toLocaleString()} · 현재가 ${c.price.toLocaleString()}</div>
       <div class="btn-row">
         <button class="btn" data-sell="${id}" data-q="${Math.ceil(hd.qty / 2)}">절반 매도</button>
@@ -140,26 +133,38 @@ function tabStock() {
       </div></div>`;
   }).join('');
 
-  const show = watch.length ? watch : listed.slice(0, 14);
-  h += `<div class="row" style="margin-top:8px"><h4>${watch.length ? '관심 종목' : '시장 전체'}</h4></div>`;
+  /* 관심 등록이 시장 목록을 덮어쓰면 다른 종목을 못 본다. 서브탭으로 가른다. */
+  const onWatch = STOCK_VIEW === 'watch';
+  const show = onWatch ? watch : listed.slice(0, 14);
+  h += `<div class="subtabs" style="margin-top:8px">
+    <button class="subtab ${onWatch ? '' : 'on'}" data-sv="all">시장 전체</button>
+    <button class="subtab ${onWatch ? 'on' : ''}" data-sv="watch">관심 ${watch.length}</button>
+  </div>`;
+  if (!show.length) h += `<div class="empty">${onWatch ? '관심 등록한 종목이 없습니다<br>시장 전체에서 등록하세요' : '상장 종목이 없습니다'}</div>`;
   h += show.map(c => {
     const prev = c.hist.length > 1 ? c.hist[c.hist.length - 2] : c.price;
     const chg = ((c.price - prev) / prev * 100);
     const q1 = Math.max(1, Math.floor(s.co.cash * 0.1 / c.price));
     return `<div class="row tight">
-      <h4>${esc(c.name)}<span class="${chg >= 0 ? 'c-jade' : 'c-blood'}" style="font-size:10px">${c.price.toLocaleString()}원 ${chg >= 0 ? '▲' : '▼'}${Math.abs(chg).toFixed(1)}%</span></h4>
+      <h4>${esc(c.name)}<span class="${chg >= 0 ? 'c-jade' : 'c-blood'}" style="font-size:10px;font-family:var(--f-sm)">${c.price.toLocaleString()}원 ${chg >= 0 ? '▲' : '▼'}${Math.abs(chg).toFixed(1)}%</span></h4>
       <div class="meta">${SECTORS[c.sector].name} · 시총 ${won(c.cap)}${c.curse ? ' · <span class="c-mauve">살 적중</span>' : ''}</div>
       <div class="btn-row">
         <button class="btn jade" data-buy="${c.id}" data-q="${q1}" ${q1 * c.price > s.co.cash ? 'disabled' : ''}>매수 ${q1.toLocaleString()}주</button>
-        ${s.stock.watch.includes(c.id) ? '' : `<button class="btn" data-watch="${c.id}">관심 등록</button>`}
+        ${s.stock.watch.includes(c.id)
+          ? `<button class="btn" data-unwatch="${c.id}">관심 해제</button>`
+          : `<button class="btn" data-watch="${c.id}">관심 등록</button>`}
       </div></div>`;
   }).join('');
 
-  $('right-body').innerHTML = h;
-  const R = $('right-body');
+  $('panel-body').innerHTML = h;
+  const R = $('panel-body');
   R.querySelectorAll('[data-buy]').forEach(b => b.onclick = () => { buyStock(s, s.market.find(c => c.id === b.dataset.buy), +b.dataset.q); renderRight(); renderHud(); });
   R.querySelectorAll('[data-sell]').forEach(b => b.onclick = () => { sellStock(s, s.market.find(c => c.id === b.dataset.sell), +b.dataset.q); renderRight(); renderHud(); });
   R.querySelectorAll('[data-watch]').forEach(b => b.onclick = () => { s.stock.watch.push(b.dataset.watch); renderRight(); });
+  R.querySelectorAll('[data-unwatch]').forEach(b => b.onclick = () => {
+    s.stock.watch = s.stock.watch.filter(id => id !== b.dataset.unwatch); renderRight();
+  });
+  R.querySelectorAll('[data-sv]').forEach(b => b.onclick = () => { STOCK_VIEW = b.dataset.sv; renderRight(); });
 }
 
 /* 무당 */
@@ -190,14 +195,14 @@ function tabShaman() {
   h += `<div class="row" style="margin-top:8px"><h4>섭외 가능 무당</h4>
     <div class="meta">등급이 높을수록 효과가 크지만 발각 시 타격도 큽니다.</div></div>`;
   h += s.shaman.pool.map((sh, i) => `<div class="row tight">
-    <h4>${esc(sh.name)}<span class="c-dim" style="font-size:9px">${SHAMAN_TIERS[sh.tier].name}</span></h4>
+    <h4>${esc(sh.name)}<span class="c-dim" style="font-size:10px;font-family:var(--f-sm)">${SHAMAN_TIERS[sh.tier].name}</span></h4>
     <div><span class="stat-chip">성공 ${Math.round(sh.rate * 100)}%</span><span class="stat-chip">효과 ×${sh.power}</span><span class="stat-chip">발각 ${Math.round(sh.expose * 100)}%</span></div>
     <div class="meta">굿 1회 ${won(shamanFee(s, sh))}</div>
     <div class="btn-row"><button class="btn mauve" data-hires="${i}" ${hired?.id === sh.id ? 'disabled' : ''}>${hired?.id === sh.id ? '계약 중' : '계약'}</button></div>
   </div>`).join('');
 
-  $('right-body').innerHTML = h;
-  const R = $('right-body');
+  $('panel-body').innerHTML = h;
+  const R = $('panel-body');
   R.querySelectorAll('[data-hires]').forEach(b => b.onclick = () => { s.shaman.hired = s.shaman.pool[+b.dataset.hires]; renderRight(); });
   const bl = $('bless'); if (bl) bl.onclick = () => { doGut(s, 'bless'); renderAll(); };
   const dr = $('drop'); if (dr) dr.onclick = () => { s.shaman.hired = null; renderRight(); };
@@ -212,14 +217,14 @@ function tabRumor() {
     <div class="kv"><span>일일 입수 확률</span><b>${(clamp(intel * BAL.rumorChanceBase * (1 + s.staff.filter(e => e.trait.id === 'ear').length * 0.6), 0, 1) * 100).toFixed(1)}%</b></div>
     <div class="meta">정보력이 높은 직원을 고용할수록 높은 등급의 찌라시가 들어옵니다. 등급 F~S.</div></div>`;
   h += s.rumors.length ? s.rumors.map(r => `<div class="row tight" style="${r.used ? 'opacity:.5' : ''}">
-      <h4><span class="c-gold">${r.grade}급</span> ${esc(r.tname)}<span class="c-dim" style="font-size:9px">${r.day}일차</span></h4>
+      <h4><span class="c-gold">${r.grade}급</span> ${esc(r.tname)}<span class="c-dim" style="font-size:10px;font-family:var(--f-sm)">${r.day}일차</span></h4>
       <div class="meta">${esc(r.text)}</div>
       <div class="meta">사용 시 인수가 프리미엄 -${Math.round(r.val * 100)}%p${r.val >= 0.16 ? ' · 인수 난이도 1단계 하락' : ''}</div>
       ${r.used ? '<div class="meta c-dim">사용됨</div>' : `<div class="btn-row"><button class="btn gold" data-rum="${r.id}">정보 활용</button></div>`}
     </div>`).join('')
     : `<div class="row"><div class="empty">입수한 찌라시가 없습니다<br>정보력 높은 직원을 채용해보세요</div></div>`;
-  $('right-body').innerHTML = h;
-  $('right-body').querySelectorAll('[data-rum]').forEach(b => b.onclick = () => {
+  $('panel-body').innerHTML = h;
+  $('panel-body').querySelectorAll('[data-rum]').forEach(b => b.onclick = () => {
     useRumor(s, s.rumors.find(r => r.id === b.dataset.rum)); renderRight();
   });
 }
@@ -229,13 +234,13 @@ function tabInbox() {
   const s = S;
   s.inbox.forEach(i => i.read = true);
   let h = s.inbox.length ? s.inbox.map(i => `<div class="row tight" style="border-left:5px solid ${i.kind === 'bad' ? 'var(--blood)' : i.kind === 'good' ? 'var(--jade)' : 'var(--sky)'}">
-      <h4>${esc(i.title)}<span class="c-dim" style="font-size:9px">${i.day}일차</span></h4>
+      <h4>${esc(i.title)}<span class="c-dim" style="font-size:10px;font-family:var(--f-sm)">${i.day}일차</span></h4>
       <div class="meta">${i.body}</div></div>`).join('')
     : `<div class="row"><div class="empty">알림이 없습니다</div></div>`;
   h += `<div class="row" style="margin-top:10px"><h4>뉴스 기록</h4>${
-    s.log.slice(0, 20).map(l => `<div class="kv"><span class="c-dim">${l.d}일</span><b style="font-size:9px;text-align:right">${esc(l.t)}</b></div>`).join('') || '<div class="empty">없음</div>'}</div>`;
-  $('right-body').innerHTML = h;
+    s.log.slice(0, 20).map(l => `<div class="kv"><span class="c-dim">${l.d}일</span><b style="font-size:10px;font-family:var(--f-sm);text-align:right">${esc(l.t)}</b></div>`).join('') || '<div class="empty">없음</div>'}</div>`;
+  $('panel-body').innerHTML = h;
   renderHud();
 }
 
-export { setTab, TAB, TABS, renderRight, rerollCost, tabInbox, tabRumor, tabShaman, tabStaff, tabStock, trainCost };
+export { setTab, STOCK_VIEW, TAB, TABS, renderRight, rerollCost, tabInbox, tabRumor, tabShaman, tabStaff, tabStock, trainCost };
