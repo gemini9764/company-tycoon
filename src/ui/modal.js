@@ -1,3 +1,4 @@
+import { sfx } from '../core/audio.js';
 import { $ } from '../core/util.js';
 
 /* ── 모달 ────────────────────────────────────────────────── */
@@ -5,10 +6,11 @@ let modalStack = [];
 
 function openModal(cfg) {
   modalStack.push(cfg);
+  sfx('open');
   renderModal();
 }
 
-function closeModal() { modalStack.pop(); renderModal(); }
+function closeModal() { modalStack.pop(); sfx('close'); renderModal(); }
 
 function renderModal() {
   const layer = $('modal-layer'), cfg = modalStack[modalStack.length - 1];
@@ -31,6 +33,8 @@ function renderModal() {
     const a = cfg.actions[+b.dataset.a]; closeModal(); a.run && a.run();
   });
   const x = $('mx'); if (x) x.onclick = () => { closeModal(); cfg.onClose && cfg.onClose(); };
+  // 모달 본문에 직접 손을 대야 하는 화면(설정의 슬라이더 등)이 쓰는 훅
+  cfg.onOpen && cfg.onOpen();
 }
 
 export { closeModal, modalStack, openModal, renderModal };

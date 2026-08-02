@@ -1,19 +1,22 @@
 import './debug.js';   // QA 핸들 (window.game)
+import { unlockAudio, startBgm } from './core/audio.js';
 import { BAL } from './core/balance.js';
 import { TIERS } from './core/data.js';
 import { frameLoop } from './core/loop.js';
 import { S, newState, setS } from './core/state.js';
-import { SAVE_KEY, Store, loadGame } from './core/storage.js';
-import { $, esc, won } from './core/util.js';
-import { initCanvas, setMode, zoomInto } from './render/canvas.js';
+import { SAVE_KEY, Store, loadGame, loadPrefs, saveInfo } from './core/storage.js';
+import { $, won } from './core/util.js';
+import { initCanvas, rotateCity, setMode, zoomInto } from './render/canvas.js';
 import { renderHud } from './ui/hud.js';
 import { closePanel, renderAll } from './ui/index.js';
 import { closeModal, modalStack, openModal } from './ui/modal.js';
+import { hideTitle, setExitHandler, showTitle } from './ui/title.js';
 import { news, pushInbox, toggleNews } from './ui/toast.js';
 
 /* ── 부팅 ────────────────────────────────────────────────── */
 async function boot() {
   await Store.init();
+  await loadPrefs();
   initCanvas();
 
   // 모드 전환 버튼은 독이 매번 다시 그리므로 핸들러도 그쪽에서 건다
@@ -24,32 +27,56 @@ async function boot() {
     if (!S) return;
     if (e.key === ' ') { e.preventDefault(); S.speed = S.speed ? 0 : 1; renderHud(); }
     if (e.key === 'Tab') { e.preventDefault(); zoomInto(S.mode === 'city' ? 'store' : 'city'); }
+    const k = e.key.toLowerCase();
+    if (k === 'q') rotateCity(-1);
+    if (k === 'e') rotateCity(1);
     if (e.key === 'Escape') {
       if (modalStack.length) { if (modalStack[modalStack.length - 1].dismissable !== false) closeModal(); }
       else closePanel();
     }
   });
 
-  const saved = await loadGame();
-  if (saved) {
-    setS(saved); S.speed = 0;
-    setMode(S.mode || 'city'); renderAll();
-    openModal({
-      title: '이어서 하기',
-      body: `<p>저장된 게임이 있습니다.</p>
-        <div class="kv" style="margin-top:10px"><span>회사</span><b>${esc(S.co.name)}</b></div>
-        <div class="kv"><span>등급</span><b>${TIERS[S.co.tier].name}</b></div>
-        <div class="kv"><span>경과</span><b>${S.day}일차</b></div>
-        <div class="kv"><span>자금</span><b>${won(S.co.cash)}</b></div>`,
-      choices: [
-        { label: '이어서 하기', run: () => { S.speed = 1; renderAll(); } },
-        { label: '새로 시작', sub: '저장 데이터를 지웁니다', run: () => { Store.del(SAVE_KEY); intro(); } },
-      ],
-      dismissable: false,
-    });
-  } else intro();
+  // 자동재생 정책 — AudioContext 는 사용자 제스처에서만 열린다
+  const wake = () => { unlockAudio(); startBgm(); };
+  document.addEventListener('pointerdown', wake, { once: true });
+  document.addEventListener('keydown', wake, { once: true });
 
+  setExitHandler(backToTitle);
+  await openTitle();
+}
+
+/** 타이틀 메뉴. 부팅과 '메인 타이틀로' 가 같은 것을 쓴다. */
+async function openTitle() {
+  showTitle(await saveInfo(), {
+    onNew: () => { Store.del(SAVE_KEY); hideTitle(); intro(); },
+    onContinue: async () => {
+      const saved = await loadGame();
+      if (!saved) return;                       // 그사이 지워졌다면 타이틀에 머문다
+      setS(saved); S.speed = 0;
+      setMode(S.mode || 'city'); renderAll();
+      hideTitle(); startLoop();
+      S.speed = 1; renderHud();
+    },
+  });
+}
+
+/* 렌더 루프는 S 가 생긴 뒤에만 돈다. 타이틀에서는 draw() 가 볼 상태가 없다. */
+let looping = false;
+
+function startLoop() {
+  if (looping) return;
+  looping = true;
   requestAnimationFrame(frameLoop);
+}
+
+/* 설정에서 '메인 타이틀로'. 시간을 멈추고 열린 창을 접은 뒤 타이틀을 다시 띄운다.
+   루프는 그대로 두고 S 만 정지시킨다 — draw() 는 마지막 화면을 계속 그리지만
+   타이틀 레이어가 덮으므로 보이지 않는다. */
+async function backToTitle() {
+  if (S) S.speed = 0;
+  closePanel();
+  while (modalStack.length) closeModal();
+  await openTitle();
 }
 
 function intro() {
@@ -84,6 +111,7 @@ function intro() {
       renderAll();
     } }],
   });
+  startLoop();
 }
 
 boot();

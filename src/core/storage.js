@@ -1,8 +1,10 @@
-import { S } from './state.js';
+import { SAVE_V, S } from './state.js';
+import { soundPrefs, setSoundPrefs } from './audio.js';
 import { toast } from '../ui/toast.js';
 
 /* ── 저장 (서버 없음) ─────────────────────────────────────── */
 const SAVE_KEY = 'company-tycoon-save';
+const PREF_KEY = 'company-tycoon-prefs';   // 설정은 세이브와 분리 — 새 게임을 해도 유지된다
 
 const Store = {
   mode: 'memory', mem: {},
@@ -46,8 +48,25 @@ async function loadGame() {
   if (!raw) return null;
   try {
     const d = JSON.parse(raw);
-    return d && d.v === 3 ? d : null;   // 구버전 세이브는 폐기
+    return d && d.v === SAVE_V ? d : null;   // 구버전 세이브는 폐기
   } catch { return null; }
 }
 
-export { SAVE_KEY, Store, loadGame, saveGame };
+/** 세이브 존재 여부와 요약. 타이틀의 '이어하기' 버튼이 쓴다. */
+async function saveInfo() {
+  const d = await loadGame();
+  return d ? { name: d.co.name, tier: d.co.tier, day: d.day, cash: d.co.cash, subs: d.co.subs.length } : null;
+}
+
+/* ── 설정 ────────────────────────────────────────────────── */
+async function loadPrefs() {
+  const raw = await Store.get(PREF_KEY);
+  if (!raw) return;
+  try { setSoundPrefs(JSON.parse(raw).sound); } catch { /* 깨진 설정은 기본값으로 */ }
+}
+
+async function savePrefs() {
+  await Store.set(PREF_KEY, JSON.stringify({ sound: soundPrefs() }));
+}
+
+export { PREF_KEY, SAVE_KEY, Store, loadGame, loadPrefs, savePrefs, saveGame, saveInfo };

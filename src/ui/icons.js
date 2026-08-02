@@ -152,7 +152,43 @@ const ICONS = {
       '............',
     ],
   },
+  /* 잠김 — 자물쇠. 잠긴 버튼 모서리 배지로 쓴다 */
+  lock: {
+    p: { m: '#AAB2C4', b: '#D8B23A', k: '#5A4410', o: '#3A3020' },
+    d: [
+      '............',
+      '....mmmm....',
+      '...mmmmmm...',
+      '...mm..mm...',
+      '...mm..mm...',
+      '..oooooooo..',
+      '..obbbbbbo..',
+      '..obbkkbbo..',
+      '..obbkkbbo..',
+      '..obbbbbbo..',
+      '..oooooooo..',
+      '............',
+    ],
+  },
   /* 알림 — 봉투 */
+  /* 설정 — 톱니 */
+  config: {
+    p: { g: '#8A93AD', l: '#C6CCE2', d: '#2A3048' },
+    d: [
+      '............',
+      '...l....l...',
+      '..lgl..lgl..',
+      '..lgggggggl.',
+      '...ggddgg...',
+      '.llgdddddgll',
+      '.llgdddddgll',
+      '...ggddgg...',
+      '..lgggggggl.',
+      '..lgl..lgl..',
+      '...l....l...',
+      '............',
+    ],
+  },
   inbox: {
     p: { o: '#8A8F9E', f: '#F5EFDD', s: '#CDBE97' },
     d: [
@@ -201,7 +237,7 @@ function iconEl(name, scale = 3) {
 /** `<i data-ico="...">` 자리표시자를 실제 아이콘으로 갈아 끼운다. */
 function fillIcons(root, scale = 3) {
   root.querySelectorAll('[data-ico]').forEach(slot => {
-    const el = iconEl(slot.dataset.ico, scale);
+    const el = iconEl(slot.dataset.ico, +slot.dataset.icoS || scale);
     slot.replaceWith(el);
   });
 }

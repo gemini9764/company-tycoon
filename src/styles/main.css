@@ -87,6 +87,12 @@ button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--gold);outl
   border:2px solid var(--ink);box-shadow:var(--shadow);
   display:flex;min-height:0;overflow:hidden;
 }
+/* 모드 전용 버튼은 맵 우상단에 얹는다. 상단 바에는 모드와 무관한 것만 남는다. */
+#modebtns{
+  position:absolute;right:8px;top:8px;z-index:3;display:flex;gap:6px;
+  pointer-events:none;                 /* 빈 영역이 맵 클릭을 먹지 않게 */
+}
+#modebtns .dbtn{pointer-events:auto}
 #board-hint{
   position:absolute;left:8px;top:8px;z-index:2;pointer-events:none;
   background:rgba(11,15,27,.72);border:2px solid var(--ink);
@@ -154,6 +160,9 @@ canvas.zooming{transform:scale(1.8);opacity:0}
 .btn-row{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
 
 
+/* 설정 — 타이틀 복귀는 사운드 항목과 성격이 달라 선으로 끊는다 */
+.set-exit{margin-top:12px;padding-top:11px;border-top:2px solid var(--paper-3)}
+
 /* ── 창 안 서브탭 ──────────────────────────── */
 .subtabs{display:flex;gap:0;margin-bottom:7px;border:2px solid var(--ink)}
 .subtab{
@@ -196,14 +205,21 @@ canvas.zooming{transform:scale(1.8);opacity:0}
 .dbtn b{font-weight:normal}
 .dbtn:hover:not(:disabled){background:#4A5473}
 .dbtn.on{background:var(--gold);color:var(--ink);box-shadow:none;transform:translateY(1px)}
-.dbtn:disabled{background:var(--ink);color:#5D6684;cursor:not-allowed;box-shadow:none}
-.dbtn:disabled .ico{opacity:.3}
+.dbtn:disabled{background:var(--ink);cursor:not-allowed;box-shadow:none}
 .dbtn .dot{
   position:absolute;top:-4px;right:-4px;width:10px;height:10px;
   background:var(--blood);border:2px solid var(--ink);
 }
-.dbtn .lock{
-  position:absolute;inset:auto 0 3px 0;font-family:var(--f-sm);font-size:10px;color:#6E7799;
+/* 잠긴 버튼 — '잠김' 글자를 라벨 위에 겹쳐 놓으면 둘 다 안 읽힌다.
+   아이콘을 죽이고 자물쇠를 모서리 배지로 뺀다. */
+.dbtn.locked{background:#1E2436;border-color:#2A3046;cursor:help}
+.dbtn.locked:hover{background:#252C42}
+.dbtn.locked .ico{opacity:.22}
+.dbtn.locked b{color:#5A6480}
+.dbtn.locked::before{background:rgba(255,255,255,.05)}
+.lockbadge{
+  position:absolute;right:-6px;top:-6px;line-height:0;padding:2px;
+  background:var(--ink);border:2px solid #4A5473;
 }
 
 /* ── 버튼 창 ───────────────────────────────── */
@@ -262,9 +278,12 @@ canvas.zooming{transform:scale(1.8);opacity:0}
 .news-row b{font-weight:normal;font-size:12px;color:var(--paper-2)}
 
 /* ── 모달 ──────────────────────────────────── */
+/* 모달은 항상 최상단이다. 타이틀(z 60)에서도 설정 모달을 열어야 하므로
+   타이틀보다 위에 둔다. 이 순서가 뒤집히면 모달이 타이틀 뒤에 열려
+   '설정이 안 눌린다'로 보인다. */
 #modal-layer{
   position:fixed;inset:0;background:rgba(10,12,22,.78);
-  display:none;align-items:center;justify-content:center;padding:20px;z-index:50;
+  display:none;align-items:center;justify-content:center;padding:20px;z-index:80;
 }
 #modal-layer.on{display:flex}
 .modal{
@@ -320,3 +339,73 @@ canvas.zooming{transform:scale(1.8);opacity:0}
 @media (prefers-reduced-motion:reduce){
   *{animation-duration:.01ms!important;transition-duration:.01ms!important}
 }
+
+/* ── 타이틀 ─────────────────────────────────
+   메뉴는 새로 시작 / 이어하기 / 설정 셋. 세이브가 없으면 '이어하기'는
+   숨기지 않고 비활성으로 두고 이유를 적는다. */
+#title-layer{
+  position:fixed;inset:0;z-index:60;display:none;
+  align-items:center;justify-content:center;
+  background:#0B0F1B;
+  background-image:
+    radial-gradient(circle at 50% 34%,#1D2A44 0%,#0B0F1B 62%),
+    linear-gradient(rgba(255,255,255,.02) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.02) 1px,transparent 1px);
+  background-size:auto,16px 16px,16px 16px;
+}
+#title-layer.on{display:flex}
+#title-box{text-align:center;padding:20px}
+#title-cv{
+  width:640px;height:300px;image-rendering:pixelated;display:block;margin:0 auto;
+}
+#title-box h1{
+  font-family:var(--f-lg);font-size:45px;font-weight:normal;letter-spacing:4px;
+  color:var(--gold);margin-top:6px;text-shadow:3px 3px 0 #0B0F1B,6px 6px 0 rgba(0,0,0,.4);
+}
+#title-sub{
+  font-family:var(--f-sm);font-size:10px;letter-spacing:6px;color:var(--ink-3);
+  margin-top:10px;
+}
+#title-menu{display:flex;gap:10px;justify-content:center;margin-top:22px}
+.tbtn{
+  min-width:186px;padding:11px 14px;background:var(--ink-2);
+  border:2px solid var(--ink-3);box-shadow:var(--shadow);color:var(--paper);
+  font-family:var(--f-lg);font-size:15px;line-height:1;
+}
+.tbtn small{
+  display:block;margin-top:7px;font-family:var(--f-sm);font-size:10px;
+  color:var(--paper-3);line-height:1.5;
+}
+.tbtn:hover:not([disabled]){border-color:var(--gold);background:var(--ink-3)}
+.tbtn.gold{background:var(--gold);color:var(--ink);border-color:var(--paper)}
+.tbtn.gold small{color:#6B4E12}
+.tbtn.gold:hover{background:#FFC64D}
+.tbtn[disabled]{opacity:.45;cursor:not-allowed;box-shadow:none}
+#title-foot{margin-top:20px;font-family:var(--f-sm);font-size:10px;color:var(--ink-3)}
+
+/* ── 설정 ───────────────────────────────── */
+.set-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:2px solid var(--paper-3)}
+.set-row span{flex:0 0 74px;font-size:12px}
+.set-row b{flex:0 0 34px;text-align:right;font-family:var(--f-lg);font-size:15px;font-weight:normal}
+.set-row.off{opacity:.4}
+.set-mute{border-bottom-width:2px}
+.set-mute button{margin-left:auto;min-width:66px}
+.set-row input[type=range]{
+  flex:1 1 auto;height:16px;appearance:none;background:var(--paper-3);
+  border:2px solid var(--ink);cursor:pointer;
+}
+.set-row input[type=range]::-webkit-slider-thumb{
+  appearance:none;width:14px;height:20px;background:var(--gold);border:2px solid var(--ink);
+}
+.set-row input[type=range]::-moz-range-thumb{
+  width:14px;height:20px;background:var(--gold);border:2px solid var(--ink);border-radius:0;
+}
+
+/* 카메라 회전 — 도시 모드에서만 쓴다. 사옥은 고정 배치가 읽기 쉬워 회전하지 않는다 */
+.rot-seg{display:flex;gap:3px;margin-left:6px}
+.rot-seg.off{visibility:hidden}
+.rot{
+  width:26px;padding:0;height:100%;background:var(--ink-2);border:2px solid var(--ink-3);
+  color:var(--paper-3);font-size:12px;line-height:1;
+}
+.rot:hover{border-color:var(--gold);color:var(--gold)}
