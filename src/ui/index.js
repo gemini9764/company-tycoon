@@ -1,8 +1,9 @@
 import { S } from '../core/state.js';
 import { $ } from '../core/util.js';
-import { panelTitle, renderDock } from './dock.js';
+import { inMode, panelTitle, renderDock } from './dock.js';
 import { renderHud } from './hud.js';
 import { renderLeft } from './panelLeft.js';
+import { renderShop } from './shopPanel.js';
 import { TAB, renderRight, setTab } from './tabs.js';
 import { renderNews } from './toast.js';
 
@@ -11,6 +12,7 @@ function renderTopBar() {
   $('board-hint').textContent = S.mode === 'city'
     ? '도시 — 건물 클릭 → 회사 정보 · 금빛 건물이 우리 사옥 · Tab 전환'
     : '사옥 — 왼쪽은 매장, 오른쪽은 사무실과 사장실 · Tab 전환';
+  if (TAB && !inMode(TAB)) return setTab(null);   // setTab 이 독과 창을 다시 그린다
   renderDock();
 }
 
@@ -23,7 +25,9 @@ function renderPanel() {
   $('panel-layer').classList.toggle('on', on);
   if (!on) return;
   $('panel-title').textContent = panelTitle();
-  TAB === 'co' ? renderLeft() : renderRight();
+  if (TAB === 'co') renderLeft();
+  else if (TAB === 'shop') renderShop();
+  else renderRight();
 }
 
 function closePanel() { setTab(null); }

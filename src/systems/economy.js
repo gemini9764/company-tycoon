@@ -5,13 +5,80 @@ import { $, clamp, rnd, won } from '../core/util.js';
 import { checkBankrupt, seizeSub } from './bank.js';
 import { pushInbox } from '../ui/toast.js';
 
+/* ── 매장 시설 ────────────────────────────────────────────
+   레벨을 올리면 매출·손님·재고 유지 기간·관리 인력에 영구 보너스가 붙는다.
+   타일 배치는 건드리지 않는다 — 손님 경로가 그 격자를 쓰기 때문. */
+const FACIL = {
+  shelf:   { n: '진열대 증설', max: 3, tier: 0, d: '매출 +7% / 단계' },
+  counter: { n: '계산대 확장', max: 3, tier: 1, d: '손님 +2명 · 매출 +4% / 단계' },
+  cold:    { n: '냉장 설비',   max: 3, tier: 1, d: '재고 유지 +4일 / 단계' },
+  office:  { n: '사무실 확장', max: 3, tier: 2, d: '관리 인력 +1명분 / 단계' },
+};
+
+const facLv = (s, k) => (s.co.facil && s.co.facil[k]) || 0;
+
+/** 다음 단계 비용. 회사 규모를 따라가므로 후반에도 의미가 남는다. */
+function facilCost(s, k) {
+  const lv = facLv(s, k);
+  return Math.round(Math.max(2e7, retailPotential(s) * 9) * Math.pow(2.2, lv));
+}
+
+function facilLocked(s, k) { return s.co.tier < FACIL[k].tier; }
+
 /* ── 경영: 일 매출/비용 ──────────────────────────────────── */
-function dailyRetail(s) {
+/** 재고를 무시한 매출 잠재력. 발주 단가의 기준이라 재고와 순환하지 않게 분리한다. */
+function retailPotential(s) {
   const base = BAL.retailBase * BAL.tierRetailMul[s.co.tier];
   const salesBuf = 1 + sumStat(s.staff, 'sales') * 0.004
                  + s.staff.filter(e => e.trait.id === 'star').length * 0.12;
   const variety = 1 + s.co.subs.length * 0.06;
-  return base * s.co.marketing * salesBuf * variety;
+  const fac = 1 + facLv(s, 'shelf') * 0.07 + facLv(s, 'counter') * 0.04;
+  return base * s.co.marketing * salesBuf * variety * fac;
+}
+
+/** 재고가 매출에 곱해지는 배수. 바닥나도 invFloor 까지만 떨어진다. */
+function invFactor(s) {
+  const r = clamp((s.co.inv ?? 100) / 100, 0, 1);
+  return BAL.invFloor + (1 - BAL.invFloor) * r;
+}
+
+function dailyRetail(s) { return retailPotential(s) * invFactor(s); }
+
+/** 만재에서 바닥까지 걸리는 일수 */
+function invLife(s) { return BAL.invDays + facLv(s, 'cold') * 4; }
+
+/** 재고 pct 만큼 채우는 값. 절반 이상 한 번에 채우면 할인. */
+function invCost(s, pct) {
+  const raw = retailPotential(s) * BAL.invUnit * pct;
+  return Math.round(raw * (pct >= 50 ? 1 - BAL.invBulkOff : 1));
+}
+
+/** 발주 실행. 살 수 있는 만큼만 채우고 실제 채운 양을 돌려준다. */
+function orderInv(s, pct, autoUp) {
+  const room = Math.max(0, 100 - (s.co.inv ?? 100));
+  let want = Math.min(pct, room);
+  if (want <= 0) return 0;
+  const mul = autoUp ? 1 + BAL.invAutoUp : 1;
+  let cost = Math.round(invCost(s, want) * mul);
+  if (cost > s.co.cash) {                       // 살 수 있는 만큼으로 줄인다
+    want = Math.floor(want * (s.co.cash / cost));
+    if (want <= 0) return 0;
+    cost = Math.round(invCost(s, want) * mul);
+  }
+  s.co.cash -= cost;
+  s.co.inv = clamp((s.co.inv ?? 100) + want, 0, 100);
+  return want;
+}
+
+/* 하루치 재고 소모. 자동 발주면 소모분을 바로 되채운다(단가 할증).
+   이름을 inv 로 둔 이유는 systems/stock.js(주식)와 헷갈리지 않게 하려는 것. */
+function tickInv(s) {
+  const before = s.co.inv ?? 100;
+  s.co.inv = clamp(before - 100 / invLife(s), 0, 100);
+  if (s.co.autoOrder) orderInv(s, 100 - s.co.inv, true);
+  else if (before >= BAL.invWarnAt && s.co.inv < BAL.invWarnAt) {
+    pushInbox(s, '재고 부족', `매장 재고가 ${Math.round(s.co.inv)}% 입니다. 발주하지 않으면 매출이 최대 ${Math.round((1 - BAL.invFloor) * 100)}% 까지 빠집니다.`, 'bad');
+  }
 }
 
 /* 통합 진척도 — 인수 직후엔 시너지가 안 나오고, pmiDays에 걸쳐 100%까지 올라온다.
@@ -25,7 +92,7 @@ function pmi(s, c) {
    후반부에도 경영 모드의 결정이 그룹 수익의 최대 변수로 남게 하는 장치. */
 function managersNeeded(s) { return Math.ceil(s.co.subs.length / BAL.subsPerManager); }
 
-function managersHave(s)   { return s.staff.filter(e => !e.onTeam).length; }
+function managersHave(s)   { return s.staff.filter(e => !e.onTeam).length + facLv(s, 'office'); }
 
 function synergyParts(s) {
   const bySec = {};
@@ -50,10 +117,11 @@ function dailySubIncome(s) {
 }
 
 function dailyUpkeep(s) {
-  return s.co.subs.reduce((a, c) => a + c.cap * BAL.subYield * (pmi(s, c) < 1 ? 0.46 : 0.36), 0) + dailyRetail(s) * 0.42;
+  return s.co.subs.reduce((a, c) => a + c.cap * BAL.subYield * (pmi(s, c) < 1 ? 0.46 : 0.36), 0) + dailyRetail(s) * BAL.retailUpkeep;
 }
 
 function tickEconomy(s) {
+  tickInv(s);
   const rev  = dailyRetail(s) * rnd(0.88, 1.14) + dailySubIncome(s);
   const cost = dailyUpkeep(s);
   s.co.revToday = rev; s.co.costToday = cost;
@@ -109,4 +177,4 @@ function tickMonth(s) {
   checkBankrupt(s);
 }
 
-export { dailyRetail, dailySubIncome, dailyUpkeep, managersHave, managersNeeded, pmi, synergyParts, tickEconomy, tickMonth, tickSynergy };
+export { FACIL, facLv, facilCost, facilLocked, invCost, orderInv, retailPotential, invFactor, invLife, tickInv, dailyRetail, dailySubIncome, dailyUpkeep, managersHave, managersNeeded, pmi, synergyParts, tickEconomy, tickMonth, tickSynergy };

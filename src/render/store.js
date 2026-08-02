@@ -36,6 +36,36 @@ const SHOP_BLOCK = new Set(
   [...FRIDGES, ...FREEZERS, ...SHELVES, ...FLATS, ...COUNTER, ...SHOP_PROPS, CLERK, { gx: 8, gy: 3 }].map(o => `${o.gx},${o.gy}`)
 );
 
+/* ── 시설 증설로 늘어나는 집기 ────────────────────────────────
+   레벨을 올리면 숫자만 오르는 게 아니라 매장에 실제로 집기가 는다.
+   늘어난 칸은 손님이 못 지나가야 하므로 충돌 판정도 같이 따라가야 한다 —
+   그래서 SHOP_BLOCK 을 그대로 쓰지 않고 `blockedAt()` 을 거친다.
+
+   자리는 통로를 막지 않는 곳으로만 골랐다. gy=2·4·5·7·9 가로 통로와
+   gx=0·4·6 세로 통로는 어느 레벨에서도 열려 있어야 한다.
+   ─────────────────────────────────────────────────────────── */
+const EXTRA_SHELF   = [{ gx: 1, gy: 1 }, { gx: 2, gy: 1 }, { gx: 3, gy: 1 }];   // 냉장고 아래 한 줄
+const EXTRA_FRIDGE  = [{ gx: 7, gy: 0 }, { gx: 7, gy: 1 }, { gx: 4, gy: 1 }];   // 냉장 설비
+const EXTRA_COUNTER = [{ gx: 7, gy: 4 }];                                        // 계산대 2번대
+const CLERK2 = { gx: 8, gy: 4 };
+
+const fl = k => (S.co.facil && S.co.facil[k]) || 0;
+
+/** 지금 레벨에서 실제로 깔린 집기 목록 */
+function shelvesNow() { return SHELVES.concat(EXTRA_SHELF.slice(0, fl('shelf'))); }
+
+function fridgesNow() { return FRIDGES.concat(EXTRA_FRIDGE.slice(0, fl('cold'))); }
+
+function countersNow() { return COUNTER.concat(fl('counter') ? EXTRA_COUNTER : []); }
+
+/** 충돌 판정 — 기본 집기 + 증설분 */
+function blockedAt(gx, gy) {
+  if (SHOP_BLOCK.has(`${gx},${gy}`)) return true;
+  const ex = [...EXTRA_SHELF.slice(0, fl('shelf')), ...EXTRA_FRIDGE.slice(0, fl('cold'))];
+  if (fl('counter')) ex.push(...EXTRA_COUNTER, CLERK2);
+  return ex.some(o => o.gx === gx && o.gy === gy);
+}
+
 const QUEUE = { gx: 6, gy: 3 };         // 손님이 계산 줄 서는 자리
 
 /* 사무실 — 책상 자리는 고용 순서대로 채운다 */
@@ -53,16 +83,21 @@ const FLOOR_SHOP = '#C9BC9B', FLOOR_SHOP2 = '#B9A981';
 const FLOOR_OFF = '#5A6180', FLOOR_OFF2 = '#525A78';
 const FLOOR_BOSS = '#6E5A46';
 
-let floorLayer = null, floorFor = null, clerk = null, boss = null;
+let floorLayer = null, floorFor = null, floorKey = '', clerk = null, clerk2 = null, boss = null;
+
+/** 바닥·마감이 시설 레벨을 따라가므로 캐시 키에 레벨을 넣는다 */
+function facilKey() { return ['shelf', 'counter', 'cold', 'office'].map(fl).join(''); }
 
 function P(gx, gy) { return { x: isoX(STORE_O, gx, gy), y: isoY(STORE_O, gx, gy) }; }
 
 /* ── 바닥 캐시 ───────────────────────────────────────────── */
 function storeFloor() {
-  if (floorLayer && floorFor === S) return floorLayer;
-  floorFor = S;
-  clerk = newLook('#F2B233');
-  boss = newLook('#8B5CB8');
+  const key = facilKey();
+  if (floorLayer && floorFor === S && floorKey === key) return floorLayer;
+  floorFor = S; floorKey = key;
+  clerk = clerk || newLook('#F2B233');
+  clerk2 = clerk2 || newLook('#E8E4D8');
+  boss = boss || newLook('#8B5CB8');
   const layer = makeLayer(STORE_W, STORE_H);
   const g = layer.ctx;
   if (g) {
@@ -70,9 +105,9 @@ function storeFloor() {
       const { x, y } = P(gx, gy);
       if (gx === SPLIT_GX) { rhomb(g, x, y, HW, HH, '#4A4436'); continue; }
       const alt = (gx + gy) % 2 === 0;
-      if (gx < SPLIT_GX) rhomb(g, x, y, HW, HH, alt ? FLOOR_SHOP : FLOOR_SHOP2);
+      if (gx < SPLIT_GX) { const f = shopFloorPal(); rhomb(g, x, y, HW, HH, alt ? f[0] : f[1]); }
       else if (inBossRoom(gx, gy)) { rhomb(g, x, y, HW, HH, FLOOR_BOSS); rhombEdge(g, x, y, HW, HH, '#5C4A38'); }
-      else { rhomb(g, x, y, HW, HH, alt ? FLOOR_OFF : FLOOR_OFF2); }
+      else { const f = offFloorPal(); rhomb(g, x, y, HW, HH, alt ? f[0] : f[1]); }
     }
     for (let i = 0; i < 3; i++) {                       // 출입 매트
       const { x, y } = P(DOOR.gx - i, DOOR.gy);
@@ -83,7 +118,40 @@ function storeFloor() {
   return floorLayer;
 }
 
+/* 시설을 올릴수록 바닥 마감이 좋아진다 — 나무 → 타일 → 대리석.
+   숫자 말고 화면으로도 성장을 보여 주려는 것. */
+function shopFloorPal() {
+  const sum = fl('shelf') + fl('counter') + fl('cold') + fl('office');
+  if (sum >= 8) return ['#E4E0D4', '#D4CFC0'];        // 대리석
+  if (sum >= 4) return ['#D6CBAE', '#C6B996'];        // 타일
+  return [FLOOR_SHOP, FLOOR_SHOP2];                    // 나무
+}
+
+/* 사무실도 같이 좋아진다 */
+function offFloorPal() {
+  const lv = fl('office');
+  if (lv >= 3) return ['#5E6A92', '#56628A'];
+  if (lv >= 1) return ['#5A6486', '#525C7E'];
+  return [FLOOR_OFF, FLOOR_OFF2];
+}
+
 function inBossRoom(gx, gy) { return gx >= 13 && gy <= 2; }
+
+/* 사옥에도 클릭할 것을 둔다. 지금까지 사옥 캔버스는 판정이 아예 없어서
+   보고만 있는 화면이었다. 사장실 책상 → 결재, 계산대 → 매장 창. */
+const HOTSPOTS = [
+  { k: 'boss',    tiles: [BOSS.desk, BOSS.seat], tip: '사장실 — 오늘의 결재' },
+  { k: 'counter', tiles: COUNTER,                tip: '계산대 — 매장 운영' },
+];
+
+/** 월드 좌표 → 사옥 핫스팟. 없으면 null. */
+function storeHit(p) {
+  const g = tileOf(p);
+  for (const h of HOTSPOTS) {
+    if (h.tiles.some(o => o.gx === g.gx && o.gy === g.gy)) return h;
+  }
+  return null;
+}
 
 /* ── 손님 ────────────────────────────────────────────────── */
 function spawnCustomers() {
@@ -106,7 +174,7 @@ function newCustomer() {
 function walkable(gx, gy) {
   if (gy !== DOOR.gy && gx < 0) return false;
   if (gx < SPAWN_GX || gx > SPLIT_GX - 1 || gy < 0 || gy > ROOM_H - 1) return false;
-  return gx < 0 || !SHOP_BLOCK.has(`${gx},${gy}`);
+  return gx < 0 || !blockedAt(gx, gy);
 }
 
 function findPath(from, to) {
@@ -137,7 +205,7 @@ function tileOf(p) {
 function retarget(p) {
   const from = tileOf(p);
   let to;
-  if (p.phase === 'shelf') { const s = pick(SHELVES); to = { gx: s.gx, gy: s.gy + 1 }; }
+  if (p.phase === 'shelf') { const s = pick(shelvesNow()); to = { gx: s.gx, gy: s.gy + 1 }; }
   else if (p.phase === 'counter') to = { gx: QUEUE.gx, gy: QUEUE.gy + (Math.random() < 0.5 ? 0 : 1) };
   else to = { gx: SPAWN_GX, gy: DOOR.gy };
   if (!walkable(to.gx, to.gy)) to = { gx: 5, gy: 5 };
@@ -186,9 +254,9 @@ function drawStore() {
   drawWalls();
 
   const items = [];
-  for (const o of FRIDGES) items.push({ y: P(o.gx, o.gy).y, f: () => drawFridge(o) });
+  for (const o of fridgesNow()) items.push({ y: P(o.gx, o.gy).y, f: () => drawFridge(o) });
   for (const o of FREEZERS) items.push({ y: P(o.gx, o.gy).y, f: () => drawFreezer(o) });
-  for (const o of SHELVES) items.push({ y: P(o.gx, o.gy).y, f: () => drawShelf(o) });
+  for (const o of shelvesNow()) items.push({ y: P(o.gx, o.gy).y, f: () => drawShelf(o) });
   for (const o of FLATS) items.push({ y: P(o.gx, o.gy).y, f: () => drawFlat(o) });
   for (const o of SHOP_PROPS) items.push({ y: P(o.gx, o.gy).y, f: () => drawProp(o) });
   items.push({ y: P(COUNTER[1].gx, COUNTER[1].gy).y, f: drawCounter });
@@ -279,6 +347,12 @@ function drawPartition() {
 }
 
 /* ── 매장 집기 ───────────────────────────────────────────── */
+/** 재고율 0~1. 진열대가 비어 보이게 해서 발주 시점을 그림으로 알린다. */
+function invRatio() { return clamp((S.co.inv ?? 100) / 100, 0, 1); }
+
+/** n칸 중 재고만큼만 채운다 */
+function stocked(n) { return Math.max(0, Math.round(n * invRatio())); }
+
 /** 인수한 업종이 늘수록 진열 상품 색이 늘어난다 */
 function palette() {
   return ['#7FB069', '#E0A24A', ...S.co.subs.slice(0, 6).map(s => SECTORS[s.sector].color)];
@@ -289,8 +363,11 @@ function drawFridge(o) {
   const pal = palette();
   prism(X, x, y, 13, 6, 26, '#DDE3F0', '#8A93A8', '#C6CCE2');
   isoWin(X, x, y, 13, 6, 'r', 3, 4, 18, 18, '#8FB6D6');
-  for (let r = 0; r < 2; r++) for (let k = 0; k < 3; k++)
+  const putR = stocked(6);
+  for (let i = 0; i < putR; i++) {
+    const r = i < 3 ? 0 : 1, k = i % 3;
     isoWin(X, x, y, 13, 6, 'r', 4 + k * 6, 6 + r * 9, 4, 7, pal[(o.gx + r + k) % pal.length]);
+  }
   X.fillStyle = '#8A8F9E'; X.fillRect(Math.round(x + 9), Math.round(y - 12), 2, 6);
 }
 
@@ -299,8 +376,11 @@ function drawFreezer(o) {
   const { x, y } = P(o.gx, o.gy);
   const pal = palette();
   prism(X, x, y, 14, 7, 12, '#8FA8C4', '#7A8496', '#B7C3D6');
-  for (let r = 0; r < 2; r++) for (let k = 0; k < 3; k++)
-    prism(X, x - 6 + k * 6, y - 12 + (k - 1) * 3 + r * 5, 3, 2, 4, pal[(o.gx + r + k) % pal.length], '#5E6478', shade(pal[(o.gx + r + k) % pal.length], -0.25));
+  const putF = stocked(6);
+  for (let i = 0; i < putF; i++) {
+    const r = i < 3 ? 0 : 1, k = i % 3, c = pal[(o.gx + r + k) % pal.length];
+    prism(X, x - 6 + k * 6, y - 12 + (k - 1) * 3 + r * 5, 3, 2, 4, c, '#5E6478', shade(c, -0.25));
+  }
   faces(X, x, y, 14, 7, 12, 13, '#DDE3F0', '#EEF2FA');
 }
 
@@ -309,7 +389,9 @@ function drawShelf(o) {
   const pal = palette();
   X.save(); X.globalAlpha = 0.2; rhomb(X, x + 2, y + 1, 14, 7, '#000000'); X.restore();
   prism(X, x, y, 14, 7, 17, '#9C7A56', '#6B5136', '#8A6A4A');
-  for (let r = 0; r < 2; r++) for (let k = 0; k < 3; k++) {
+  const put = stocked(6);
+  for (let i = 0; i < put; i++) {
+    const r = i < 3 ? 0 : 1, k = i % 3;
     const c = pal[(o.gx * 2 + o.gy + r + k) % pal.length];
     isoWin(X, x, y, 14, 7, 'r', 3 + k * 6, 3 + r * 7, 4, 5, c);
     isoWin(X, x, y, 14, 7, 'l', 3 + k * 6, 3 + r * 7, 4, 5, shade(c, -0.2));
@@ -328,7 +410,7 @@ function drawFlat(o) {
 }
 
 function drawCounter() {
-  for (const o of COUNTER) {
+  for (const o of countersNow()) {
     const { x, y } = P(o.gx, o.gy);
     X.save(); X.globalAlpha = 0.2; rhomb(X, x + 2, y + 1, 14, 7, '#000000'); X.restore();
     prism(X, x, y, 14, 7, 14, '#7186AD', '#3E4A66', '#5A6B8C');
@@ -337,8 +419,17 @@ function drawCounter() {
   const a = P(COUNTER[0].gx, COUNTER[0].gy);
   X.fillStyle = '#20263A'; X.fillRect(Math.round(a.x) - 5, Math.round(a.y) - 26, 11, 8);   // POS
   X.fillStyle = '#8AB4D8'; X.fillRect(Math.round(a.x) - 4, Math.round(a.y) - 25, 9, 5);
+  if (fl('counter') >= 2) {                                    // 셀프 계산 단말 한 대 더
+    const b = P(COUNTER[1].gx, COUNTER[1].gy);
+    X.fillStyle = '#20263A'; X.fillRect(Math.round(b.x) - 5, Math.round(b.y) - 24, 11, 8);
+    X.fillStyle = '#4ECDC4'; X.fillRect(Math.round(b.x) - 4, Math.round(b.y) - 23, 9, 5);
+  }
   const c = P(CLERK.gx, CLERK.gy);
   drawPerson(c.x, c.y, clerk, 'w', 1);                                                     // 점원
+  if (fl('counter')) {                                          // 2번대 점원
+    const c2 = P(CLERK2.gx, CLERK2.gy);
+    drawPerson(c2.x, c2.y, clerk2, 'w', 1);
+  }
 }
 
 function drawProp(o) {
@@ -371,6 +462,12 @@ function addOffice(items) {
   const bd = P(BOSS.desk.gx, BOSS.desk.gy), bs = P(BOSS.seat.gx, BOSS.seat.gy);
   items.push({ y: bs.y, f: () => drawSitter(bs.x, bs.y, boss, 's', Math.floor(frame / 40) % 2) });
   items.push({ y: bd.y, f: () => drawBossDesk(bd) });
+  const extraOff = [{ gx: 13, gy: 9, k: 'cabinet' }, { gx: 10, gy: 5, k: 'plant' }, { gx: 12, gy: 9, k: 'copier' }]
+    .slice(0, fl('office'));
+  for (const o of extraOff) {
+    const p = P(o.gx, o.gy);
+    items.push({ y: p.y, f: () => drawOfficeProp(p, o.k) });
+  }
   for (const o of [{ gx: 13, gy: 0, k: 'shelf' }, { gx: 15, gy: 2, k: 'sofa' }, { gx: 13, gy: 2, k: 'plant' },
                    { gx: 13, gy: 5, k: 'copier' }, { gx: 13, gy: 8, k: 'cooler' }, { gx: 15, gy: 9, k: 'cabinet' }, { gx: 10, gy: 9, k: 'plant' }]) {
     const p = P(o.gx, o.gy);
@@ -408,6 +505,14 @@ function drawBossDesk(p) {
   X.fillStyle = '#F2B233'; X.fillRect(Math.round(x) + 4, Math.round(y) - 16, 6, 4);    // 명패
   X.fillStyle = '#F5EFDD'; X.fillRect(Math.round(x) - 3, Math.round(y) - 15, 8, 5);
   drawText(x, y - 30, '사장실', { size: 10, color: '#FFD57A' });
+  /* 오늘 결재가 남아 있으면 눌러야 할 곳임을 알린다 */
+  if ((S.co.deskDay || 0) !== S.day) {
+    const p = 0.55 + Math.sin(frame / 16) * 0.25;
+    X.save(); X.globalAlpha = p;
+    X.fillStyle = '#F2B233'; X.fillRect(Math.round(x) - 10, Math.round(y) - 44, 20, 9);
+    X.restore();
+    drawText(x, y - 37, '결재', { size: 10, color: '#20263A', shadow: false });
+  }
 }
 
 function drawOfficeProp(p, k) {
@@ -444,6 +549,7 @@ function drawFoot() {
     ['일매출', won(S.co.revToday), '#FFD57A'],
     ['순익', (net >= 0 ? '+' : '') + won(net), net >= 0 ? '#4BD69B' : '#F07068'],
     ['인지도', '×' + S.co.marketing.toFixed(2), '#8FBEEA'],
+    ['재고', Math.round(S.co.inv ?? 100) + '%', (S.co.inv ?? 100) < 25 ? '#F07068' : (S.co.inv ?? 100) < 60 ? '#FFD57A' : '#4BD69B'],
     ['손님', customers.length + '명', '#E3D8BB'],
     ['직원', S.staff.length + '명', '#E3D8BB'],
   ];
@@ -454,4 +560,4 @@ function drawFoot() {
   });
 }
 
-export { BOSS, CLERK, COUNTER, DESKS, DOOR, FLATS, FREEZERS, FRIDGES, drawFreezer, P, QUEUE, SHELVES, SHOP_BLOCK, SHOP_PROPS, SPAWN_GX, addOffice, advancePhase, bar, drawBossDesk, drawCounter, drawDesk, drawEmptyChair, drawFlat, drawFoot, drawFridge, drawOfficeProp, drawPartition, drawProp, drawShelf, drawSignboard, drawStore, drawWalls, drawWhiteboard, findPath, inBossRoom, newCustomer, palette, retarget, spawnCustomers, stepCustomers, storeFloor, tileOf, walkable };
+export { BOSS, CLERK, CLERK2, COUNTER, DESKS, DOOR, EXTRA_COUNTER, EXTRA_FRIDGE, EXTRA_SHELF, FLATS, FREEZERS, FRIDGES, HOTSPOTS, P, QUEUE, SHELVES, SHOP_BLOCK, SHOP_PROPS, SPAWN_GX, addOffice, advancePhase, bar, blockedAt, countersNow, drawBossDesk, drawCounter, drawDesk, drawEmptyChair, drawFlat, drawFoot, drawFreezer, drawFridge, drawOfficeProp, drawPartition, drawProp, drawShelf, drawSignboard, drawStore, drawWalls, drawWhiteboard, facilKey, findPath, fl, fridgesNow, inBossRoom, invRatio, newCustomer, offFloorPal, palette, retarget, shelvesNow, shopFloorPal, spawnCustomers, stepCustomers, stocked, storeFloor, storeHit, tileOf, walkable };

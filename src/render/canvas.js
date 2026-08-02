@@ -1,10 +1,14 @@
+import { BAL } from '../core/balance.js';
 import { DIFFS, SECTORS, TIERS } from '../core/data.js';
+import { sfx } from '../core/audio.js';
 import { S } from '../core/state.js';
 import { $, clamp, pick, won } from '../core/util.js';
 import { HW, isoX, isoY } from './iso.js';
 import { cityHit, drawCity } from './city.js';
-import { drawStore, spawnCustomers } from './store.js';
+import { drawStore, spawnCustomers, storeHit } from './store.js';
 import { openCompany } from '../ui/companyPopup.js';
+import { openDesk } from '../ui/desk.js';
+import { setTab } from '../ui/tabs.js';
 import { renderTopBar } from '../ui/index.js';
 
 /* ══════════════════════════════════════════════════════════════
@@ -22,12 +26,19 @@ const CV = document.getElementById('cv');
 
 const X = CV.getContext('2d');
 
-/* 도시 — 21×21 타일. 3칸 격자에서 2×2 자리가 한 블록이라 블록은 7×7 = 49칸.
-   세로가 배율의 병목이라 월드 높이를 늘릴 수 없다. 그래서 헤드룸을 깎고
-   타일 수만 늘려 같은 2배율에서 더 큰 도시를 담는다. */
-const MAP_W = 21, MAP_H = 21;
-const CITY_W = (MAP_W + MAP_H) * HW, CITY_H = 404;
-const CITY_O = { x: MAP_H * HW, y: 56 };           // 맵 원점 (위쪽 헤드룸 56)
+/* 도시 — 3칸 격자에서 2×2 자리가 한 블록. 타일 수 = cityBlocks × 3.
+   현재 7×7 = 49블록 / 21×21 타일.
+
+   **세로가 배율의 병목이다.** 1080p 브라우저의 캔버스 높이가 약 865px 이라
+   월드 높이가 432를 넘는 순간 배율이 2 → 1 로 떨어져 맵이 확 작아진다.
+   헤드룸(CITY_HEAD)과 아래 여백을 깎아 404 → 384 로 줄였다. PX=2 를 유지하는 데
+   필요한 캔버스 높이가 808 → 768px 로 내려가 여유가 늘었고, 1440p 에서는 PX=3 도
+   닿는다. 블록을 더 늘리려면 이 예산부터 다시 짜야 한다 — GRAPHICS.md 참고. */
+const MAP_W = BAL.cityBlocks * 3, MAP_H = BAL.cityBlocks * 3;
+const CITY_HEAD = 40;                              // 위쪽 헤드룸 — 첫 블록의 고층이 잘리지 않을 만큼
+const CITY_W = (MAP_W + MAP_H) * HW;
+const CITY_H = CITY_HEAD + (MAP_W + MAP_H - 2) * 8 + 24;   // + 24 = 맨 앞 상호판 자리
+const CITY_O = { x: MAP_H * HW, y: CITY_HEAD };
 
 /* 월드 밖 여백에도 시골 풍경을 깐다. 월드 변환은 캔버스를 자르지 않으므로,
    지면 레이어를 월드보다 크게 구워 음수 좌표에 붙이면 레터박스가 채워진다.
@@ -112,6 +123,13 @@ function hitLot(p) {
 }
 
 function onCanvasMove(ev) {
+  if (S.mode === 'store') {                       // 사옥 — 핫스팟만 안내한다
+    const sh = storeHit(toLogical(ev));
+    CV.style.cursor = sh ? 'pointer' : 'default';
+    if (!sh) { hoverId = null; return hideTip(); }
+    if (sh.k !== hoverId) { hoverId = sh.k; showTip(ev, `<b class="c-gold">${sh.tip}</b>`); }
+    return moveTip(ev);
+  }
   const h = hitLot(toLogical(ev));
   CV.style.cursor = h ? 'pointer' : 'default';
   const id = h ? (h.self ? '__me' : h.co.id) : null;
@@ -127,6 +145,11 @@ function onCanvasMove(ev) {
 }
 
 function onCanvasClick(ev) {
+  if (S.mode === 'store') {
+    const sh = storeHit(toLogical(ev));
+    if (sh) { sfx('tap'); sh.k === 'boss' ? openDesk() : setTab('shop'); }
+    return;
+  }
   const h = hitLot(toLogical(ev));
   if (!h) return;
   if (h.self) return zoomInto('store');
@@ -136,6 +159,20 @@ function onCanvasClick(ev) {
 function zoomInto(m) {
   CV.classList.add('zooming');
   setTimeout(() => { setMode(m); CV.classList.remove('zooming'); }, 260);
+}
+
+/* ── 카메라 회전 ─────────────────────────────────────────────
+   2D 라 중간 각도를 그릴 수 없다. 회전 프레임을 보여 주려 하면 어색하므로
+   zoomInto 와 같은 페이드로 한 번 덮고 그 사이에 방향을 바꾼다.
+   지면 레이어는 city.js 가 bakedView 를 보고 알아서 다시 굽는다. */
+function rotateCity(dir) {
+  if (!S || S.mode !== 'city') return;
+  CV.classList.add('zooming');
+  setTimeout(() => {
+    S.view = (((S.view | 0) + dir) % 4 + 4) % 4;
+    hideTip();
+    CV.classList.remove('zooming');
+  }, 130);
 }
 
 /* ── 툴팁 ────────────────────────────────────────────────── */
@@ -320,4 +357,4 @@ function shade(hex, amt) {
   return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`;
 }
 
-export { CITY_H, CITY_O, CITY_PAD_X, CITY_PAD_Y, CITY_W, CV, DPR, FONT, FOOT_Y, HAIRS, MAP_H, MAP_W, OUT, OX, OY, PX, ROOM_H, ROOM_W, SHIRTS, SKINS, SPLIT_GX, STORE_H, STORE_O, STORE_W, X, customers, draw, drawHead, drawLabel, drawPerson, drawPops, drawSitter, drawText, drawTorso, faceOf, fitCanvas, frame, hideTip, hitLot, hoverId, initCanvas, lotPos, mix, moveTip, newLook, onCanvasClick, onCanvasMove, pops, setMode, shade, showTip, textW, tipEl, toLogical, worldH, worldW, zoomInto };
+export { CITY_HEAD, CITY_H, CITY_O, CITY_PAD_X, CITY_PAD_Y, CITY_W, CV, DPR, FONT, FOOT_Y, HAIRS, MAP_H, MAP_W, OUT, OX, OY, PX, ROOM_H, ROOM_W, SHIRTS, SKINS, SPLIT_GX, STORE_H, STORE_O, STORE_W, X, customers, draw, drawHead, drawLabel, drawPerson, drawPops, drawSitter, drawText, drawTorso, faceOf, fitCanvas, frame, hideTip, hitLot, hoverId, initCanvas, lotPos, mix, moveTip, newLook, onCanvasClick, onCanvasMove, pops, setMode, shade, showTip, textW, tipEl, toLogical, worldH, worldW, zoomInto, rotateCity };
