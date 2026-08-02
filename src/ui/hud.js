@@ -1,3 +1,4 @@
+import { BAL } from '../core/balance.js';
 import { TIERS } from '../core/data.js';
 import { debtTotal } from '../core/derive.js';
 import { S } from '../core/state.js';
@@ -22,7 +23,7 @@ function renderHud() {
     <div class="hud-spacer"></div>
     <div class="hud-ctrl">
       <span class="hud-day">${Math.floor(s.day / 30) + 1}년차 ${s.day % 30 || 30}일</span>
-      ${[0, 1, 2, 4].map(v => `<button class="spd ${s.speed === v ? 'on' : ''}" data-spd="${v}">${v ? v + 'x' : '❚❚'}</button>`).join('')}
+      ${BAL.speeds.map(v => `<button class="spd ${s.speed === v ? 'on' : ''}" data-spd="${v}">${v ? v + 'x' : '❚❚'}</button>`).join('')}
       <button class="mini-btn" id="btn-help">?</button>
       <button class="mini-btn" id="btn-save">저장</button>
     </div>`;

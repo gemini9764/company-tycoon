@@ -3,22 +3,21 @@ import { DIFFS, SECTORS, TIERS } from '../core/data.js';
 import { S } from '../core/state.js';
 import { $, esc, pct, won } from '../core/util.js';
 import { capCeiling } from '../systems/company.js';
-import { dailyRetail, managersHave, managersNeeded, pmi, synergyParts } from '../systems/economy.js';
-import { renderHud } from './hud.js';
-import { toast } from './toast.js';
+import { goalText } from '../systems/ending.js';
+import { managersHave, managersNeeded, pmi, synergyParts } from '../systems/economy.js';
 import { TAB } from './tabs.js';
 
 /* ── 회사 현황 창 ────────────────────────────────────────── */
 function renderLeft() {
   if (TAB !== 'co') return;                 // 회사 창이 닫혀 있으면 그릴 곳이 없다
-  const s = S, t = TIERS[s.co.tier], next = TIERS[s.co.tier + 1];
+  const s = S, t = TIERS[s.co.tier];
   const net = s.co.revToday - s.co.costToday;
   let h = '';
 
   h += `<div class="row">
     <h4>${t.name}<span class="c-dim" style="font-size:10px;font-family:var(--f-sm)">${s.co.tier + 1}/${TIERS.length}</span></h4>
     <div class="gauge sm" style="margin-top:5px"><i style="width:${(s.co.tier + 1) / TIERS.length * 100}%;background:var(--gold)"></i></div>
-    <div class="meta">다음 목표 — ${next ? t.goal : '최종 등급 · 순위 경쟁 지속'}</div>
+    <div class="meta">다음 목표 — ${goalText(s)}</div>
     <div class="meta">인수 가능 규모 상한 ${capCeiling(s) === Infinity ? '무제한' : won(capCeiling(s))}</div>
   </div>`;
 
@@ -29,10 +28,7 @@ function renderLeft() {
     <div class="kv" style="border-top:1px solid var(--paper-3);margin-top:3px;padding-top:3px">
       <span>순익</span><b class="${net >= 0 ? 'c-jade' : 'c-blood'}">${net >= 0 ? '+' : ''}${won(net)}</b></div>
     <div class="kv"><span>인지도</span><b>×${s.co.marketing.toFixed(2)}</b></div>
-    <div class="btn-row">
-      <button class="btn gold" id="ad-s">전단지 ${won(adCost(s, 1))}</button>
-      <button class="btn gold" id="ad-l">광고 캠페인 ${won(adCost(s, 3))}</button>
-    </div>
+    <div class="meta c-dim">인지도·발주·시설은 <b>사옥 → 매장</b> 창에서 조작합니다.</div>
   </div>`;
 
   if (s.nego) {
@@ -72,10 +68,7 @@ function renderLeft() {
       <div class="meta">계열사 수익 전체에 곱해집니다. 목표 ×${sp.target.toFixed(2)}로 서서히 수렴합니다.</div>
       ${line('업종 집중', sp.focus)}${line('통합 진행 중', sp.integ)}${line('관리 인력 부족', sp.short)}${line('점검 효과', sp.audit)}
       <div class="kv"><span>관리 인력</span><b class="${managersHave(s) < managersNeeded(s) ? 'c-blood' : ''}">${managersHave(s)} / ${managersNeeded(s)}명 필요</b></div>
-      <div class="btn-row">
-        <button class="btn jade" id="audit" ${s.co.auditBuff >= BAL.auditCap ? 'disabled' : ''}>사업부 점검 ${won(auditCost(s))}</button>
-      </div>
-      <div class="meta">${s.co.auditBuff >= BAL.auditCap ? '점검 효과가 최대입니다.' : '현장 점검으로 효율을 끌어올립니다. 효과는 시간이 지나면 옅어집니다.'}</div>
+      <div class="meta">사업부 점검은 <b>사옥 → 매장 → 운영</b> 에서 실행합니다.</div>
     </div>`;
     h += `<div class="row"><h4>계열사 ${s.co.subs.length}</h4>${
       s.co.subs.map(c => {
@@ -85,23 +78,8 @@ function renderLeft() {
   }
 
   $('panel-body').innerHTML = h;
-  const ad = (mul) => { const c = adCost(s, mul); if (s.co.cash < c) return toast('자금이 부족합니다', 'bad');
-    s.co.cash -= c; s.co.marketing = Math.min(BAL.marketingCap, s.co.marketing + 0.12 * mul);
-    toast(`인지도 +${(0.12 * mul).toFixed(2)}`, 'good'); renderLeft(); renderHud(); };
-  $('ad-s').onclick = () => ad(1);
-  $('ad-l').onclick = () => ad(3);
-  const au = $('audit');
-  if (au) au.onclick = () => {
-    const c = auditCost(s); if (s.co.cash < c) return toast('자금이 부족합니다', 'bad');
-    s.co.cash -= c;
-    s.co.auditBuff = Math.min(BAL.auditCap, (s.co.auditBuff || 0) + BAL.auditGain);
-    toast(`운영 효율 목표 +${Math.round(BAL.auditGain * 100)}%`, 'good');
-    renderLeft(); renderHud();
-  };
 }
 
-const adCost = (s, mul) => Math.round(Math.max(3e5, dailyRetail(s) * 1.6) * mul);
 
-const auditCost = s => Math.round(Math.max(3e6, s.co.subs.reduce((a, c) => a + c.cap, 0) * 0.004));
 
-export { adCost, auditCost, renderLeft };
+export { renderLeft };
