@@ -1,7 +1,8 @@
+import { BAL } from '../core/balance.js';
 import { SECTORS } from '../core/data.js';
 import { S } from '../core/state.js';
 import { $, chance, pick, rnd } from '../core/util.js';
-import { HH, HW, faces, isoWin, isoX, isoY, makeLayer, prism, rhomb, rhombEdge } from './iso.js';
+import { HH, HW, faces, isoWin, isoX, isoY, makeLayer, prism, rhomb, rhombEdge, rotFace, rotG } from './iso.js';
 import { CITY_H, CITY_O, CITY_PAD_X, CITY_PAD_Y, CITY_W, MAP_H, MAP_W, X, drawLabel, drawPerson, drawPops, drawText, frame, hoverId, mix, newLook, shade, textW } from './canvas.js';
 
 /* ══════════════════════════════════════════════════════════════
@@ -30,11 +31,13 @@ const BLDG_STYLE = {
 const BLDG_H = { tower: [36, 66], neon: [30, 50], lab: [28, 44], shop: [22, 36], plant: [20, 30] };
 
 /* 회사가 안 쓰는 블록은 도심에서 멀어질수록 시골이 된다.
-   가운데는 오피스·아파트가 빽빽하고 바깥으로 갈수록 상가 → 공원 → 논밭. */
+   가운데는 오피스·아파트가 빽빽하고 바깥으로 갈수록 상가 → 공원 → 논밭.
+   ring 은 블록 격자 중심으로부터의 거리라 블록 수가 바뀌어도 따라간다. */
 function emptyKind(i, j, k) {
-  const ring = Math.max(Math.abs(i - 3), Math.abs(j - 3));
+  const c = (BAL.cityBlocks - 1) / 2;
+  const ring = Math.round(Math.max(Math.abs(i - c), Math.abs(j - c)));
   if (ring <= 1) return k < 0.42 ? 'office' : k < 0.74 ? 'apart' : k < 0.9 ? 'shops' : 'plaza';
-  if (ring === 2) return k < 0.3 ? 'shops' : k < 0.52 ? 'office' : k < 0.68 ? 'apart' : k < 0.84 ? 'park' : 'lot';
+  if (ring <= 2) return k < 0.3 ? 'shops' : k < 0.52 ? 'office' : k < 0.68 ? 'apart' : k < 0.84 ? 'park' : 'lot';
   return k < 0.3 ? 'farm' : k < 0.56 ? 'houses' : k < 0.76 ? 'park' : k < 0.9 ? 'shops' : 'lot';
 }
 
@@ -49,13 +52,28 @@ const MY_R = [16, 19, 22, 24, 25, 26, 27];
 
 const ROAD = '#3C4360', ROAD_EDGE = '#2F3550', WALK = '#5A6280';
 
-let ground = null, builtFor = null, empties = [], traffic = [], plates = [];
+let ground = null, builtFor = null, bakedView = -1, empties = [], traffic = [], plates = [];
+
+/* ── 회전 ────────────────────────────────────────────────────
+   모든 타일→월드 변환이 이 두 함수를 지난다. 여기서만 회전을 먹이면
+   건물 배치·정렬·클릭 판정·차량 경로가 전부 같이 돈다.
+   (건물 몸통은 prism 이 좌우 대칭이라 방향을 안 탄다 — 그래서 회전이 싸다) */
+const viewOf = () => (S && S.view | 0) & 3;
+
+function cityX(O, gx, gy) { const [a, b] = rotG(gx, gy, viewOf(), MAP_W, MAP_H); return isoX(O, a, b); }
+
+function cityY(O, gx, gy) { const [a, b] = rotG(gx, gy, viewOf(), MAP_W, MAP_H); return isoY(O, a, b); }
+
+/* 상호판의 화면상 사각형. flushPlates 가 매 프레임 다시 채운다.
+   상호판은 건물을 전부 그린 뒤 맨 위에 얹히므로 절대 가려지지 않는다.
+   그래서 이걸 그대로 클릭 타깃으로 쓴다 — 뒤에 완전히 숨은 회사도 집을 수 있다. */
+const plateBoxes = [];
 
 /* ── 지면 캐시 ───────────────────────────────────────────── */
 /* 타일 441장을 매 프레임 그리면 낭비다. 정지 화면이라 한 번 굽고 통째로 붙인다. */
 function cityGround() {
-  if (ground && builtFor === S) return ground;
-  builtFor = S;
+  if (ground && builtFor === S && bakedView === viewOf()) return ground;
+  builtFor = S; bakedView = viewOf();
   buildEmpties();
   ensureTraffic();
   const LW = CITY_W + CITY_PAD_X * 2, LH = CITY_H + CITY_PAD_Y * 2;
@@ -66,8 +84,9 @@ function cityGround() {
     g.fillStyle = '#25402F'; g.fillRect(0, 0, LW, LH);
     drawOutskirts(g, O, LW, LH);
     for (let gy = 0; gy < MAP_H; gy++) for (let gx = 0; gx < MAP_W; gx++) {
-      const x = isoX(O, gx, gy), y = isoY(O, gx, gy);
-      const rx = gx % 3 === 0, ry = gy % 3 === 0;
+      const x = cityX(O, gx, gy), y = cityY(O, gx, gy);
+      let rx = gx % 3 === 0, ry = gy % 3 === 0;
+      if (viewOf() & 1) [rx, ry] = [ry, rx];         // 홀수 뷰에서는 도로 방향이 바뀐다
       if (rx || ry) drawRoadTile(g, x, y, rx, ry);
       else drawBlockTile(g, x, y, gx, gy);
     }
@@ -76,25 +95,45 @@ function cityGround() {
   return ground;
 }
 
-/* ── 도시 밖 시골 ────────────────────────────────────────────
-   좌우 여백이 허전해 보이지 않게 논밭·숲·연못을 성기게 흩뿌린다.
-   빽빽하게 채우면 도심과 구분이 안 되므로 4×4 타일 단위로 뭉쳐서 배치한다.
-   전부 지면 레이어에 구우므로 프레임 비용은 0이다.
+/* ── 도시 밖 ─────────────────────────────────────────────────
+   화면이 비어 보이던 원인은 도심 밖이 전부 논밭이었기 때문이다. 쿼터뷰 마름모는
+   화면 사각형의 절반만 덮으므로 네 귀퉁이가 항상 남는데, 거기가 죄다 초록이면
+   "도시가 조그맣게 떠 있는" 그림이 된다.
+
+   그래서 거리에 따라 세 단으로 나눈다. 맵 경계에서
+     0~5 타일  교외 주택가 — 도로가 이어지고 집·상가가 촘촘하다
+     6~13 타일 마을 — 집이 성기고 논밭이 섞인다
+     14 타일~  들판 — 논밭·숲·저수지
+
+   전부 지면 레이어에 굽는다. 타일이 수천 장이어도 **프레임 비용은 0** 이다.
    ─────────────────────────────────────────────────────────── */
 function drawOutskirts(g, O, LW, LH) {
-  const R = 30;
+  const R = 34;
   const inMap = (gx, gy) => gx >= 0 && gx < MAP_W && gy >= 0 && gy < MAP_H;
   const cell = (gx, gy) => h2((gx >> 2) * 31 + 7, (gy >> 2) * 17 + 3);
+
+  /* 맵 경계까지의 체비셰프 거리. 도심에서 멀어지는 정도를 이걸로 잰다. */
+  const edge = (gx, gy) => Math.max(
+    gx < 0 ? -gx : gx >= MAP_W ? gx - MAP_W + 1 : 0,
+    gy < 0 ? -gy : gy >= MAP_H ? gy - MAP_H + 1 : 0,
+  );
 
   for (let pass = 0; pass < 2; pass++) {
     for (let gy = -R; gy < MAP_H + R; gy++) for (let gx = -R; gx < MAP_W + R; gx++) {
       if (inMap(gx, gy)) continue;
-      const x = isoX(O, gx, gy), y = isoY(O, gx, gy);
+      const x = cityX(O, gx, gy), y = cityY(O, gx, gy);
       if (x < -24 || x > LW + 24 || y < -24 || y > LH + 24) continue;
       const ck = cell(gx, gy), r = h2(gx * 7 + 1, gy * 13 + 5);
+      const d = edge(gx, gy);
+      const road = d <= 13 && (gx % 4 === 0 || gy % 4 === 0);   // 교외 도로망
 
       if (pass === 0) {                                   // 바닥
-        if (ck < 0.16) {                                  // 논밭 뙈기
+        if (road) {
+          rhomb(g, x, y, HW, HH, d <= 5 ? '#48506E' : '#5A5342');
+          rhombEdge(g, x, y, HW, HH, d <= 5 ? '#3A4160' : '#4A4436');
+        } else if (d <= 5) {                              // 교외 — 포장된 마당
+          rhomb(g, x, y, HW, HH, (gx + gy) % 2 ? '#5E6B52' : '#586548');
+        } else if (ck < 0.16) {                           // 논밭 뙈기
           rhomb(g, x, y, HW, HH, r > 0.5 ? '#6B5A3A' : '#635336');
           g.fillStyle = '#7D6A44';
           for (let i = -3; i <= 3; i += 2) g.fillRect(Math.round(x - 8 + i * 2), Math.round(y + i), 16, 1);
@@ -106,10 +145,22 @@ function drawOutskirts(g, O, LW, LH) {
         continue;
       }
 
-      if (ck >= 0.22 && ck < 0.36 && r < 0.42) drawTree(x, y, r, g);          // 숲
-      else if (ck >= 0.36 && r < 0.05) drawTree(x, y, r * 12, g);             // 들판의 외딴 나무
-      else if (ck >= 0.36 && r > 0.985) drawHouse(x, y - 2, r, g);            // 외딴집
-      else if (ck < 0.16 && r > 0.97) drawShed(x, y, 0.4, g);                 // 논 옆 창고
+      if (road) continue;                                 // 도로 위에는 아무것도 안 올린다
+
+      if (d <= 5) {                                       // 교외 주택가 — 촘촘하게
+        if (r < 0.44) drawHouse(x, y - 2, r, g);
+        else if (r < 0.52) drawShed(x, y, r, g);
+        else if (r < 0.60) drawTree(x, y, r, g);
+      } else if (d <= 13) {                               // 마을 — 성기게
+        if (ck >= 0.22 && r < 0.17) drawHouse(x, y - 2, r * 5, g);
+        else if (r < 0.24) drawTree(x, y, r * 4, g);
+        else if (ck < 0.16 && r > 0.93) drawShed(x, y, 0.4, g);
+      } else {                                            // 들판
+        if (ck >= 0.22 && ck < 0.36 && r < 0.42) drawTree(x, y, r, g);
+        else if (ck >= 0.36 && r < 0.05) drawTree(x, y, r * 12, g);
+        else if (ck >= 0.36 && r > 0.985) drawHouse(x, y - 2, r, g);
+        else if (ck < 0.16 && r > 0.97) drawShed(x, y, 0.4, g);
+      }
     }
   }
 }
@@ -118,7 +169,8 @@ function drawOutskirts(g, O, LW, LH) {
 function buildEmpties() {
   const used = new Set([`${S.co.lot.tx},${S.co.lot.ty}`, ...S.market.map(c => `${c.lot.tx},${c.lot.ty}`)]);
   empties = [];
-  for (let j = 0; j < 7; j++) for (let i = 0; i < 7; i++) {
+  const N = BAL.cityBlocks;
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
     const tx = 1 + i * 3, ty = 1 + j * 3;
     if (used.has(`${tx},${ty}`)) continue;
     empties.push({ tx, ty, kind: emptyKind(i, j, h2(tx, ty)) });
@@ -221,7 +273,9 @@ function pedFace(t) {
 function drawCar(t, x, y) {
   const long = t.kind === 'bus' ? 8 : t.kind === 'truck' ? 6 : 4;
   const h = t.kind === 'bus' ? 11 : 8, rx = 8, ry = 4;
-  const ox = long, oy = t.axis === 'x' ? long / 2 : -long / 2;
+  /* 차체를 진행 축으로 늘린다. 회전하면 화면상 진행 축도 바뀌므로 같이 돌린다. */
+  const ne = rotFace(pedFace(t), viewOf()) === 'n' || rotFace(pedFace(t), viewOf()) === 's';
+  const ox = long, oy = ne ? -long / 2 : long / 2;
   X.save(); X.globalAlpha = 0.24;
   rhomb(X, x + 2, y + 1, rx + long, (rx + long) / 2, '#000000'); X.restore();
   for (const s of [-1, 1]) {
@@ -242,29 +296,37 @@ function drawCity() {
 
   /* 쿼터뷰는 화면 아래쪽이 앞이다. 바닥 y 로 정렬해야 앞뒤가 맞는다. */
   const items = [];
-  for (const c of S.market) items.push({ y: lotY(c.lot), f: () => drawBuilding(c) });
-  items.push({ y: lotY(S.co.lot), f: drawMyBuilding });
-  for (const e of empties) items.push({ y: lotY(e), f: () => drawTerrain(e) });
+  for (const c of S.market) items.push({ y: lotY(c.lot), box: bboxOf(bldgGeom(c)), f: () => drawBuilding(c) });
+  items.push({ y: lotY(S.co.lot), box: bboxOf(myGeom()), f: drawMyBuilding });
+  for (const e of empties) {
+    const p = lotC(e);
+    items.push({ y: lotY(e), box: bboxOf({ x: p.x, y: p.y, rx: 30, ry: 15, h: 44 }), f: () => drawTerrain(e) });
+  }
   for (const t of traffic) {
     const p = trafficPos(t);
-    const x = isoX(CITY_O, p.gx, p.gy), y = isoY(CITY_O, p.gx, p.gy);
+    const x = cityX(CITY_O, p.gx, p.gy), y = cityY(CITY_O, p.gx, p.gy);
     items.push({
       y,
       f: t.type === 'car' ? () => drawCar(t, x, y)
-        : () => drawPerson(x, y, t.look, pedFace(t), Math.floor(t.walk * 5)),
+        : () => drawPerson(x, y, t.look, rotFace(pedFace(t), viewOf()), Math.floor(t.walk * 5)),
     });
   }
   items.sort((a, b) => a.y - b.y);
-  for (const it of items) it.f();
+  const foc = focusOf();
+  for (const it of items) {
+    if (foc && it.box && it.y > foc.y && boxHits(it.box, foc.box)) {
+      X.save(); X.globalAlpha = 0.24; it.f(); X.restore();   // 앞을 가리는 것만 눌러 준다
+    } else it.f();
+  }
 
   flushPlates();
   drawNegoMark();
   drawPops();
 }
 
-function lotY(lot) { return isoY(CITY_O, lot.tx + 1, lot.ty + 1); }
+function lotY(lot) { return cityY(CITY_O, lot.tx + 1, lot.ty + 1); }
 
-function lotC(lot) { return { x: isoX(CITY_O, lot.tx + 1, lot.ty + 1), y: lotY(lot) }; }
+function lotC(lot) { return { x: cityX(CITY_O, lot.tx + 1, lot.ty + 1), y: lotY(lot) }; }
 
 /* ── 지형 블록 ───────────────────────────────────────────── */
 const FILL_BODY = ['#5A6480', '#6B6E86', '#7A6E6A', '#5E7480', '#6E6480', '#7A7460'];
@@ -460,7 +522,7 @@ function drawBuilding(c) {
     X.save(); X.globalAlpha = 0.5 + Math.sin(frame / 10) * 0.2;
     rhombEdge(X, x, y - h, rx, ry, '#FFD57A'); rhombEdge(X, x, y, rx, ry, '#FFD57A'); X.restore();
   }
-  drawNamePlate(x, y, c.name, c.owned ? '#FFD57A' : '#D6DAEA');
+  drawNamePlate(x, y, c.name, c.owned ? '#FFD57A' : '#D6DAEA', { co: c, g });
 }
 
 /** 건물 앞 여백 — 주차 구획이나 화단 */
@@ -560,13 +622,19 @@ function drawShop(c, g, sec, seed) {
   prism(X, x, y - h, rr, rr / 2, 1, shade(sec.color, 0.2), shade(sec.color, -0.25), sec.color);
 }
 
-function drawNamePlate(x, y, name, color) { plates.push({ x, y, name, color }); }
+function drawNamePlate(x, y, name, color, hit) { plates.push({ x, y, name, color, hit }); }
 
 function flushPlates() {
+  plateBoxes.length = 0;
   for (const p of plates) {
     const w = Math.max(18, Math.round(textW(p.name, 10)) + 8);
-    X.fillStyle = 'rgba(11,15,27,.82)'; X.fillRect(Math.round(p.x - w / 2), Math.round(p.y + 14), w, 11);
+    const x = Math.round(p.x - w / 2), y = Math.round(p.y + 14);
+    const on = p.hit && (p.hit.self ? hoverId === '__me' : hoverId === p.hit.co.id);
+    X.fillStyle = on ? 'rgba(11,15,27,.95)' : 'rgba(11,15,27,.82)';
+    X.fillRect(x, y, w, 11);
+    if (on) { X.fillStyle = '#FFD57A'; X.fillRect(x, y, w, 1); X.fillRect(x, y + 10, w, 1); }
     drawText(p.x, p.y + 22, p.name, { size: 10, color: p.color, shadow: false });
+    if (p.hit) plateBoxes.push({ x, y, w, h: 11, hit: p.hit });
   }
   plates.length = 0;
 }
@@ -607,7 +675,7 @@ function drawMyBuilding() {
 
   X.save(); X.globalAlpha = 0.35 + Math.sin(frame / 22) * 0.22;
   rhombEdge(X, x, y, rx + 4, (rx + 4) / 2, '#FFD57A'); X.restore();
-  drawNamePlate(x, y, S.co.name, '#FFD57A');
+  drawNamePlate(x, y, S.co.name, '#FFD57A', { self: true, g: myGeom() });
 }
 
 /* ── 협상 표시 ───────────────────────────────────────────── */
@@ -625,16 +693,57 @@ function drawNegoMark() {
 /* ── 클릭 판정 ───────────────────────────────────────────── */
 /* 건물이 위로 솟아 있어 바닥 마름모만으로는 못 잡는다. 건물을 감싼 사각형을
    화면 앞(아래)에서부터 훑어 먼저 걸리는 것을 고른다. */
+/* ── 클릭 판정 ───────────────────────────────────────────────
+   쿼터뷰에서는 앞 건물이 뒤 건물을 덮어 클릭이 어렵다. 두 갈래로 푼다.
+
+   ① 실루엣 판정 — 사각형 근사를 쓰면 건물 마름모 바깥 모서리(빈 하늘)까지
+      앞 건물이 먹어 버린다. 마름모 기둥의 실제 실루엣으로 판정한다.
+   ② 상호판 판정 — 그래도 완전히 가려진 회사는 남는다. 상호판은 항상 최상단에
+      그려지므로, 상호판 자체를 클릭 타깃으로 삼아 '못 집는 회사'를 없앤다.
+   ─────────────────────────────────────────────────────────── */
+
+/** 마름모 기둥의 실루엣 판정. 그 x 에서의 세로 반경만큼만 인정한다. */
+function isoHit(p, g) {
+  const dx = Math.abs(p.x - g.x) / g.rx;
+  if (dx > 1) return false;
+  const band = (1 - dx) * g.ry;
+  return p.y >= g.y - band - g.h && p.y <= g.y + band;
+}
+
+function plateHit(p) {
+  for (let i = plateBoxes.length - 1; i >= 0; i--) {   // 나중에 그린 것이 위
+    const b = plateBoxes[i];
+    if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) return b.hit;
+  }
+  return null;
+}
+
 function cityHit(p) {
+  const plate = plateHit(p);
+  if (plate) return plate;
   const list = [
     ...S.market.map(c => ({ co: c, g: bldgGeom(c) })),
     { self: true, g: myGeom() },
   ].sort((a, b) => b.g.y - a.g.y);
-  for (const it of list) {
-    const { x, y, rx, ry, h } = it.g;
-    if (p.x >= x - rx && p.x <= x + rx && p.y >= y - ry - h && p.y <= y + ry) return it;
-  }
+  for (const it of list) if (isoHit(p, it.g)) return it;
   return null;
+}
+
+/* ── 가림 처리 ───────────────────────────────────────────────
+   상호판으로 숨은 회사를 집을 수 있게 되면서, 정작 그 건물이 안 보이는 문제가
+   생긴다. 호버 대상보다 앞에 있으면서 겹치는 것들을 반투명으로 눌러 준다.
+   ─────────────────────────────────────────────────────────── */
+function bboxOf(g) { return { l: g.x - g.rx, r: g.x + g.rx, t: g.y - g.h - g.ry, b: g.y + g.ry }; }
+
+function boxHits(a, b) { return a.l < b.r && a.r > b.l && a.t < b.b && a.b > b.t; }
+
+/** 호버 중인 대상의 위치와 겉넓이. 없으면 null. */
+function focusOf() {
+  if (!hoverId) return null;
+  let g = null;
+  if (hoverId === '__me') g = myGeom();
+  else { const c = S.market.find(m => m.id === hoverId); if (c) g = bldgGeom(c); }
+  return g ? { y: g.y, box: bboxOf(g) } : null;
 }
 
 function myGeom() {
@@ -642,4 +751,4 @@ function myGeom() {
   return { x, y, rx, ry: rx / 2, h: MY_H[S.co.tier] };
 }
 
-export { bldgGeom, flushPlates, drawOutskirts, emptyKind, drawFillApart, drawFillOffice, drawFillShops, drawRoofProps, KIND_FLOOR, FILL_BODY, buildEmpties, cityGround, cityHit, drawApron, drawBench, drawBlockTile, drawBuilding, drawCar, drawCity, drawCrop, drawFountain, drawHouse, drawLab, drawMyBuilding, drawNamePlate, drawNegoMark, drawNeon, drawPlant, drawPond, drawRoadTile, drawShed, drawShop, drawSign, drawTerrain, drawTower, drawTree, ensureTraffic, h2, kindOf, lotC, lotY, moveTraffic, myGeom, pedFace, speckle, trafficPos };
+export { bboxOf, boxHits, focusOf, isoHit, plateHit, bldgGeom, flushPlates, drawOutskirts, emptyKind, drawFillApart, drawFillOffice, drawFillShops, drawRoofProps, KIND_FLOOR, FILL_BODY, buildEmpties, cityGround, cityHit, drawApron, drawBench, drawBlockTile, drawBuilding, drawCar, drawCity, drawCrop, drawFountain, drawHouse, drawLab, drawMyBuilding, drawNamePlate, drawNegoMark, drawNeon, drawPlant, drawPond, drawRoadTile, drawShed, drawShop, drawSign, drawTerrain, drawTower, drawTree, ensureTraffic, h2, kindOf, lotC, lotY, moveTraffic, myGeom, pedFace, speckle, trafficPos };

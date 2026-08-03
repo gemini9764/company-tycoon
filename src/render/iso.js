@@ -19,6 +19,30 @@ function unIso(o, wx, wy) {
   return { gx: (dy + dx) / 2, gy: (dy - dx) / 2 };
 }
 
+/* ── 회전 ────────────────────────────────────────────────────
+   쿼터뷰에서 90° 회전은 투영식을 건드릴 필요가 없다. **타일 좌표만 돌리면**
+   화면이 따라 돈다. 그리는 쪽과 판정하는 쪽이 이 함수 하나를 같이 쓰면
+   클릭 판정은 저절로 맞는다.
+
+   view 0 = 기본, 1·2·3 = 시계 방향 90°씩. 실수 좌표(차량·보행자)도 그대로 통한다. */
+function rotG(gx, gy, view, W, H) {
+  switch (view & 3) {
+    case 1: return [gy, W - 1 - gx];
+    case 2: return [W - 1 - gx, H - 1 - gy];
+    case 3: return [H - 1 - gy, gx];
+    default: return [gx, gy];
+  }
+}
+
+/* 보행자·차량이 향한 쪽. 화면 기준 라벨이라 회전하면 같이 돌아야 한다.
+   'e' 우하(SE) · 's' 좌하(SW) · 'w' 좌상(NW) · 'n' 우상(NE) — 반시계 순서다. */
+const FACES4 = ['e', 's', 'w', 'n'];
+
+function rotFace(face, view) {
+  const i = FACES4.indexOf(face);
+  return i < 0 ? face : FACES4[(i - view + 8) & 3];
+}
+
 /** 그리는 순서. 값이 작을수록 뒤(먼저 그림). */
 function depth(gx, gy) { return gx + gy; }
 
@@ -114,4 +138,4 @@ function makeLayer(w, h) {
   return { c, ctx };
 }
 
-export { HH, HW, TH, TW, depth, faces, isoShadow, isoWin, isoX, isoY, makeLayer, prism, rhomb, rhombEdge, unIso };
+export { FACES4, HH, HW, TH, TW, depth, rotFace, rotG, faces, isoShadow, isoWin, isoX, isoY, makeLayer, prism, rhomb, rhombEdge, unIso };
