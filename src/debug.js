@@ -8,6 +8,7 @@
  * 콘솔에서 내부 상태를 들여다볼 창구가 필요해 한곳에 모아 window.game 으로 내보낸다.
  * 게임 로직은 이 파일에 의존하지 않는다 — 지우면 창구만 사라진다.
  */
+import * as audioMod from './core/audio.js';
 import * as balanceMod from './core/balance.js';
 import * as clockMod from './core/clock.js';
 import * as dataMod from './core/data.js';
@@ -17,6 +18,8 @@ import * as stateMod from './core/state.js';
 import * as storageMod from './core/storage.js';
 import * as utilMod from './core/util.js';
 import * as canvasMod from './render/canvas.js';
+import * as cityMod from './render/city.js';
+import * as storeRenderMod from './render/store.js';
 import * as bankMod from './systems/bank.js';
 import * as companyMod from './systems/company.js';
 import * as economyMod from './systems/economy.js';
@@ -32,16 +35,20 @@ import * as dockMod from './ui/dock.js';
 import * as iconsMod from './ui/icons.js';
 import * as hudMod from './ui/hud.js';
 import * as panelLeftMod from './ui/panelLeft.js';
+import * as shopPanelMod from './ui/shopPanel.js';
+import * as deskMod from './ui/desk.js';
 import * as toastMod from './ui/toast.js';
 import * as uiMod from './ui/index.js';
 import * as modalMod from './ui/modal.js';
+import * as settingsMod from './ui/settings.js';
+import * as titleMod from './ui/title.js';
 import * as tabsMod from './ui/tabs.js';
 
 const api = {
-  ...balanceMod, ...clockMod, ...dataMod, ...deriveMod, ...loopMod, ...stateMod, ...storageMod, ...utilMod,
-  ...canvasMod, ...bankMod, ...companyMod, ...economyMod, ...endingMod, ...eventsMod, ...mnaMod,
+  ...audioMod, ...balanceMod, ...clockMod, ...dataMod, ...deriveMod, ...loopMod, ...stateMod, ...storageMod, ...utilMod,
+  ...canvasMod, ...cityMod, ...storeRenderMod, ...bankMod, ...companyMod, ...economyMod, ...endingMod, ...eventsMod, ...mnaMod,
   ...rumorMod, ...shamanMod, ...stockMod,
-  ...bankPanelMod, ...companyPopupMod, ...dockMod, ...iconsMod, ...hudMod, ...panelLeftMod, ...toastMod, ...uiMod, ...modalMod, ...tabsMod,
+  ...bankPanelMod, ...companyPopupMod, ...dockMod, ...iconsMod, ...hudMod, ...panelLeftMod, ...shopPanelMod, ...deskMod, ...toastMod, ...uiMod, ...modalMod, ...settingsMod, ...tabsMod, ...titleMod,
 };
 
 // S 는 교체되는 라이브 바인딩이라 스프레드로는 최신값이 안 잡힌다. getter로 노출한다.

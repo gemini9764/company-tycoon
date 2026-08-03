@@ -7,9 +7,22 @@ const TIERS = [
   { name:'스타트업',   goal:'계열사 3개 확보',                 bldg:2, ok:s=>s.co.subs.length>=3, unlock:'무당 시스템' },
   { name:'중소기업',   goal:'순자산 500억 + 계열사 5개',          bldg:3, ok:s=>netWorth(s)>=5e10 && s.co.subs.length>=5, unlock:'국세청 이벤트' },
   { name:'중견기업',   goal:"난이도 '상' 이상 기업 인수",       bldg:4, ok:s=>s.co.hardAcq>=1, unlock:'국가 이벤트' },
-  { name:'대기업',     goal:'순자산 1조 + 시총 순위 100위 입성',  bldg:5, ok:s=>netWorth(s)>=1e12 && s.co.rank<=100 },
+  { name:'대기업',     goal:'순자산 7,000억 + 시총 순위 120위 입성',  bldg:5, ok:s=>netWorth(s)>=7e11 && s.co.rank<=120 },
   { name:'글로벌그룹', goal:'시가총액 순위 1위',                bldg:6, ok:s=>s.co.rank<=1 },
 ];
+
+/* NPC 회사의 규모 등급. 플레이어 등급(TIERS)은 목표 달성으로 오르지만 NPC 는
+   시총밖에 없으므로 구간으로 환산한다. 값은 각 등급의 상한 시총이다. */
+const TIER_CAP = [1e8, 1e9, 1e10, 1e11, 1.5e12, 1.5e13, Infinity];
+
+/** 시총 → 등급 인덱스 (0 구멍가게 ~ 6 글로벌그룹) */
+function capTier(cap) {
+  const i = TIER_CAP.findIndex(v => cap < v);
+  return i < 0 ? TIER_CAP.length - 1 : i;
+}
+
+/** 상장 기준 — 중견기업(4) 이상은 무조건 상장. 플레이어 회사는 상장하지 않는다. */
+const LIST_TIER = 4;
 
 /* ── 업종 ────────────────────────────────────────────────── */
 const SECTORS = {
@@ -68,4 +81,4 @@ const TRAITS = [
   { id:'none',   name:'평범',     desc:'특이사항 없음',           },
 ];
 
-export { CREDITS, DIFFS, FIRST, GIVEN, NAME_A, RUMOR_GRADES, SECTORS, SECTOR_KEYS, SHAMAN_TIERS, TIERS, TRAITS };
+export { LIST_TIER, TIER_CAP, capTier, CREDITS, DIFFS, FIRST, GIVEN, NAME_A, RUMOR_GRADES, SECTORS, SECTOR_KEYS, SHAMAN_TIERS, TIERS, TRAITS };

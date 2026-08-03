@@ -12,6 +12,7 @@ import { tickStock } from '../systems/stock.js';
 import { renderDock } from '../ui/dock.js';
 import { renderHud } from '../ui/hud.js';
 import { renderLeft } from '../ui/panelLeft.js';
+import { renderShop } from '../ui/shopPanel.js';
 import { TAB, renderRight } from '../ui/tabs.js';
 
 /* ══════════════════════════════════════════════════════════════
@@ -33,7 +34,7 @@ function tickDay() {
   checkTier(s);
   checkEnding(s);
   if (s.day % 60 === 0) saveGame(true);
-  renderHud(); renderDock(); renderLeft();
+  renderHud(); renderDock(); renderLeft(); renderShop();
   if (['stock', 'bank', 'rumor'].includes(TAB)) renderRight();
 }
 

@@ -1,9 +1,14 @@
 import { BAL } from './balance.js';
-import { FIRST, GIVEN, NAME_A, SECTORS, SECTOR_KEYS, SHAMAN_TIERS, TRAITS } from './data.js';
+import { FIRST, GIVEN, LIST_TIER, NAME_A, SECTORS, SECTOR_KEYS, SHAMAN_TIERS, TRAITS, capTier } from './data.js';
 import { chance, clamp, pick, rint, rnd } from './util.js';
 import { recalcCap } from '../systems/company.js';
 
 /* ── 상태 ────────────────────────────────────────────────── */
+/* 세이브 포맷 버전. 상태 구조를 바꾸면 올린다 — 구버전 세이브는 폐기된다.
+   newState 의 v 와 storage 의 검사값이 갈라지면 '이어하기'가 조용히 죽으므로
+   두 곳이 이 상수 하나만 본다. */
+const SAVE_V = 9;
+
 let S = null;
 
 /** S 는 게임 전체가 공유하는 단일 상태. 교체는 반드시 이 함수로 한다. */
@@ -11,8 +16,8 @@ function setS(next) { S = next; return S; }
 
 function newState(companyName) {
   const s = {
-    v: 5,          // 맵이 7×7 블록으로 커져 구버전 세이브의 lot 좌표를 못 쓴다
-    day: 1, speed: 1, mode: 'city',
+    v: SAVE_V,     // v9 — 매장 재고·시설·사장실 결재가 추가됐다
+    day: 1, speed: 1, mode: 'city', view: 0,   // view = 카메라 방향 0~3 (90°씩)
     co: {
       name: companyName || '한별상사',
       tier: 0, cash: BAL.startCash,
@@ -25,6 +30,11 @@ function newState(companyName) {
       mistrust: 0,         // 무속 신뢰도(미신지수)
       revToday: 0, costToday: 0, rev30: [], negMonths: 0,
       synergy: 1.0, auditBuff: 0,
+      /* 매장 운영 — 사옥 모드의 능동 요소 */
+      inv: 100,            // 재고율 0~100. 팔릴수록 줄고, 바닥나면 매출이 invFloor 배
+      autoOrder: false,    // 자동 발주 (단가 할증, 손 안 대도 유지)
+      facil: { shelf: 0, counter: 0, cold: 0, office: 0 },   // 시설 레벨
+      deskDay: 0,          // 사장실 결재를 마지막으로 한 날 (하루 1회)
     },
     staff: [], recruits: [],
     market: [],            // NPC 회사
@@ -34,7 +44,7 @@ function newState(companyName) {
     shaman: { hired: null, pool: [], unlocked: false },
     rumors: [],
     inbox: [], log: [],
-    flags: { tutorialSeen: false, ending: null },
+    flags: { tutorialSeen: false, ending: null, ms: [], capGoal: 0 },   // ms = 달성한 마일스톤 id
     lastEventDay: 0,
   };
   seedMarket(s);
@@ -45,16 +55,17 @@ function newState(companyName) {
   return s;
 }
 
-/* NPC 회사 23개 — 도시 맵 격자에 배치. 규모는 셔플해 위치와 무관하게 흩뿌린다.
-   블록은 7×7=49칸이고 그중 24칸만 회사가 쓴다. 남는 칸은 렌더가 도심 오피스·
-   아파트·상가·공원·논밭으로 채운다. 회사 수는 그대로라 밸런스에는 영향이 없다. */
+/* NPC 회사를 도시 맵 격자에 배치. 규모는 셔플해 위치와 무관하게 흩뿌린다.
+   블록은 cityBlocks² 칸이고 그중 npcCount+1 칸을 회사가 쓴다. 남는 칸은 렌더가
+   도심 오피스·아파트·상가·공원·논밭으로 채운다. */
 function seedMarket(s) {
+  const N = BAL.cityBlocks;
   const lots = [];
-  for (let j = 0; j < 7; j++) for (let i = 0; i < 7; i++) lots.push({ tx: 1 + i * 3, ty: 1 + j * 3 });
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) lots.push({ tx: 1 + i * 3, ty: 1 + j * 3 });
   for (let i = lots.length - 1; i > 0; i--) { const j = rint(0, i); [lots[i], lots[j]] = [lots[j], lots[i]]; }
   s.co.lot = lots.pop();   // 기획서: 초기 설립 위치 랜덤
 
-  const seats = lots.slice(0, 23);
+  const seats = lots.slice(0, Math.min(BAL.npcCount, lots.length));
   const used = new Set();
   s.market = seats.map((lot, i) => {
     const sector = pick(SECTOR_KEYS);
@@ -65,7 +76,7 @@ function seedMarket(s) {
     const t = i / (seats.length - 1);
     const cap = Math.round(6e7 * Math.pow(250000, t) * rnd(0.7, 1.45));
     const diff = cap > 2e12 ? 3 : cap > 1e11 ? 2 : cap > 3e9 ? 1 : 0;
-    const listed = cap > 2e9 && chance(0.78);
+    const listed = capTier(cap) >= LIST_TIER;   // 중견기업 이상은 무조건 상장
     return {
       id: 'c' + i, name: nm, sector,
       cap, diff, diff0: diff, lot, listed,   // diff0 = 원래 난이도 (등급 조건 판정 기준)
@@ -100,4 +111,4 @@ function makeShaman(tier) {
   };
 }
 
-export { setS, S, makeShaman, makeStaff, newState, seedMarket };
+export { SAVE_V, setS, S, makeShaman, makeStaff, newState, seedMarket };
