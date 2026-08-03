@@ -67,6 +67,17 @@ const doc = win.document;
 const game = win.game;
 if (!game) throw new Error('window.game 이 없습니다');
 
+await mkdir(join(ROOT, 'shots'), { recursive: true });
+
+// 타이틀 배경 그림 — DOM 은 jsdom 이 그리지 못하므로 캔버스만 떨군다
+{
+  const t = doc.getElementById('title-cv');
+  t.getContext('2d');
+  await writeFile(join(ROOT, 'shots/title.png'), t.__napi.toBuffer('image/png'));
+  console.log('title → shots/title.png');
+}
+
+doc.getElementById('title-new').click();     // 타이틀 → 새로 시작
 doc.getElementById('co-name').value = '한별상사';
 doc.querySelector('#modal [data-a="0"]').click();
 
@@ -85,8 +96,6 @@ win.eval(`
   game.S.market[0].curse = 20;
 `);
 
-await mkdir(join(ROOT, 'shots'), { recursive: true });
-
 // 아이콘은 12×12 격자를 손으로 찍은 것이라 눈으로 봐야 확인이 된다
 {
   const N = Object.keys(win.game.ICONS);
@@ -101,6 +110,26 @@ await mkdir(join(ROOT, 'shots'), { recursive: true });
   await writeFile(join(ROOT, 'shots/icons.png'), sh.toBuffer('image/png'));
   console.log('icons → shots/icons.png  (' + N.join(' ') + ')');
 }
+
+/* 카메라 4방향. 회전은 타일 좌표 변환 하나로 도는 구조라 한 방향만 보면
+   나머지가 깨진 걸 못 잡는다. 네 장 다 떨군다. */
+win.eval("game.setMode('city')");
+for (let v = 0; v < 4; v++) {
+  win.eval(`game.S.view = ${v}`);
+  for (let i = 0; i < 60; i++) win.eval('game.draw()');
+  await writeFile(join(ROOT, `shots/view${v}.png`), surface.toBuffer('image/png'));
+}
+win.eval('game.S.view = 0');
+console.log('views → shots/view0..3.png');
+
+/* 시설 0단계 / 최대 단계를 나란히 — 증설이 그림에 반영되는지 눈으로 본다 */
+for (const [tag, lv] of [['facil0', 0], ['facil3', 3]]) {
+  win.eval(`game.S.co.inv = 100; game.S.co.facil = { shelf:${lv}, counter:${lv}, cold:${lv}, office:${lv} }; game.setMode('store')`);
+  for (let i = 0; i < 120; i++) win.eval('game.draw()');
+  await writeFile(join(ROOT, `shots/${tag}.png`), surface.toBuffer('image/png'));
+  console.log(`${tag} → shots/${tag}.png  (시설 Lv.${lv})`);
+}
+win.eval('game.S.co.facil = { shelf:0, counter:0, cold:0, office:0 }');
 
 for (const mode of ['city', 'store']) {
   win.eval(`game.setMode('${mode}')`);

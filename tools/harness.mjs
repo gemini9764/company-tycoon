@@ -39,8 +39,10 @@ export async function boot({ silent = true } = {}) {
   return { dom, win, doc: win.document, game: win.game, errors };
 }
 
-/** 인트로 모달을 넘기고 게임을 시작한다. */
+/** 타이틀 → 새로 시작 → 인트로 모달을 넘기고 게임을 시작한다. */
 export function startGame(doc, name = '테스트상사') {
+  const title = doc.getElementById('title-new');
+  if (title) title.click();
   const input = doc.getElementById('co-name');
   if (!input) throw new Error('인트로 모달이 뜨지 않았습니다');
   input.value = name;

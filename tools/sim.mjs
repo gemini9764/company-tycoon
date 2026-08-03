@@ -4,7 +4,10 @@
  * 전략이 다른 봇을 여러 시드로 완주시켜 등급 구간 길이와 엔딩 분포를 본다.
  * 루프 전체를 페이지 안에서 돌려 반복당 브릿지 비용을 없앴다.
  *
- *   node tools/sim.mjs [--runs=2] [--days=4000]
+ *   node tools/sim.mjs [--runs=2] [--days=4000] [--strats=normal,occult] [--noref]
+ *
+ * 한 판이 수 초, 부팅이 수십 초다. 실행 시간을 제한받는 환경에서는 --strats 로
+ * 전략을 나눠 여러 번 돌리고 결과를 합친다. --noref 는 등급 구간 측정을 건너뛴다.
  */
 import { boot, startGame } from './harness.mjs';
 
@@ -12,10 +15,17 @@ const arg = (k, d) => {
   const m = process.argv.find(a => a.startsWith(`--${k}=`));
   return m ? Number(m.split('=')[1]) : d;
 };
+const argS = (k, d) => {
+  const m = process.argv.find(a => a.startsWith(`--${k}=`));
+  return m ? m.split('=')[1].split(',') : d;
+};
 const RUNS = arg('runs', 2), MAX_DAYS = arg('days', 4000);
+const STRATS = argS('strats', ['normal', 'leveraged', 'reckless', 'occult']);
+const NOREF = process.argv.includes('--noref');
 
 const { win, doc } = await boot();
 startGame(doc, '시뮬');
+win.__desk = process.argv.includes('--desk');
 
 // ── 봇 본체는 페이지 안에서 정의한다 ─────────────────────────
 win.eval(`
@@ -24,6 +34,9 @@ window.runSim = function (strategy, maxDays) {
   const S = g.setS(g.newState('시뮬'));
   S.speed = 0;
   S.staff.forEach(e => e.onTeam = true);
+  /* 재고를 방치하면 매출이 stockFloor 까지 떨어진다. 봇은 '관리는 하는' 플레이를
+     대표해야 하므로 자동 발주를 켠다 — 단가 할증까지 포함한 보수적인 기준선이다. */
+  S.co.autoOrder = true;
 
   // 모달이 열리면 전략에 맞는 선택지를 누른다
   function resolve() {
@@ -43,12 +56,14 @@ window.runSim = function (strategy, maxDays) {
   }
 
   const marks = {};
-  for (let day = 1; day <= maxDays && !S.flags.ending; day++) {
+  /* 성공은 더 이상 엔딩이 아니다(무한 진행). 계측은 '시총 1위 도달'에서 끊는다. */
+  const done = () => S.flags.ending || S.flags.ms.includes('rank1');
+  for (let day = 1; day <= maxDays && !done(); day++) {
     g.tickDay();
     resolve();
 
     // 인수 판단 — 전략별로 감당할 자금 배수가 다르다
-    if (!S.nego && !S.flags.ending) {
+    if (!S.nego && !done()) {
       const mult = strategy === 'reckless' ? 3 : strategy === 'leveraged' ? 1.5 : 0.62;
       const budget = S.co.cash * mult;
       const c = S.market
@@ -91,6 +106,16 @@ window.runSim = function (strategy, maxDays) {
         g.doGut(S, 'bless');
       }
     }
+    /* 사장실 결재 — 리스크를 내리는 유일한 수단. 기본 봇은 쓰지 않는다(기준선을
+       바꾸지 않으려고). --desk 로 켜면 '결재까지 챙기는 플레이'를 잰다. */
+    if (window.__desk && S.co.deskDay !== S.day) {
+      const need = S.co.mistrust >= 45 ? 'donate' : S.co.probe >= 40 ? 'press' : null;
+      const it = need && g.ITEMS.find(x => x.id === need);
+      if (it) {
+        const c = g.deskCost(S, it.mul);
+        if (S.co.cash > c * 6) { S.co.cash -= c; S.co.deskDay = S.day; it.run(S); }
+      }
+    }
     if (marks['t' + S.co.tier] === undefined) marks['t' + S.co.tier] = day;
   }
   return {
@@ -105,21 +130,23 @@ window.runSim = function (strategy, maxDays) {
 const run = (s, days = MAX_DAYS) => win.runSim(s, days);
 
 // ── 등급 구간 ────────────────────────────────────────────────
-const ref = run('normal');
-console.log('=== 등급 구간 (무차입 전략) ===');
-let prev = 0;
-for (const k of Object.keys(ref.marks).sort((a, b) => ref.marks[a] - ref.marks[b])) {
-  const day = ref.marks[k];
-  const name = win.game.TIERS[+k.slice(1)].name;
-  console.log(`${name.padEnd(6)} ${String(day).padStart(5)}일   구간 ${String(day - prev).padStart(4)}일`);
-  prev = day;
+if (!NOREF) {
+  const ref = run('normal');
+  console.log('=== 등급 구간 (무차입 전략) ===');
+  let prev = 0;
+  for (const k of Object.keys(ref.marks).sort((a, b) => ref.marks[a] - ref.marks[b])) {
+    const day = ref.marks[k];
+    const name = win.game.TIERS[+k.slice(1)].name;
+    console.log(`${name.padEnd(6)} ${String(day).padStart(5)}일   구간 ${String(day - prev).padStart(4)}일`);
+    prev = day;
+  }
 }
 
 // ── 전략별 결과 ──────────────────────────────────────────────
 console.log('\n=== 전략별 결과 ===');
 console.log('전략        일수   등급        엔딩       계열사   시총      순위  효율  미신  수사');
 const plan = [];
-for (const s of ['normal', 'leveraged', 'reckless', 'occult']) {
+for (const s of STRATS) {
   for (let i = 0; i < RUNS; i++) plan.push(s);
 }
 for (const s of plan) {

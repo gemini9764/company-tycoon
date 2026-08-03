@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>iso3d 프로토타입 — 픽셀 쿼터뷰 (three.js)</title>
+<link href="https://cdn.jsdelivr.net/npm/galmuri/dist/galmuri.css" rel="stylesheet">
+<style>
+  :root{ --ink:#161A2B; --paper:#F5EFDD; --gold:#F2B233; --f:"Galmuri11","Malgun Gothic",sans-serif; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden;background:#0B0F1B;color:var(--paper);font-family:var(--f);font-size:12px}
+  #wrap{position:fixed;inset:0}
+  /* 핵심: 저해상도로 렌더하고 CSS 로 정수배 확대한다. 3D 를 픽셀로 만드는 지점. */
+  canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges}
+  #labels{position:fixed;inset:0;pointer-events:none}
+  .plate{
+    position:absolute;transform:translate(-50%,0);white-space:nowrap;
+    background:rgba(11,15,27,.82);padding:1px 5px;font-size:12px;pointer-events:auto;cursor:pointer;
+  }
+  .plate.on{background:rgba(11,15,27,.96);box-shadow:0 -1px 0 var(--gold),0 1px 0 var(--gold)}
+  .plate.me{color:#FFD57A}
+  #hud{position:fixed;left:10px;top:10px;background:rgba(11,15,27,.86);border:2px solid #39415F;padding:10px 12px;line-height:1.9}
+  #hud b{color:var(--gold)}
+  kbd{background:#39415F;padding:1px 5px;border:1px solid #161A2B}
+  #pick{position:fixed;right:10px;top:10px;background:rgba(11,15,27,.86);border:2px solid #39415F;padding:10px 12px;min-width:190px;line-height:1.9}
+</style>
+</head>
+<body>
+<div id="wrap"></div>
+<div id="labels"></div>
+<div id="hud">
+  <b>iso3d 프로토타입</b><br>
+  <kbd>Q</kbd> <kbd>E</kbd> 카메라 90° 회전<br>
+  <kbd>1</kbd>~<kbd>4</kbd> 픽셀 배율<br>
+  <kbd>X</kbd> 가림 투시 On/Off<br>
+  건물 또는 상호판 클릭 → 선택
+</div>
+<div id="pick">선택된 회사 없음</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+/* ══════════════════════════════════════════════════════════════
+   iso3d — "3D 로 만들고 픽셀로 출력한다" 를 검증하는 프로토타입
+
+   본편(canvas 2D 도트)을 대체할지 판단하려고 만든 것이다. 확인하려는 것 넷:
+
+     ① 진짜 3D 조명·그림자를 넣어도 픽셀 톤이 유지되는가
+     ② 저해상도 렌더 + 정수배 확대가 기존 PX 파이프라인과 같은 결을 내는가
+     ③ 카메라 90° 회전이 '건물이 겹쳐 클릭이 어렵다' 를 실제로 푸는가
+     ④ 레이캐스트 픽킹이 도트 실루엣 판정보다 나은가
+
+   외부 에셋은 여전히 0 이다. 건물은 전부 BoxGeometry 조합으로 절차 생성한다.
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── 팔레트 ──────────────────────────────────────────────────
+   픽셀 느낌은 해상도가 아니라 '색 수'에서 나온다. 조명이 만드는 중간색을
+   줄이려고 재질은 전부 MeshLambertMaterial + 단색으로 두고, 라이트도 두 개만 쓴다. */
+const PAL = {
+  grass: 0x2F5A3C, road: 0x3C4360, walk: 0x5A6280,
+  mine: 0xF2B233,
+  body: [0x57607F, 0x6B6E86, 0x5E7480, 0x7A6E6A, 0x6E6480, 0x59627E],
+  roof: 0x39415F, win: 0xFFE9A8, owned: 0x4C7358,
+};
+
+const SECTORS = ['IT', '제약', '건설', '미디어', '유통', '식품', '금융', '패션'];
+const NAMES = ['한별', '늘봄', '태산', '동해', '청람', '만세', '해든', '가람', '나래', '온새'];
+const STYLE = ['tower', 'lab', 'plant', 'neon', 'shop'];
+
+/* ── 씬 ──────────────────────────────────────────────────── */
+const wrap = document.getElementById('wrap');
+const renderer = new THREE.WebGLRenderer({ antialias: false });   // 안티에일리어싱은 픽셀의 적
+renderer.setPixelRatio(1);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+wrap.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x25402F);
+
+/* 2:1 픽셀 아이소메트릭의 고도각은 30° 다.
+   (수평 정사각형을 45° 돌려 내려다볼 때 가로:세로 = 1 : sinθ. 2:1 → sinθ = 0.5) */
+const ELEV = Math.PI / 6;
+let yaw = Math.PI / 4, yawTo = yaw;            // 45° 에서 시작, 90° 단위로 돈다
+const DIST = 260;
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 900);
+
+const sun = new THREE.DirectionalLight(0xFFF3D6, 1.9);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+const sc = sun.shadow.camera;
+sc.left = -180; sc.right = 180; sc.top = 180; sc.bottom = -180; sc.near = 1; sc.far = 700;
+scene.add(sun, sun.target);
+scene.add(new THREE.AmbientLight(0x8FA6D6, 1.25));   // 그림자 안이 새까매지지 않게
+
+/* ── 지면 ────────────────────────────────────────────────── */
+const TILE = 12, MAP = 21;
+const ground = new THREE.Mesh(
+  new THREE.BoxGeometry(MAP * TILE + 240, 4, MAP * TILE + 240),
+  new THREE.MeshLambertMaterial({ color: PAL.grass }),
+);
+ground.position.y = -2; ground.receiveShadow = true;
+scene.add(ground);
+
+const roadMat = new THREE.MeshLambertMaterial({ color: PAL.road });
+for (let i = 0; i < MAP; i += 3) {
+  for (const axis of [0, 1]) {
+    const r = new THREE.Mesh(
+      axis ? new THREE.BoxGeometry(MAP * TILE, 1, TILE) : new THREE.BoxGeometry(TILE, 1, MAP * TILE),
+      roadMat,
+    );
+    const p = (i - (MAP - 1) / 2) * TILE;
+    r.position.set(axis ? 0 : p, 0.5, axis ? p : 0);
+    r.receiveShadow = true;
+    scene.add(r);
+  }
+}
+
+/* ── 건물 ────────────────────────────────────────────────────
+   업종에 따라 실루엣을 바꾼다. 상자 몇 개를 쌓는 것만으로 스카이라인이 갈린다.
+   본편 city.js 의 BLDG_STYLE 을 그대로 옮겨 온 규칙이다. */
+function makeBuilding(co) {
+  const g = new THREE.Group();
+  const w = co.style === 'plant' ? 22 : 15 + co.scale * 6;
+  const h = 14 + co.scale * (co.style === 'tower' ? 62 : co.style === 'neon' ? 40 : 26);
+  const mat = new THREE.MeshLambertMaterial({ color: co.owned ? PAL.owned : co.color });
+  const roofMat = new THREE.MeshLambertMaterial({ color: PAL.roof });
+
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), mat);
+  body.position.y = h / 2;
+  g.add(body);
+
+  if (co.style === 'tower') {                       // 상층부가 좁아지는 고층
+    const t = new THREE.Mesh(new THREE.BoxGeometry(w * 0.62, h * 0.34, w * 0.62), mat);
+    t.position.y = h + h * 0.17; g.add(t);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(1.5, 12, 1.5), roofMat);
+    m.position.y = h * 1.34 + 6; g.add(m);
+  } else if (co.style === 'lab') {                  // 돔
+    const d = new THREE.Mesh(new THREE.SphereGeometry(w * 0.34, 10, 6), roofMat);
+    d.position.y = h; g.add(d);
+  } else if (co.style === 'plant') {                // 굴뚝 두 개
+    for (const dx of [-w * 0.28, w * 0.28]) {
+      const c = new THREE.Mesh(new THREE.CylinderGeometry(2, 2.4, 16, 8), roofMat);
+      c.position.set(dx, h + 8, -w * 0.28); g.add(c);
+    }
+  } else if (co.style === 'neon') {                 // 전광판
+    const s = new THREE.Mesh(new THREE.BoxGeometry(w * 0.9, 10, 1.5),
+      new THREE.MeshBasicMaterial({ color: co.color }));
+    s.position.set(0, h * 0.72, w / 2 + 1); g.add(s);
+  } else {                                          // 상가 — 차양
+    const a = new THREE.Mesh(new THREE.BoxGeometry(w + 4, 2, w + 4), roofMat);
+    a.position.y = h; g.add(a);
+  }
+
+  // 창문 — 인스턴싱으로 한 번에. 개수가 많아도 드로우콜은 1이다.
+  const rows = Math.max(1, Math.floor(h / 9)), cols = Math.max(1, Math.floor(w / 6));
+  const win = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(2.6, 3.4, 0.4),
+    new THREE.MeshBasicMaterial({ color: PAL.win }),
+    rows * cols * 2,
+  );
+  const m4 = new THREE.Object3D();
+  let n = 0;
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const y = 6 + r * 9, x = -w / 2 + 4 + c * 6;
+    if (x > w / 2 - 4) continue;
+    m4.position.set(x, y, w / 2 + 0.3); m4.rotation.y = 0; m4.updateMatrix();
+    win.setMatrixAt(n++, m4.matrix);
+    m4.position.set(w / 2 + 0.3, y, x); m4.rotation.y = Math.PI / 2; m4.updateMatrix();
+    win.setMatrixAt(n++, m4.matrix);
+  }
+  win.count = n;
+  g.add(win);
+
+  g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  g.userData.co = co;
+  g.userData.height = h;
+  return g;
+}
+
+/* ── 회사 배치 ───────────────────────────────────────────── */
+const companies = [];
+const groups = [];
+const used = new Set();
+let idx = 0;
+for (let j = 0; j < 7; j++) for (let i = 0; i < 7; i++) {
+  if (Math.random() < 0.36) continue;                       // 빈 블록
+  const co = {
+    id: 'c' + idx++,
+    name: NAMES[Math.floor(Math.random() * NAMES.length)] + SECTORS[Math.floor(Math.random() * SECTORS.length)],
+    style: STYLE[Math.floor(Math.random() * STYLE.length)],
+    scale: Math.random(),
+    color: PAL.body[Math.floor(Math.random() * PAL.body.length)],
+    owned: Math.random() < 0.15,
+    mine: false,
+  };
+  if (used.has(co.name)) continue;
+  used.add(co.name);
+  const g = makeBuilding(co);
+  g.position.set((1 + i * 3 - (MAP - 1) / 2) * TILE, 0, (1 + j * 3 - (MAP - 1) / 2) * TILE);
+  scene.add(g); groups.push(g); companies.push(co);
+}
+// 플레이어 사옥 — 금빛
+const me = companies[Math.floor(companies.length / 2)];
+me.mine = true; me.name = '한별상사';
+groups[companies.indexOf(me)].traverse(o => {
+  if (o.isMesh && o.material.color && o.material.color.getHex() !== PAL.win) {
+    o.material = new THREE.MeshLambertMaterial({ color: PAL.mine });
+  }
+});
+
+/* ── 카메라 ──────────────────────────────────────────────── */
+let PX = 3;                                                  // 픽셀 배율(정수)
+function resize() {
+  const W = innerWidth, H = innerHeight;
+  const w = Math.floor(W / PX), h = Math.floor(H / PX);
+  renderer.setSize(w, h, false);
+  renderer.domElement.style.width = W + 'px';
+  renderer.domElement.style.height = H + 'px';
+  const half = 150;                                          // 세로로 보이는 월드 반경
+  const asp = w / h;
+  camera.left = -half * asp; camera.right = half * asp;
+  camera.top = half; camera.bottom = -half;
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize);
+resize();
+
+function placeCamera() {
+  const cy = Math.sin(ELEV), cr = Math.cos(ELEV);
+  camera.position.set(Math.cos(yaw) * cr * DIST, cy * DIST, Math.sin(yaw) * cr * DIST);
+  camera.lookAt(0, 12, 0);
+  sun.position.set(Math.cos(yaw + 0.9) * 220, 260, Math.sin(yaw + 0.9) * 220);
+  sun.target.position.set(0, 0, 0);
+}
+
+/* ── 픽킹 ────────────────────────────────────────────────────
+   도트 실루엣을 손으로 판정하던 자리를 레이캐스트가 대신한다. 정확하고,
+   건물 모양이 바뀌어도 판정식을 다시 쓸 일이 없다. */
+const ray = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+let hover = null, picked = null, xray = true;
+
+function pickAt(ev) {
+  const r = renderer.domElement.getBoundingClientRect();
+  ndc.x = ((ev.clientX - r.left) / r.width) * 2 - 1;
+  ndc.y = -((ev.clientY - r.top) / r.height) * 2 + 1;
+  ray.setFromCamera(ndc, camera);
+  const hits = ray.intersectObjects(groups, true);
+  for (const h of hits) {
+    let o = h.object;
+    while (o && !o.userData.co) o = o.parent;
+    if (o) return o;
+  }
+  return null;
+}
+
+renderer.domElement.addEventListener('mousemove', e => {
+  hover = pickAt(e);
+  renderer.domElement.style.cursor = hover ? 'pointer' : 'default';
+});
+renderer.domElement.addEventListener('click', e => select(pickAt(e)));
+
+function select(g) {
+  picked = g;
+  const box = document.getElementById('pick');
+  if (!g) { box.textContent = '선택된 회사 없음'; return; }
+  const co = g.userData.co;
+  box.innerHTML = `<b>${co.name}</b><br>${co.mine ? '우리 사옥' : co.owned ? '계열사' : '인수 대상'}<br>
+    <span style="color:#98A4CC">실루엣 겹침과 무관하게 집힙니다</span>`;
+}
+
+/* ── 상호판 (DOM 오버레이) ──────────────────────────────────
+   픽셀 폰트를 3D 안에서 텍스처로 그리면 확대·회전에 깨진다. 본편이 텍스트를
+   변환 밖 층에 따로 얹는 것과 같은 이유로, 여기서는 DOM 으로 띄운다.
+   그래서 상호판은 절대 가려지지 않고 그대로 클릭 타깃이 된다. */
+const labelBox = document.getElementById('labels');
+const plates = groups.map(g => {
+  const el = document.createElement('div');
+  el.className = 'plate' + (g.userData.co.mine ? ' me' : '');
+  el.textContent = g.userData.co.name;
+  el.onclick = () => select(g);
+  el.onmouseenter = () => { hover = g; };
+  el.onmouseleave = () => { if (hover === g) hover = null; };
+  labelBox.appendChild(el);
+  return el;
+});
+
+const v3 = new THREE.Vector3();
+function placePlates() {
+  const W = innerWidth, H = innerHeight;
+  groups.forEach((g, i) => {
+    v3.set(g.position.x, 2, g.position.z).project(camera);
+    const x = (v3.x * 0.5 + 0.5) * W, y = (-v3.y * 0.5 + 0.5) * H;
+    const el = plates[i];
+    el.style.left = x + 'px'; el.style.top = (y + 4) + 'px';
+    el.classList.toggle('on', hover === g || picked === g);
+  });
+}
+
+/* ── 가림 투시 ───────────────────────────────────────────────
+   회전으로 대부분 풀리지만, 그래도 남는 가림은 앞 건물을 반투명으로 눌러
+   처리한다. 카메라에서 대상까지의 거리보다 가까우면서 화면에서 겹치는 것만. */
+function applyXray() {
+  const target = hover || picked;
+  for (const g of groups) {
+    const on = xray && target && g !== target && nearer(g, target) && overlaps(g, target);
+    g.traverse(o => {
+      if (!o.isMesh) return;
+      if (o.material.transparent !== on) {
+        o.material.transparent = on;
+        o.material.opacity = on ? 0.22 : 1;
+        o.material.depthWrite = !on;
+        o.material.needsUpdate = true;
+      }
+    });
+  }
+}
+const a3 = new THREE.Vector3(), b3 = new THREE.Vector3();
+function nearer(g, t) {
+  return camera.position.distanceTo(g.position) < camera.position.distanceTo(t.position);
+}
+function overlaps(g, t) {
+  a3.set(g.position.x, g.userData.height / 2, g.position.z).project(camera);
+  b3.set(t.position.x, t.userData.height / 2, t.position.z).project(camera);
+  return Math.abs(a3.x - b3.x) < 0.09 && Math.abs(a3.y - b3.y) < 0.16;
+}
+
+/* ── 입력 ────────────────────────────────────────────────── */
+addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (k === 'q') yawTo -= Math.PI / 2;
+  if (k === 'e') yawTo += Math.PI / 2;
+  if (k === 'x') xray = !xray;
+  if ('1234'.includes(k)) { PX = +k; resize(); }
+});
+
+/* ── 루프 ────────────────────────────────────────────────── */
+function tick() {
+  yaw += (yawTo - yaw) * 0.16;                     // 90° 스냅을 부드럽게
+  placeCamera();
+  applyXray();
+  placePlates();
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+}
+tick();
+</script>
+</body>
+</html>
