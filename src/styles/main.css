@@ -355,6 +355,8 @@ canvas.zooming{transform:scale(1.8);opacity:0}
 }
 #title-layer.on{display:flex}
 #title-box{text-align:center;padding:20px}
+/* 타일이 48×24 가 되면서 백킹을 640×300 으로 키우고 1:1 로 띄운다.
+   인게임 배율이 PX=1 이므로 여기서 2배로 늘리면 타이틀만 도트가 굵어진다. */
 #title-cv{
   width:640px;height:300px;image-rendering:pixelated;display:block;margin:0 auto;
 }

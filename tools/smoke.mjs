@@ -176,7 +176,7 @@ try {
   const plateOk = win.eval(`(() => {
     game.setMode('city'); game.draw();
     const c = game.S.market[0], g = game.bldgGeom(c);
-    const h = game.cityHit({ x: g.x, y: g.y + 19 });                  // 상호판 위치
+    const h = game.cityHit({ x: g.x, y: g.y + 29 });                  // 상호판 위치 (건물 바닥 +21 부터 16px)
     return !!h && !h.self && h.co.id === c.id;
   })()`);
   check('상호판 클릭 타깃', plateOk, '가려진 회사도 집힌다');
@@ -191,7 +191,7 @@ try {
          정당하게 가려질 수 있어 회전 버그와 구분이 안 된다. */
       const c = game.S.market[3], g = game.bldgGeom(c);
       seen.add(Math.round(g.x) + ',' + Math.round(g.y));
-      const h = game.cityHit({ x: g.x, y: g.y + 19 });
+      const h = game.cityHit({ x: g.x, y: g.y + 29 });
       if (!h || h.self || h.co.id !== c.id) return '뷰 ' + v + ' 판정 어긋남';
     }
     game.S.view = 0;

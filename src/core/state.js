@@ -7,7 +7,7 @@ import { recalcCap } from '../systems/company.js';
 /* 세이브 포맷 버전. 상태 구조를 바꾸면 올린다 — 구버전 세이브는 폐기된다.
    newState 의 v 와 storage 의 검사값이 갈라지면 '이어하기'가 조용히 죽으므로
    두 곳이 이 상수 하나만 본다. */
-const SAVE_V = 9;
+const SAVE_V = 10;
 
 let S = null;
 
@@ -16,7 +16,7 @@ function setS(next) { S = next; return S; }
 
 function newState(companyName) {
   const s = {
-    v: SAVE_V,     // v9 — 매장 재고·시설·사장실 결재가 추가됐다
+    v: SAVE_V,     // v10 — 맵이 10×10 블록으로 넓어져 lot 좌표가 바뀌었다
     day: 1, speed: 1, mode: 'city', view: 0,   // view = 카메라 방향 0~3 (90°씩)
     co: {
       name: companyName || '한별상사',

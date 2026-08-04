@@ -18,9 +18,9 @@ import { openSettings } from './settings.js';
 
 /* [타일x, 타일y, 높이, 폭반경, 몸통색] — 가운데 금빛이 플레이어 사옥 */
 const TITLE_CITY = [
-  [0, 4, 26, 16, '#57607F'], [1, 5, 18, 14, '#6B6E86'], [4, 0, 30, 16, '#5E7480'],
-  [5, 1, 20, 14, '#7A6E6A'], [2, 1, 40, 18, '#4A5474'], [0, 1, 22, 14, '#6E6480'],
-  [4, 3, 34, 16, '#59627E'], [5, 4, 16, 12, '#7A7460'], [1, 3, 46, 20, '#F2B233'],
+  [0, 4, 39, 24, '#57607F'], [1, 5, 27, 22, '#6B6E86'], [4, 0, 45, 24, '#5E7480'],
+  [5, 1, 30, 22, '#7A6E6A'], [2, 1, 60, 28, '#4A5474'], [0, 1, 33, 22, '#6E6480'],
+  [4, 3, 51, 24, '#59627E'], [5, 4, 24, 18, '#7A7460'], [1, 3, 69, 30, '#F2B233'],
 ];
 
 function drawTitleArt() {
@@ -31,7 +31,7 @@ function drawTitleArt() {
   g.imageSmoothingEnabled = false;
   g.clearRect(0, 0, cv.width, cv.height);
 
-  const O = { x: cv.width / 2 - HW, y: 44 };
+  const O = { x: cv.width / 2 - HW, y: 88 };
   for (let gy = -1; gy < 7; gy++) for (let gx = -1; gx < 7; gx++) {
     rhomb(g, isoX(O, gx, gy), isoY(O, gx, gy), HW, HH, (gx + gy) % 2 ? '#2F5A3C' : '#2B5138');
   }
@@ -40,12 +40,12 @@ function drawTitleArt() {
   })).sort((a, b) => a.y - b.y);
 
   for (const b of items) {
-    g.save(); g.globalAlpha = 0.28; rhomb(g, b.x + 3, b.y + 2, b.rx, b.rx / 2, '#000000'); g.restore();
+    g.save(); g.globalAlpha = 0.28; rhomb(g, b.x + 5, b.y + 3, b.rx, b.rx / 2, '#000000'); g.restore();
     prism(g, b.x, b.y, b.rx, b.rx / 2, b.h, shadeHex(b.c, 0.26), shadeHex(b.c, -0.30), b.c);
     g.fillStyle = 'rgba(255,225,160,.55)';          // 창문
-    for (let r = 6; r < b.h - 4; r += 7) {
-      for (let i = 4; i < b.rx - 4; i += 6) {
-        g.fillRect(Math.round(b.x - b.rx + i), Math.round(b.y + b.rx / 2 - (b.rx - i) / 2 - r), 2, 3);
+    for (let r = 9; r < b.h - 6; r += 11) {
+      for (let i = 6; i < b.rx - 6; i += 9) {
+        g.fillRect(Math.round(b.x - b.rx + i), Math.round(b.y + b.rx / 2 - (b.rx - i) / 2 - r), 3, 5);
       }
     }
   }

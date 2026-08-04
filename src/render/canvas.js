@@ -27,29 +27,31 @@ const CV = document.getElementById('cv');
 const X = CV.getContext('2d');
 
 /* 도시 — 3칸 격자에서 2×2 자리가 한 블록. 타일 수 = cityBlocks × 3.
-   현재 7×7 = 49블록 / 21×21 타일.
+   현재 10×10 = 100블록 / 30×30 타일.
 
-   **세로가 배율의 병목이다.** 1080p 브라우저의 캔버스 높이가 약 865px 이라
-   월드 높이가 432를 넘는 순간 배율이 2 → 1 로 떨어져 맵이 확 작아진다.
-   헤드룸(CITY_HEAD)과 아래 여백을 깎아 404 → 384 로 줄였다. PX=2 를 유지하는 데
-   필요한 캔버스 높이가 808 → 768px 로 내려가 여유가 늘었고, 1440p 에서는 PX=3 도
-   닿는다. 블록을 더 늘리려면 이 예산부터 다시 짜야 한다 — GRAPHICS.md 참고. */
+   **배율 정책이 바뀌었다 (GRAPHICS.md 2단계).** 타일이 48×24 라 월드가 1440×792 이고
+   1080p 브라우저의 캔버스(약 1904×865)에서 PX=1 로 딱 맞는다. PX 는 1 이 하한이므로
+   창이 줄어도 배율이 더 떨어질 곳이 없다 — 대신 좁은 화면에서는 가장자리가 잘린다.
+   블록을 더 늘리려면 세로 예산(865px)부터 다시 짜야 한다. */
 const MAP_W = BAL.cityBlocks * 3, MAP_H = BAL.cityBlocks * 3;
-const CITY_HEAD = 40;                              // 위쪽 헤드룸 — 첫 블록의 고층이 잘리지 않을 만큼
+const CITY_HEAD = 60;                              // 위쪽 헤드룸 — 첫 블록의 고층이 잘리지 않을 만큼
 const CITY_W = (MAP_W + MAP_H) * HW;
-const CITY_H = CITY_HEAD + (MAP_W + MAP_H - 2) * 8 + 24;   // + 24 = 맨 앞 상호판 자리
+const CITY_H = CITY_HEAD + (MAP_W + MAP_H - 2) * HH + 36;  // + 36 = 맨 앞 상호판 자리
 const CITY_O = { x: MAP_H * HW, y: CITY_HEAD };
 
 /* 월드 밖 여백에도 시골 풍경을 깐다. 월드 변환은 캔버스를 자르지 않으므로,
    지면 레이어를 월드보다 크게 구워 음수 좌표에 붙이면 레터박스가 채워진다.
    월드 크기(=배율 계산의 분모)는 그대로라 좁은 창에서 배율이 떨어지지 않는다. */
-const CITY_PAD_X = 364, CITY_PAD_Y = 40;
+const CITY_PAD_X = 546, CITY_PAD_Y = 60;
 
 /* 사옥(경영) — 16×10 타일. gx 0..8 매장 / 9 칸막이 / 10..15 사무실 */
 const ROOM_W = 16, ROOM_H = 10;
-const STORE_W = 416, STORE_H = 280;
-const STORE_O = { x: ROOM_H * HW, y: 56 };
-const FOOT_Y = STORE_H - 16;                       // 하단 상태 스트립 상단
+/* 사옥은 PX=2 로 돈다. 세로가 병목이라 여백을 깎아 404 로 맞췄다 —
+   PX=2 에 필요한 캔버스 높이가 808px 이라 1080p(약 865px)에 여유가 남는다.
+   여기를 40px 만 키워도 배율이 1로 떨어져 화면이 절반이 된다. */
+const STORE_W = 624, STORE_H = 404;
+const STORE_O = { x: ROOM_H * HW, y: 72 };
+const FOOT_Y = STORE_H - 24;                       // 하단 상태 스트립 상단
 const SPLIT_GX = 9;                                // 매장과 사무실을 가르는 열
 
 /* Galmuri 는 비트맵 폰트라 설계 크기(9→10px, 11→12px, 14→15px)에서만 또렷하다.
@@ -230,11 +232,13 @@ function textW(str, size = 10) {
 }
 
 /* 배경 상자는 월드 층, 글자는 텍스트 층. 두 층의 크기를 맞추려고 폭을 재서 쓴다. */
+/* 상자 크기는 글자에서 뽑는다. 글자는 텍스트 층이라 월드를 키워도 같이 안 커지므로
+   여기 숫자를 월드와 함께 1.5배 하면 상자만 헐거워진다. */
 function drawLabel(x, y, str, color, size = 10) {
-  const w = Math.max(16, Math.round(textW(str, size)) + 7), h = size + 4;
+  const w = Math.max(20, Math.round(textW(str, size)) + 10), h = size + 6;
   X.fillStyle = 'rgba(11,15,27,.85)'; X.fillRect(Math.round(x - w / 2), Math.round(y - h), w, h);
-  X.fillStyle = color; X.fillRect(Math.round(x - w / 2), Math.round(y - h), w, 1);
-  drawText(x, y - 3, str, { size, color, shadow: false });
+  X.fillStyle = color; X.fillRect(Math.round(x - w / 2), Math.round(y - h), w, 2);
+  drawText(x, y - 5, str, { size, color, shadow: false });
 }
 
 /* ── 캐릭터 ──────────────────────────────────────────────────
@@ -271,14 +275,14 @@ function drawPerson(x, y, look, dir = 's', step = 1) {
   const { skin, shirt, hair, pants } = look;
 
   X.fillStyle = 'rgba(0,0,0,.22)';
-  X.fillRect(x - 5, y, 11, 2); X.fillRect(x - 3, y - 1, 7, 1); X.fillRect(x - 3, y + 2, 7, 1);
+  X.fillRect(x - 8, y, 17, 3); X.fillRect(x - 5, y - 2, 11, 2); X.fillRect(x - 5, y + 3, 11, 2);
 
   X.fillStyle = OUT;                                // 다리
-  X.fillRect(x - 5 - sw, b - 7, 5, 7); X.fillRect(x + 1 + sw, b - 7, 5, 7);
+  X.fillRect(x - 8 - sw, b - 11, 8, 11); X.fillRect(x + 2 + sw, b - 11, 8, 11);
   X.fillStyle = pants;
-  X.fillRect(x - 4 - sw, b - 7, 3, 4); X.fillRect(x + 2 + sw, b - 7, 3, 4);
+  X.fillRect(x - 6 - sw, b - 11, 5, 6); X.fillRect(x + 3 + sw, b - 11, 5, 6);
   X.fillStyle = '#20263A';
-  X.fillRect(x - 4 - sw, b - 3, 3, 3); X.fillRect(x + 2 + sw, b - 3, 3, 3);
+  X.fillRect(x - 6 - sw, b - 5, 5, 5); X.fillRect(x + 3 + sw, b - 5, 5, 5);
 
   drawTorso(x, b, skin, shirt, -sw);
   drawHead(x, b, skin, hair, dir);
@@ -286,49 +290,49 @@ function drawPerson(x, y, look, dir = 's', step = 1) {
 
 /** 몸통 + 팔. 선 모습과 앉은 모습이 공유한다. */
 function drawTorso(x, b, skin, shirt, swing) {
-  X.fillStyle = OUT; X.fillRect(x - 8, b - 16, 16, 11);
+  X.fillStyle = OUT; X.fillRect(x - 12, b - 24, 24, 17);
   X.fillStyle = shade(shirt, -0.30);
-  X.fillRect(x - 7, b - 15, 2, 8 + swing); X.fillRect(x + 5, b - 15, 2, 8 - swing);
+  X.fillRect(x - 11, b - 23, 3, 12 + swing); X.fillRect(x + 8, b - 23, 3, 12 - swing);
   X.fillStyle = skin;
-  X.fillRect(x - 7, b - 8 + swing, 2, 2); X.fillRect(x + 5, b - 8 - swing, 2, 2);
-  X.fillStyle = shirt; X.fillRect(x - 5, b - 15, 10, 10);
-  X.fillStyle = shade(shirt, 0.22); X.fillRect(x - 5, b - 15, 10, 2);
-  X.fillStyle = shade(shirt, -0.16); X.fillRect(x - 5, b - 7, 10, 2);
+  X.fillRect(x - 11, b - 12 + swing, 3, 3); X.fillRect(x + 8, b - 12 - swing, 3, 3);
+  X.fillStyle = shirt; X.fillRect(x - 8, b - 23, 15, 15);
+  X.fillStyle = shade(shirt, 0.22); X.fillRect(x - 8, b - 23, 15, 3);
+  X.fillStyle = shade(shirt, -0.16); X.fillRect(x - 8, b - 11, 15, 3);
 }
 
 /** 큰 머리 + 방향별 얼굴 */
 function drawHead(x, b, skin, hair, dir) {
-  const t = b - 27;
-  X.fillStyle = OUT; X.fillRect(x - 7, t, 14, 13);
-  X.fillStyle = skin; X.fillRect(x - 6, t + 1, 12, 11);
-  X.fillStyle = shade(skin, -0.16); X.fillRect(x - 6, t + 10, 12, 2);
+  const t = b - 41;
+  X.fillStyle = OUT; X.fillRect(x - 11, t, 21, 20);
+  X.fillStyle = skin; X.fillRect(x - 9, t + 2, 18, 17);
+  X.fillStyle = shade(skin, -0.16); X.fillRect(x - 9, t + 15, 18, 3);
 
   X.fillStyle = hair;
   if (dir === 'n') {                                // 뒤통수 — 얼굴이 안 보인다
-    X.fillRect(x - 6, t + 1, 12, 10);
-    X.fillStyle = shade(hair, 0.28); X.fillRect(x - 6, t + 1, 12, 2);
+    X.fillRect(x - 9, t + 2, 18, 15);
+    X.fillStyle = shade(hair, 0.28); X.fillRect(x - 9, t + 2, 18, 3);
     return;
   }
-  X.fillRect(x - 6, t + 1, 12, 4);
-  X.fillRect(x - 6, t + 1, 2, 8); X.fillRect(x + 4, t + 1, 2, 8);
-  if (dir === 'e') X.fillRect(x - 6, t + 1, 5, 7);
-  if (dir === 'w') X.fillRect(x + 1, t + 1, 5, 7);
-  X.fillStyle = shade(hair, 0.28); X.fillRect(x - 6, t + 1, 12, 1);
+  X.fillRect(x - 9, t + 2, 18, 6);
+  X.fillRect(x - 9, t + 2, 3, 12); X.fillRect(x + 6, t + 2, 3, 12);
+  if (dir === 'e') X.fillRect(x - 9, t + 2, 8, 11);
+  if (dir === 'w') X.fillRect(x + 2, t + 2, 8, 11);
+  X.fillStyle = shade(hair, 0.28); X.fillRect(x - 9, t + 2, 18, 2);
 
   X.fillStyle = '#20263A';
-  if (dir === 's') { X.fillRect(x - 4, t + 6, 2, 3); X.fillRect(x + 2, t + 6, 2, 3); }
-  if (dir === 'e') X.fillRect(x + 2, t + 6, 2, 3);
-  if (dir === 'w') X.fillRect(x - 4, t + 6, 2, 3);
+  if (dir === 's') { X.fillRect(x - 6, t + 9, 3, 5); X.fillRect(x + 3, t + 9, 3, 5); }
+  if (dir === 'e') X.fillRect(x + 3, t + 9, 3, 5);
+  if (dir === 'w') X.fillRect(x - 6, t + 9, 3, 5);
 }
 
 /** 의자에 앉은 모습 — 하반신은 책상에 가리므로 상반신만 그린다. */
 function drawSitter(x, y, look, dir = 's', busy = 0) {
   x = Math.round(x); y = Math.round(y);
   const b = y + (busy ? -1 : 0);
-  X.fillStyle = 'rgba(0,0,0,.20)'; X.fillRect(x - 6, y - 1, 13, 3);
-  X.fillStyle = OUT; X.fillRect(x - 7, b - 9, 14, 9);
-  X.fillStyle = '#3E4763'; X.fillRect(x - 6, b - 8, 12, 8);
-  X.fillStyle = '#4C5673'; X.fillRect(x - 6, b - 8, 12, 2);
+  X.fillStyle = 'rgba(0,0,0,.20)'; X.fillRect(x - 9, y - 2, 20, 5);
+  X.fillStyle = OUT; X.fillRect(x - 11, b - 14, 21, 14);
+  X.fillStyle = '#3E4763'; X.fillRect(x - 9, b - 12, 18, 12);
+  X.fillStyle = '#4C5673'; X.fillRect(x - 9, b - 12, 18, 3);
   drawTorso(x, b, look.skin, look.shirt, busy ? 1 : 0);
   drawHead(x, b, look.skin, look.hair, dir);
 }
@@ -338,7 +342,7 @@ function drawPops() {
   for (const p of pops) {
     X.save();
     X.globalAlpha = clamp(p.t / 30, 0, 1);
-    drawText(p.x, p.y - (46 - p.t) * 0.35, p.txt, { size: 10, color: p.c });
+    drawText(p.x, p.y - (46 - p.t) * 0.52, p.txt, { size: 10, color: p.c });
     X.restore();
   }
 }

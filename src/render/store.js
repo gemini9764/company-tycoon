@@ -162,7 +162,7 @@ function spawnCustomers() {
 function newCustomer() {
   const p = P(SPAWN_GX, DOOR.gy);
   const c = {
-    x: p.x, y: p.y, look: newLook(), sp: rnd(0.9, 1.5),
+    x: p.x, y: p.y, look: newLook(), sp: rnd(1.35, 2.25),
     walk: 0, dir: 'e', wait: rint(0, 90), phase: 'shelf', path: [],
   };
   retarget(c);                    // 태어나자마자 진열대로 향한다
@@ -230,7 +230,7 @@ function stepCustomers(items) {
       p.walk += step;
     }
     const px = p.x, py = p.y, look = p.look, dir = p.dir;
-    const ph = p.wait > 0 ? 1 : Math.floor(p.walk / 5);
+    const ph = p.wait > 0 ? 1 : Math.floor(p.walk / 8);
     items.push({ y: py, f: () => drawPerson(px, py, look, dir, ph) });
   }
 }
@@ -275,17 +275,17 @@ function drawWalls() {
   for (let gx = 0; gx < ROOM_W; gx++) {                 // 북동쪽 벽 (gy = -1)
     const { x, y } = P(gx, -1);
     const shop = gx < SPLIT_GX;
-    prism(X, x, y, HW, HH, 34, shop ? '#7D6B53' : '#585140', shop ? '#5C4E3C' : '#3E3A2C', shop ? '#6B5B47' : '#4A4436');
+    prism(X, x, y, HW, HH, 51, shop ? '#7D6B53' : '#585140', shop ? '#5C4E3C' : '#3E3A2C', shop ? '#6B5B47' : '#4A4436');
   }
   for (let gy = -1; gy < ROOM_H; gy++) {                // 북서쪽 벽 (gx = -1)
     if (gy === DOOR.gy) continue;                        // 자동문 자리
     const { x, y } = P(-1, gy);
-    prism(X, x, y, HW, HH, 34, '#6E5E48', '#5C4E3C', '#4A3E30');
+    prism(X, x, y, HW, HH, 51, '#6E5E48', '#5C4E3C', '#4A3E30');
   }
   const d = P(-1, DOOR.gy);                              // 유리 자동문
-  prism(X, d.x, d.y, HW, HH, 34, '#9AB8D0', '#5C4E3C', '#8AB4D8');
+  prism(X, d.x, d.y, HW, HH, 51, '#9AB8D0', '#5C4E3C', '#8AB4D8');
   X.fillStyle = 'rgba(255,255,255,.30)';
-  isoWin(X, d.x, d.y, HW, HH, 'r', 2, 6, 8, 20, 'rgba(255,255,255,.22)');
+  isoWin(X, d.x, d.y, HW, HH, 'r', 3, 9, 12, 30, 'rgba(255,255,255,.22)');
 
   drawSignboard();
   drawWhiteboard();
@@ -296,28 +296,28 @@ function drawWalls() {
 function drawSignboard() {
   const a = P(1, -1), b = P(4, -1);
   const x = (a.x + b.x) / 2, y = (a.y + b.y) / 2;
-  const w = 46;
-  X.fillStyle = '#14182A'; X.fillRect(Math.round(x - w / 2), Math.round(y - 36), w, 15);
-  X.fillStyle = '#F2B233'; X.fillRect(Math.round(x - w / 2), Math.round(y - 36), w, 3);
-  drawText(x, y - 25, S.co.name, { size: 12, color: '#FFE9A8', shadow: false });
+  const w = 69;
+  X.fillStyle = '#14182A'; X.fillRect(Math.round(x - w / 2), Math.round(y - 54), w, 23);
+  X.fillStyle = '#F2B233'; X.fillRect(Math.round(x - w / 2), Math.round(y - 54), w, 5);
+  drawText(x, y - 38, S.co.name, { size: 12, color: '#FFE9A8', shadow: false });
 }
 
 /** 사무실 화이트보드 — 협상 중이면 진행도/성공도, 아니면 다음 등급 목표 */
 function drawWhiteboard() {
   const a = P(10, -1), b = P(11, -1);
   const x = (a.x + b.x) / 2, y = (a.y + b.y) / 2;
-  const w = 62, h = 22, ty = Math.round(y - 38);
-  X.fillStyle = '#20263A'; X.fillRect(Math.round(x - w / 2) - 1, ty - 1, w + 2, h + 2);
+  const w = 93, h = 33, ty = Math.round(y - 57);
+  X.fillStyle = '#20263A'; X.fillRect(Math.round(x - w / 2) - 2, ty - 2, w + 4, h + 4);
   X.fillStyle = '#EDEAE0'; X.fillRect(Math.round(x - w / 2), ty, w, h);
-  X.fillStyle = '#C9C4B4'; X.fillRect(Math.round(x - w / 2), ty + h - 2, w, 2);
+  X.fillStyle = '#C9C4B4'; X.fillRect(Math.round(x - w / 2), ty + h - 3, w, 3);
   if (S.nego) {
-    drawText(x, ty + 9, `협상 · ${S.nego.name}`, { size: 10, color: '#26304A', shadow: false });
-    bar(x - w / 2 + 4, ty + 12, w - 8, 3, S.nego.progress / 100, '#4A86C7');
-    bar(x - w / 2 + 4, ty + 17, w - 8, 3, S.nego.success / 100, '#2FA37A');
+    drawText(x, ty + 14, `협상 · ${S.nego.name}`, { size: 10, color: '#26304A', shadow: false });
+    bar(x - w / 2 + 6, ty + 18, w - 12, 5, S.nego.progress / 100, '#4A86C7');
+    bar(x - w / 2 + 6, ty + 26, w - 12, 5, S.nego.success / 100, '#2FA37A');
   } else {
     const t = TIERS[S.co.tier];
-    drawText(x, ty + 9, t.name, { size: 10, color: '#26304A', shadow: false });
-    drawText(x, ty + 19, t.goal, { size: 10, color: '#5C5340', shadow: false });
+    drawText(x, ty + 14, t.name, { size: 10, color: '#26304A', shadow: false });
+    drawText(x, ty + 29, t.goal, { size: 10, color: '#5C5340', shadow: false });
   }
 }
 
@@ -331,18 +331,18 @@ function drawPartition() {
   for (let gy = 0; gy < ROOM_H; gy++) {
     if (gy === 4) continue;                              // 통로
     const { x, y } = P(SPLIT_GX, gy);
-    prism(X, x, y, HW, HH, 26, '#4A3E2A', '#2C2418', '#3A3020');
+    prism(X, x, y, HW, HH, 39, '#4A3E2A', '#2C2418', '#3A3020');
   }
   const d = P(SPLIT_GX, 4);
-  prism(X, d.x, d.y, HW, HH, 5, '#4A3E2A', '#2C2418', '#3A3020');
+  prism(X, d.x, d.y, HW, HH, 8, '#4A3E2A', '#2C2418', '#3A3020');
   for (let gy = 0; gy <= 2; gy++) {                      // 사장실 세로 벽
     const { x, y } = P(12, gy);
-    prism(X, x, y, HW, HH, 20, '#5A4A38', '#3A2E20', '#4A3C2C');
+    prism(X, x, y, HW, HH, 30, '#5A4A38', '#3A2E20', '#4A3C2C');
   }
   for (let gx = 13; gx < ROOM_W; gx++) {                 // 사장실 가로 벽 (문 한 칸)
     const { x, y } = P(gx, 3);
-    if (gx === 13) { prism(X, x, y, HW, HH, 4, '#5A4A38', '#3A2E20', '#4A3C2C'); continue; }
-    prism(X, x, y, HW, HH, 20, '#5A4A38', '#3A2E20', '#4A3C2C');
+    if (gx === 13) { prism(X, x, y, HW, HH, 6, '#5A4A38', '#3A2E20', '#4A3C2C'); continue; }
+    prism(X, x, y, HW, HH, 30, '#5A4A38', '#3A2E20', '#4A3C2C');
   }
 }
 
@@ -361,68 +361,68 @@ function palette() {
 function drawFridge(o) {
   const { x, y } = P(o.gx, o.gy);
   const pal = palette();
-  prism(X, x, y, 13, 6, 26, '#DDE3F0', '#8A93A8', '#C6CCE2');
-  isoWin(X, x, y, 13, 6, 'r', 3, 4, 18, 18, '#8FB6D6');
+  prism(X, x, y, 20, 10, 39, '#DDE3F0', '#8A93A8', '#C6CCE2');
+  isoWin(X, x, y, 20, 10, 'r', 5, 6, 27, 27, '#8FB6D6');
   const putR = stocked(6);
   for (let i = 0; i < putR; i++) {
     const r = i < 3 ? 0 : 1, k = i % 3;
-    isoWin(X, x, y, 13, 6, 'r', 4 + k * 6, 6 + r * 9, 4, 7, pal[(o.gx + r + k) % pal.length]);
+    isoWin(X, x, y, 20, 10, 'r', 6 + k * 9, 9 + r * 14, 6, 11, pal[(o.gx + r + k) % pal.length]);
   }
-  X.fillStyle = '#8A8F9E'; X.fillRect(Math.round(x + 9), Math.round(y - 12), 2, 6);
+  X.fillStyle = '#8A8F9E'; X.fillRect(Math.round(x + 14), Math.round(y - 18), 3, 9);
 }
 
 /* 개방형 냉동고 — 위가 트여 안이 보인다 */
 function drawFreezer(o) {
   const { x, y } = P(o.gx, o.gy);
   const pal = palette();
-  prism(X, x, y, 14, 7, 12, '#8FA8C4', '#7A8496', '#B7C3D6');
+  prism(X, x, y, 22, 11, 18, '#8FA8C4', '#7A8496', '#B7C3D6');
   const putF = stocked(6);
   for (let i = 0; i < putF; i++) {
     const r = i < 3 ? 0 : 1, k = i % 3, c = pal[(o.gx + r + k) % pal.length];
-    prism(X, x - 6 + k * 6, y - 12 + (k - 1) * 3 + r * 5, 3, 2, 4, c, '#5E6478', shade(c, -0.25));
+    prism(X, x - 9 + k * 9, y - 18 + (k - 1) * 5 + r * 8, 4, 2, 6, c, '#5E6478', shade(c, -0.25));
   }
-  faces(X, x, y, 14, 7, 12, 13, '#DDE3F0', '#EEF2FA');
+  faces(X, x, y, 22, 11, 18, 20, '#DDE3F0', '#EEF2FA');
 }
 
 function drawShelf(o) {
   const { x, y } = P(o.gx, o.gy);
   const pal = palette();
-  X.save(); X.globalAlpha = 0.2; rhomb(X, x + 2, y + 1, 14, 7, '#000000'); X.restore();
-  prism(X, x, y, 14, 7, 17, '#9C7A56', '#6B5136', '#8A6A4A');
+  X.save(); X.globalAlpha = 0.2; rhomb(X, x + 3, y + 2, 22, 11, '#000000'); X.restore();
+  prism(X, x, y, 22, 11, 26, '#9C7A56', '#6B5136', '#8A6A4A');
   const put = stocked(6);
   for (let i = 0; i < put; i++) {
     const r = i < 3 ? 0 : 1, k = i % 3;
     const c = pal[(o.gx * 2 + o.gy + r + k) % pal.length];
-    isoWin(X, x, y, 14, 7, 'r', 3 + k * 6, 3 + r * 7, 4, 5, c);
-    isoWin(X, x, y, 14, 7, 'l', 3 + k * 6, 3 + r * 7, 4, 5, shade(c, -0.2));
+    isoWin(X, x, y, 22, 11, 'r', 5 + k * 9, 5 + r * 11, 6, 8, c);
+    isoWin(X, x, y, 22, 11, 'l', 5 + k * 9, 5 + r * 11, 6, 8, shade(c, -0.2));
   }
-  faces(X, x, y, 14, 7, 8, 9, '#D8CBA8', '#F5EFDD');           // 가격표 띠
+  faces(X, x, y, 22, 11, 12, 14, '#D8CBA8', '#F5EFDD');           // 가격표 띠
 }
 
 function drawFlat(o) {
   const { x, y } = P(o.gx, o.gy);
   const pal = palette();
-  prism(X, x, y, 14, 7, 8, '#9C7A56', '#6B5136', '#8A6A4A');
+  prism(X, x, y, 22, 11, 12, '#9C7A56', '#6B5136', '#8A6A4A');
   for (let k = 0; k < 3; k++) {
     const c = pal[(o.gx + k) % pal.length];
-    prism(X, x - 7 + k * 7, y - 8 + (k - 1) * 3, 4, 2, 5, shade(c, 0.25), shade(c, -0.25), c);
+    prism(X, x - 11 + k * 11, y - 12 + (k - 1) * 5, 6, 3, 8, shade(c, 0.25), shade(c, -0.25), c);
   }
 }
 
 function drawCounter() {
   for (const o of countersNow()) {
     const { x, y } = P(o.gx, o.gy);
-    X.save(); X.globalAlpha = 0.2; rhomb(X, x + 2, y + 1, 14, 7, '#000000'); X.restore();
-    prism(X, x, y, 14, 7, 14, '#7186AD', '#3E4A66', '#5A6B8C');
-    faces(X, x, y, 14, 7, 14, 15, '#8FA4CC', '#9DB2D8');
+    X.save(); X.globalAlpha = 0.2; rhomb(X, x + 3, y + 2, 22, 11, '#000000'); X.restore();
+    prism(X, x, y, 22, 11, 21, '#7186AD', '#3E4A66', '#5A6B8C');
+    faces(X, x, y, 22, 11, 21, 23, '#8FA4CC', '#9DB2D8');
   }
   const a = P(COUNTER[0].gx, COUNTER[0].gy);
-  X.fillStyle = '#20263A'; X.fillRect(Math.round(a.x) - 5, Math.round(a.y) - 26, 11, 8);   // POS
-  X.fillStyle = '#8AB4D8'; X.fillRect(Math.round(a.x) - 4, Math.round(a.y) - 25, 9, 5);
+  X.fillStyle = '#20263A'; X.fillRect(Math.round(a.x) - 8, Math.round(a.y) - 39, 17, 12);   // POS
+  X.fillStyle = '#8AB4D8'; X.fillRect(Math.round(a.x) - 6, Math.round(a.y) - 38, 14, 8);
   if (fl('counter') >= 2) {                                    // 셀프 계산 단말 한 대 더
     const b = P(COUNTER[1].gx, COUNTER[1].gy);
-    X.fillStyle = '#20263A'; X.fillRect(Math.round(b.x) - 5, Math.round(b.y) - 24, 11, 8);
-    X.fillStyle = '#4ECDC4'; X.fillRect(Math.round(b.x) - 4, Math.round(b.y) - 23, 9, 5);
+    X.fillStyle = '#20263A'; X.fillRect(Math.round(b.x) - 8, Math.round(b.y) - 36, 17, 12);
+    X.fillStyle = '#4ECDC4'; X.fillRect(Math.round(b.x) - 6, Math.round(b.y) - 35, 14, 8);
   }
   const c = P(CLERK.gx, CLERK.gy);
   drawPerson(c.x, c.y, clerk, 'w', 1);                                                     // 점원
@@ -435,15 +435,15 @@ function drawCounter() {
 function drawProp(o) {
   const { x, y } = P(o.gx, o.gy);
   if (o.k === 'plant') {
-    prism(X, x, y, 7, 4, 7, '#B96A3C', '#7A3E22', '#A0562F');
-    prism(X, x, y - 7, 9, 5, 9, '#3E8A56', '#245239', '#2F6B45');
+    prism(X, x, y, 10, 5, 11, '#B96A3C', '#7A3E22', '#A0562F');
+    prism(X, x, y - 11, 14, 7, 14, '#3E8A56', '#245239', '#2F6B45');
   } else if (o.k === 'carts') {
-    for (let i = 0; i < 3; i++) prism(X, x - 4 + i * 4, y - 2 + i * 2, 7, 4, 9, '#C6CCE2', '#5E6478', '#9AA0B0');
+    for (let i = 0; i < 3; i++) prism(X, x - 6 + i * 6, y - 3 + i * 3, 10, 5, 14, '#C6CCE2', '#5E6478', '#9AA0B0');
   } else {
-    X.fillStyle = '#59627E'; X.fillRect(Math.round(x), Math.round(y - 14), 1, 14);
-    X.fillStyle = '#D0453B'; X.fillRect(Math.round(x - 8), Math.round(y - 24), 18, 11);
+    X.fillStyle = '#59627E'; X.fillRect(Math.round(x), Math.round(y - 21), 2, 21);
+    X.fillStyle = '#D0453B'; X.fillRect(Math.round(x - 12), Math.round(y - 36), 27, 17);
     X.fillStyle = 'rgba(255,255,255,.78)';
-    X.fillRect(Math.round(x - 6), Math.round(y - 21), 14, 2); X.fillRect(Math.round(x - 6), Math.round(y - 18), 9, 2);
+    X.fillRect(Math.round(x - 9), Math.round(y - 32), 21, 3); X.fillRect(Math.round(x - 9), Math.round(y - 27), 14, 3);
   }
 }
 
@@ -476,74 +476,74 @@ function addOffice(items) {
 }
 
 function drawEmptyChair(seat, d) {
-  X.fillStyle = 'rgba(0,0,0,.20)'; rhomb(X, seat.x, seat.y, 8, 4, 'rgba(0,0,0,.20)');
-  prism(X, seat.x, seat.y, 8, 4, 4, '#4C5673', '#2A3046', '#3E4763');
-  X.fillStyle = '#3E4763'; X.fillRect(Math.round(seat.x) - 6, Math.round(seat.y) - 13, 12, 9);
-  drawText(seat.x, seat.y - 18, '출장', { size: 10, color: '#8FBEEA' });
+  X.fillStyle = 'rgba(0,0,0,.20)'; rhomb(X, seat.x, seat.y, 12, 6, 'rgba(0,0,0,.20)');
+  prism(X, seat.x, seat.y, 12, 6, 6, '#4C5673', '#2A3046', '#3E4763');
+  X.fillStyle = '#3E4763'; X.fillRect(Math.round(seat.x) - 9, Math.round(seat.y) - 20, 18, 14);
+  drawText(seat.x, seat.y - 27, '출장', { size: 10, color: '#8FBEEA' });
 }
 
 function drawDesk(p, on, i) {
   const { x, y } = p;
-  X.save(); X.globalAlpha = 0.22; rhomb(X, x + 2, y + 1, 14, 7, '#000000'); X.restore();
-  prism(X, x, y, 14, 7, 10, '#B08A62', '#6B5136', '#9C7A56');
+  X.save(); X.globalAlpha = 0.22; rhomb(X, x + 3, y + 2, 22, 11, '#000000'); X.restore();
+  prism(X, x, y, 22, 11, 15, '#B08A62', '#6B5136', '#9C7A56');
   // 모니터는 책상 왼쪽에 둔다. 가운데에 두면 앉은 사람 얼굴을 가린다.
-  X.fillStyle = '#20263A'; X.fillRect(Math.round(x) - 11, Math.round(y) - 20, 10, 8);
+  X.fillStyle = '#20263A'; X.fillRect(Math.round(x) - 17, Math.round(y) - 30, 15, 12);
   X.fillStyle = on ? (Math.floor(frame / 40 + i) % 2 ? '#4ECDC4' : '#4A86C7') : '#2C3550';
-  X.fillRect(Math.round(x) - 10, Math.round(y) - 19, 8, 6);
-  X.fillStyle = '#C6CCE2'; X.fillRect(Math.round(x) - 8, Math.round(y) - 11, 7, 2);    // 키보드
-  X.fillStyle = '#F5EFDD'; X.fillRect(Math.round(x) + 2, Math.round(y) - 13, 7, 5);    // 서류
-  X.fillStyle = '#D0453B'; X.fillRect(Math.round(x) + 8, Math.round(y) - 13, 3, 4);    // 머그
+  X.fillRect(Math.round(x) - 15, Math.round(y) - 29, 12, 9);
+  X.fillStyle = '#C6CCE2'; X.fillRect(Math.round(x) - 12, Math.round(y) - 17, 11, 3);    // 키보드
+  X.fillStyle = '#F5EFDD'; X.fillRect(Math.round(x) + 3, Math.round(y) - 20, 11, 8);    // 서류
+  X.fillStyle = '#D0453B'; X.fillRect(Math.round(x) + 12, Math.round(y) - 20, 5, 6);    // 머그
 }
 
 function drawBossDesk(p) {
   const { x, y } = p;
-  X.save(); X.globalAlpha = 0.24; rhomb(X, x + 2, y + 1, 18, 9, '#000000'); X.restore();
-  prism(X, x, y, 18, 9, 12, '#8A6A4A', '#4E3A24', '#6B5136');
-  faces(X, x, y, 18, 9, 12, 13, '#B08A62', '#C69A6E');
-  X.fillStyle = '#20263A'; X.fillRect(Math.round(x) - 14, Math.round(y) - 24, 10, 8);
-  X.fillStyle = '#4ECDC4'; X.fillRect(Math.round(x) - 13, Math.round(y) - 23, 8, 6);
-  X.fillStyle = '#F2B233'; X.fillRect(Math.round(x) + 4, Math.round(y) - 16, 6, 4);    // 명패
-  X.fillStyle = '#F5EFDD'; X.fillRect(Math.round(x) - 3, Math.round(y) - 15, 8, 5);
-  drawText(x, y - 30, '사장실', { size: 10, color: '#FFD57A' });
+  X.save(); X.globalAlpha = 0.24; rhomb(X, x + 3, y + 2, 28, 14, '#000000'); X.restore();
+  prism(X, x, y, 28, 14, 18, '#8A6A4A', '#4E3A24', '#6B5136');
+  faces(X, x, y, 28, 14, 18, 20, '#B08A62', '#C69A6E');
+  X.fillStyle = '#20263A'; X.fillRect(Math.round(x) - 21, Math.round(y) - 36, 15, 12);
+  X.fillStyle = '#4ECDC4'; X.fillRect(Math.round(x) - 20, Math.round(y) - 35, 12, 9);
+  X.fillStyle = '#F2B233'; X.fillRect(Math.round(x) + 6, Math.round(y) - 24, 9, 6);    // 명패
+  X.fillStyle = '#F5EFDD'; X.fillRect(Math.round(x) - 5, Math.round(y) - 23, 12, 8);
+  drawText(x, y - 45, '사장실', { size: 10, color: '#FFD57A' });
   /* 오늘 결재가 남아 있으면 눌러야 할 곳임을 알린다 */
   if ((S.co.deskDay || 0) !== S.day) {
     const p = 0.55 + Math.sin(frame / 16) * 0.25;
     X.save(); X.globalAlpha = p;
-    X.fillStyle = '#F2B233'; X.fillRect(Math.round(x) - 10, Math.round(y) - 44, 20, 9);
+    X.fillStyle = '#F2B233'; X.fillRect(Math.round(x) - 15, Math.round(y) - 66, 30, 14);
     X.restore();
-    drawText(x, y - 37, '결재', { size: 10, color: '#20263A', shadow: false });
+    drawText(x, y - 56, '결재', { size: 10, color: '#20263A', shadow: false });
   }
 }
 
 function drawOfficeProp(p, k) {
   const { x, y } = p;
   if (k === 'plant') {
-    prism(X, x, y, 7, 4, 7, '#B96A3C', '#7A3E22', '#A0562F');
-    prism(X, x, y - 7, 9, 5, 9, '#3E8A56', '#245239', '#2F6B45');
+    prism(X, x, y, 10, 5, 11, '#B96A3C', '#7A3E22', '#A0562F');
+    prism(X, x, y - 11, 14, 7, 14, '#3E8A56', '#245239', '#2F6B45');
   } else if (k === 'cooler') {
-    prism(X, x, y, 7, 4, 12, '#DDE3F0', '#7A8090', '#C6CCE2');
-    prism(X, x, y - 12, 6, 3, 8, '#A8CCE4', '#5E7E96', '#8AB4D8');
+    prism(X, x, y, 10, 5, 18, '#DDE3F0', '#7A8090', '#C6CCE2');
+    prism(X, x, y - 18, 10, 5, 12, '#A8CCE4', '#5E7E96', '#8AB4D8');
   } else if (k === 'copier') {
-    prism(X, x, y, 10, 5, 14, '#A6ACBC', '#5E6478', '#8A8F9E');
-    X.fillStyle = '#20263A'; X.fillRect(Math.round(x) - 6, Math.round(y) - 12, 12, 3);
-    X.fillStyle = '#2FA37A'; X.fillRect(Math.round(x) + 4, Math.round(y) - 17, 3, 2);
+    prism(X, x, y, 16, 8, 21, '#A6ACBC', '#5E6478', '#8A8F9E');
+    X.fillStyle = '#20263A'; X.fillRect(Math.round(x) - 9, Math.round(y) - 18, 18, 5);
+    X.fillStyle = '#2FA37A'; X.fillRect(Math.round(x) + 6, Math.round(y) - 26, 5, 3);
   } else if (k === 'cabinet') {
-    prism(X, x, y, 10, 5, 22, '#A6ACBC', '#5E6478', '#8A8F9E');
-    for (let i = 0; i < 3; i++) isoWin(X, x, y, 10, 5, 'r', 3, 3 + i * 6, 6, 4, '#6E7488');
+    prism(X, x, y, 16, 8, 33, '#A6ACBC', '#5E6478', '#8A8F9E');
+    for (let i = 0; i < 3; i++) isoWin(X, x, y, 16, 8, 'r', 5, 5 + i * 9, 9, 6, '#6E7488');
   } else if (k === 'sofa') {
-    prism(X, x, y, 13, 6, 6, '#5A6B8C', '#2E3A52', '#46567A');
-    X.fillStyle = '#46567A'; X.fillRect(Math.round(x) - 11, Math.round(y) - 14, 11, 9);
+    prism(X, x, y, 20, 10, 9, '#5A6B8C', '#2E3A52', '#46567A');
+    X.fillStyle = '#46567A'; X.fillRect(Math.round(x) - 17, Math.round(y) - 21, 17, 14);
   } else {
-    prism(X, x, y, 10, 5, 20, '#8A6A4A', '#4E3A24', '#6B5136');
+    prism(X, x, y, 16, 8, 30, '#8A6A4A', '#4E3A24', '#6B5136');
     const pal = ['#D0453B', '#4A86C7', '#2FA37A', '#F2B233'];
-    for (let i = 0; i < 3; i++) isoWin(X, x, y, 10, 5, 'r', 3 + i * 5, 5, 4, 9, pal[i % 4]);
+    for (let i = 0; i < 3; i++) isoWin(X, x, y, 16, 8, 'r', 5 + i * 8, 8, 6, 14, pal[i % 4]);
   }
 }
 
 /* ── 하단 상태 스트립 ────────────────────────────────────── */
 function drawFoot() {
   X.fillStyle = '#14182A'; X.fillRect(0, FOOT_Y, STORE_W, STORE_H - FOOT_Y);
-  X.fillStyle = '#39415F'; X.fillRect(0, FOOT_Y, STORE_W, 1);
+  X.fillStyle = '#39415F'; X.fillRect(0, FOOT_Y, STORE_W, 2);
   const net = S.co.revToday - S.co.costToday;
   const cells = [
     ['일매출', won(S.co.revToday), '#FFD57A'],
@@ -555,8 +555,8 @@ function drawFoot() {
   ];
   const cw = STORE_W / cells.length;
   cells.forEach(([k, v, c], i) => {
-    if (i) { X.fillStyle = '#2A3046'; X.fillRect(i * cw, FOOT_Y + 3, 1, 10); }
-    drawText(i * cw + cw / 2, FOOT_Y + 12, `${k} ${v}`, { size: 10, color: c, shadow: false });
+    if (i) { X.fillStyle = '#2A3046'; X.fillRect(i * cw, FOOT_Y + 5, 2, 15); }
+    drawText(i * cw + cw / 2, FOOT_Y + 18, `${k} ${v}`, { size: 10, color: c, shadow: false });
   });
 }
 
