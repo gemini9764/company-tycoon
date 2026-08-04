@@ -16,10 +16,10 @@ const BAL = {
 
   retailBase: 900_000,       // 구멍가게 기본 일매출
   tierRetailMul: [1, 3.2, 6, 14, 40, 120, 300],
-  subYield: 0.046,           // 계열사 시총 → 일매출 환산 계수 (회수기간 ≈ 26일)
+  subYield: 0.068,           // 계열사 시총 → 일매출 환산 계수 (회수기간 ≈ 26일)
   marketingDecay: 0.965,     // 마케팅 인지도 일일 감쇠
   marketingCap: 2.6,         // 인지도 매출 배수 상한
-  pmiDays: 55,               // 인수 후 통합 기간 — 이 기간 계열사 수익이 서서히 올라온다
+  pmiDays: 40,               // 인수 후 통합 기간 — 이 기간 계열사 수익이 서서히 올라온다
   pmiFloor: 0.12,            // 통합 첫날 수익 비율
   synLerp: 0.045,            // 운영 효율이 목표치로 수렴하는 속도
   synMin: 0.55, synMax: 1.6, // 운영 효율 하한/상한
@@ -39,7 +39,7 @@ const BAL = {
   invAutoUp: 0.12,         // 자동 발주 단가 할증
   invWarnAt: 25,           // 이 아래로 떨어지면 알림
 
-  negoProgressPerDay: 4.2,   // 협상 진행도 /일 (약 24일 소요)
+  negoProgressPerDay: 6.8,   // 협상 진행도 /일 (약 24일 소요)
   negoSuccessBase: 1.1,      // 성공도 기본 증가량
   premiumBase: 0.35,         // 인수가 프리미엄 기본값
 

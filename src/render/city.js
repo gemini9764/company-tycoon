@@ -1,7 +1,8 @@
 import { BAL } from '../core/balance.js';
 import { SECTORS } from '../core/data.js';
 import { S } from '../core/state.js';
-import { $, chance, pick, rnd } from '../core/util.js';
+import { viewRand } from '../core/rng.js';
+import { $, vchance, vpick, vrnd } from '../core/util.js';
 import { HH, HW, faces, isoWin, isoX, isoY, makeLayer, prism, rhomb, rhombEdge, rotFace, rotG } from './iso.js';
 import { CITY_H, CITY_O, CITY_PAD_X, CITY_PAD_Y, CITY_W, MAP_H, MAP_W, X, drawLabel, drawPerson, drawPops, drawText, frame, hoverId, mix, newLook, shade, textW } from './canvas.js';
 
@@ -236,22 +237,24 @@ function ensureTraffic() {
   /* 블록 사이 도로 두 줄을 차선으로 쓴다. 맨 바깥 둘레는 오프셋이 맵 밖으로 나가므로 뺀다. */
   const lanes = [];
   for (let n = 1; n < BAL.cityBlocks; n++) { lanes.push(n * BAL.blockPitch - 1); lanes.push(n * BAL.blockPitch); }
+  /* 여기는 전부 **연출 스트림**이다. 차량이 몇 대 태어났는지가 게임 난수열을
+     밀면, 지면을 다시 굽는 것만으로 그날의 인수 판정이 달라진다 (core/rng.js). */
   traffic = [];
   for (let i = 0; i < BAL.cityBlocks * 2; i++) {
-    const kind = chance(0.16) ? 'bus' : chance(0.24) ? 'truck' : 'car';
+    const kind = vchance(0.16) ? 'bus' : vchance(0.24) ? 'truck' : 'car';
     traffic.push({
-      type: 'car', kind, axis: chance(0.5) ? 'x' : 'y', lane: pick(lanes),
-      t: Math.random() * (MAP_W - 1), dir: chance(0.5) ? 1 : -1, sp: rnd(0.018, 0.04),
-      c: kind === 'bus' ? pick(['#93B8E0', '#8FCFB2'])
-        : kind === 'truck' ? pick(['#F5F2EA', '#C4C9D4'])
-        : pick(['#EE8C82', '#93B8E0', '#F5CE72', '#F5F2EA', '#8FCFB2', '#B79AD8']),
+      type: 'car', kind, axis: vchance(0.5) ? 'x' : 'y', lane: vpick(lanes),
+      t: viewRand() * (MAP_W - 1), dir: vchance(0.5) ? 1 : -1, sp: vrnd(0.018, 0.04),
+      c: kind === 'bus' ? vpick(['#93B8E0', '#8FCFB2'])
+        : kind === 'truck' ? vpick(['#F5F2EA', '#C4C9D4'])
+        : vpick(['#EE8C82', '#93B8E0', '#F5CE72', '#F5F2EA', '#8FCFB2', '#B79AD8']),
     });
   }
   for (let i = 0; i < BAL.cityBlocks * 2 + 2; i++) {
     traffic.push({
-      type: 'ped', axis: chance(0.5) ? 'x' : 'y', lane: pick(lanes),
-      t: Math.random() * (MAP_W - 1), dir: chance(0.5) ? 1 : -1, sp: rnd(0.006, 0.014),
-      look: newLook(), walk: 0, off: rnd(-0.34, 0.34),
+      type: 'ped', axis: vchance(0.5) ? 'x' : 'y', lane: vpick(lanes),
+      t: viewRand() * (MAP_W - 1), dir: vchance(0.5) ? 1 : -1, sp: vrnd(0.006, 0.014),
+      look: newLook(), walk: 0, off: vrnd(-0.34, 0.34),
     });
   }
 }

@@ -1,6 +1,7 @@
 import { SECTORS, TIERS } from '../core/data.js';
 import { S } from '../core/state.js';
-import { $, clamp, pick, rint, rnd, won } from '../core/util.js';
+import { viewRand } from '../core/rng.js';
+import { $, clamp, vpick, vrint, vrnd, won } from '../core/util.js';
 import { HH, HW, faces, isoWin, isoX, isoY, makeLayer, prism, rhomb, rhombEdge } from './iso.js';
 import { FOOT_Y, ROOM_H, ROOM_W, SPLIT_GX, STORE_H, STORE_O, STORE_W, X, customers, drawPerson, drawPops, drawSitter, drawText, faceOf, frame, newLook, pops, shade } from './canvas.js';
 import { dailyRetail } from '../systems/economy.js';
@@ -162,8 +163,8 @@ function spawnCustomers() {
 function newCustomer() {
   const p = P(SPAWN_GX, DOOR.gy);
   const c = {
-    x: p.x, y: p.y, look: newLook(), sp: rnd(1.35, 2.25),
-    walk: 0, dir: 'e', wait: rint(0, 90), phase: 'shelf', path: [],
+    x: p.x, y: p.y, look: newLook(), sp: vrnd(1.35, 2.25),
+    walk: 0, dir: 'e', wait: vrint(0, 90), phase: 'shelf', path: [],
   };
   retarget(c);                    // 태어나자마자 진열대로 향한다
   return c;
@@ -205,8 +206,8 @@ function tileOf(p) {
 function retarget(p) {
   const from = tileOf(p);
   let to;
-  if (p.phase === 'shelf') { const s = pick(shelvesNow()); to = { gx: s.gx, gy: s.gy + 1 }; }
-  else if (p.phase === 'counter') to = { gx: QUEUE.gx, gy: QUEUE.gy + (Math.random() < 0.5 ? 0 : 1) };
+  if (p.phase === 'shelf') { const s = vpick(shelvesNow()); to = { gx: s.gx, gy: s.gy + 1 }; }
+  else if (p.phase === 'counter') to = { gx: QUEUE.gx, gy: QUEUE.gy + (viewRand() < 0.5 ? 0 : 1) };
   else to = { gx: SPAWN_GX, gy: DOOR.gy };
   if (!walkable(to.gx, to.gy)) to = { gx: 5, gy: 5 };
   p.path = findPath(from, to);
@@ -236,9 +237,9 @@ function stepCustomers(items) {
 }
 
 function advancePhase(p) {
-  if (p.phase === 'shelf') { p.wait = rint(40, 110); p.phase = 'counter'; }
+  if (p.phase === 'shelf') { p.wait = vrint(40, 110); p.phase = 'counter'; }
   else if (p.phase === 'counter') {
-    p.wait = rint(25, 60); p.phase = 'leave';
+    p.wait = vrint(25, 60); p.phase = 'leave';
     const amt = Math.max(1000, dailyRetail(S) / Math.max(6, customers.length * 2.2));
     pops.push({ x: p.x, y: p.y - 26, t: 46, txt: '+' + won(amt), c: '#4BD69B' });
   } else if (p.phase === 'leave') { Object.assign(p, newCustomer()); return; }

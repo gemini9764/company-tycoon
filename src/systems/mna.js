@@ -2,6 +2,7 @@ import { BAL } from '../core/balance.js';
 import { pause, resume } from '../core/clock.js';
 import { DIFFS, SECTORS } from '../core/data.js';
 import { sumStat, teamOf } from '../core/derive.js';
+import { rand } from '../core/rng.js';
 import { $, clamp, pct, pick, rnd, won } from '../core/util.js';
 import { capCeiling, checkTier, loanRate, recalcCap, teamPower } from './company.js';
 import { openAcqLoan } from '../ui/bankPanel.js';
@@ -91,7 +92,7 @@ function negoEvent(s, n, team) {
 function finishNego(s) {
   const n = s.nego, tgt = s.market.find(c => c.id === n.id);
   s.nego = null;
-  const roll = Math.random() * 100 < n.success;
+  const roll = rand() * 100 < n.success;
   if (!roll) {
     news(`${tgt.name} 인수 협상 결렬`);
     pause();

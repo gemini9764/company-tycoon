@@ -1,3 +1,4 @@
+import { rngState, setRngState } from './rng.js';
 import { SAVE_V, S } from './state.js';
 import { soundPrefs, setSoundPrefs } from './audio.js';
 import { toast } from '../ui/toast.js';
@@ -39,6 +40,7 @@ const Store = {
 };
 
 async function saveGame(silent) {
+  S.rng = rngState();                       // 난수열 위치까지 실어야 불러온 판이 이어진다
   await Store.set(SAVE_KEY, JSON.stringify(S));
   if (!silent) toast('저장했습니다 (' + { artifact:'브라우저 저장소', local:'localStorage', memory:'메모리(새로고침 시 소실)' }[Store.mode] + ')', 'good');
 }
@@ -48,7 +50,9 @@ async function loadGame() {
   if (!raw) return null;
   try {
     const d = JSON.parse(raw);
-    return d && d.v === SAVE_V ? d : null;   // 구버전 세이브는 폐기
+    if (!d || d.v !== SAVE_V) return null;   // 구버전 세이브는 폐기
+    setRngState(d.rng || d.seed || 1);       // 저장 시점의 난수열 위치로 되돌린다
+    return d;
   } catch { return null; }
 }
 

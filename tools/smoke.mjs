@@ -306,6 +306,38 @@ try {
   await settle();
   check('타이틀에서 이어하기', !doc.getElementById('title-layer').classList.contains('on'), `${game.S.day}일차`);
 
+  /* 시드 고정 — 같은 시드는 같은 판을 만들어야 한다. 여기가 깨지면 밸런스 계측이
+     통째로 무의미해진다. 연출용 난수(차량·손님·머리 모양)가 게임 스트림을 밀지
+     않는지도 같이 본다 — 그게 가장 새기 쉬운 구멍이다. */
+  const seedOk = win.eval(`(() => {
+    const g = window.game;
+    const digest = () => g.S.market.map(c => c.name + c.cap + c.lot.tx + ',' + c.lot.ty).join('|')
+      + '#' + g.S.co.lot.tx + ',' + g.S.co.lot.ty;
+    g.setS(g.newState('시드', 4242));
+    const a = digest();
+    for (let i = 0; i < 40; i++) g.newLook();          // 연출 스트림만 밀어 본다
+    g.setS(g.newState('시드', 4242));
+    const b = digest();
+    g.setS(g.newState('시드', 9999));
+    const c = digest();
+    if (a !== b) return '같은 시드가 다른 판을 만든다';
+    if (a === c) return '시드가 달라도 같은 판이 나온다';
+    return true;
+  })()`);
+  check('시드 고정', seedOk === true, seedOk === true ? '같은 시드 = 같은 판 · 연출 난수는 안 샌다' : seedOk);
+
+  const rngOk = win.eval(`(() => {
+    const g = window.game;
+    g.setS(g.newState('시드', 777));
+    for (let i = 0; i < 30; i++) g.tickDay();
+    const saved = JSON.parse(JSON.stringify(g.S)); saved.rng = g.rngState();
+    const a = [g.rand(), g.rand(), g.rand()].join();
+    g.setRngState(saved.rng);
+    const b = [g.rand(), g.rand(), g.rand()].join();
+    return a === b ? true : '세이브의 rng 상태로 난수열이 안 이어진다';
+  })()`);
+  check('세이브가 난수열을 잇는다', rngOk === true, rngOk === true ? 'rng 상태 복원 OK' : rngOk);
+
   check('출력 무결성', !/NaN|undefined|Infinity/.test(all),
         (all.match(/.{0,30}(NaN|undefined|Infinity)/) || [''])[0]);
 } catch (e) {

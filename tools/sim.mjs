@@ -5,6 +5,11 @@
  * 루프 전체를 페이지 안에서 돌려 반복당 브릿지 비용을 없앴다.
  *
  *   node tools/sim.mjs [--runs=2] [--days=4000] [--strats=normal,occult] [--noref]
+ *                       [--seeds=101,202,303]
+ *
+ * **시드는 고정이다.** --seeds 를 안 주면 SEEDS 기본값을 쓴다. 같은 시드에서는
+ * 매물 배치·이벤트·인수 판정이 전부 같아서, 밸런스를 고친 전후를 직접 비교할 수
+ * 있다. 시드를 안 박던 시절에는 회차마다 ±8% 가 흔들려 비교가 불가능했다.
  *
  * 한 판이 수 초, 부팅이 수십 초다. 실행 시간을 제한받는 환경에서는 --strats 로
  * 전략을 나눠 여러 번 돌리고 결과를 합친다. --noref 는 등급 구간 측정을 건너뛴다.
@@ -19,7 +24,9 @@ const argS = (k, d) => {
   const m = process.argv.find(a => a.startsWith(`--${k}=`));
   return m ? m.split('=')[1].split(',') : d;
 };
-const RUNS = arg('runs', 2), MAX_DAYS = arg('days', 4000);
+/* 기준 시드 셋. 바꾸면 §6 기준선 표와 비교가 안 되므로 함부로 건드리지 말 것. */
+const SEEDS = (argS('seeds', null) || ['1001', '2002', '3003']).map(Number);
+const RUNS = arg('runs', SEEDS.length), MAX_DAYS = arg('days', 4000);
 const STRATS = argS('strats', ['normal', 'leveraged', 'reckless', 'occult']);
 const NOREF = process.argv.includes('--noref');
 
@@ -29,9 +36,9 @@ win.__desk = process.argv.includes('--desk');
 
 // ── 봇 본체는 페이지 안에서 정의한다 ─────────────────────────
 win.eval(`
-window.runSim = function (strategy, maxDays) {
+window.runSim = function (strategy, maxDays, seed) {
   const g = window.game, d0 = document;
-  const S = g.setS(g.newState('시뮬'));
+  const S = g.setS(g.newState('시뮬', seed));
   S.speed = 0;
   S.staff.forEach(e => e.onTeam = true);
   /* 재고를 방치하면 매출이 stockFloor 까지 떨어진다. 봇은 '관리는 하는' 플레이를
@@ -119,7 +126,7 @@ window.runSim = function (strategy, maxDays) {
     if (marks['t' + S.co.tier] === undefined) marks['t' + S.co.tier] = day;
   }
   return {
-    days: S.day, tier: g.TIERS[S.co.tier].name, ending: S.flags.ending || '미종료',
+    seed: S.seed, days: S.day, tier: g.TIERS[S.co.tier].name, ending: S.flags.ending || '미종료',
     subs: S.co.subs.length, total: S.market.length, cap: g.won(S.co.cap), rank: S.co.rank,
     syn: S.co.synergy.toFixed(2), mistrust: Math.round(S.co.mistrust),
     probe: Math.round(S.co.probe), marks,
@@ -127,18 +134,24 @@ window.runSim = function (strategy, maxDays) {
 };
 `);
 
-const run = (s, days = MAX_DAYS) => win.runSim(s, days);
+const run = (s, seed, days = MAX_DAYS) => win.runSim(s, days, seed);
 
 // ── 등급 구간 ────────────────────────────────────────────────
 if (!NOREF) {
-  const ref = run('normal');
-  console.log('=== 등급 구간 (무차입 전략) ===');
-  let prev = 0;
-  for (const k of Object.keys(ref.marks).sort((a, b) => ref.marks[a] - ref.marks[b])) {
-    const day = ref.marks[k];
+  const refs = SEEDS.map(sd => run('normal', sd));
+  console.log(`=== 등급 구간 (무차입 전략 · 시드 ${SEEDS.join(' / ')}) ===`);
+  console.log('등급'.padEnd(11) + SEEDS.map(sd => String(sd).padStart(9)).join('') + '     구간(평균)');
+  const keys = [...new Set(refs.flatMap(r => Object.keys(r.marks)))]
+    .sort((a, b) => refs[0].marks[a] - refs[0].marks[b]);
+  const prev = SEEDS.map(() => 0);
+  for (const k of keys) {
     const name = win.game.TIERS[+k.slice(1)].name;
-    console.log(`${name.padEnd(6)} ${String(day).padStart(5)}일   구간 ${String(day - prev).padStart(4)}일`);
-    prev = day;
+    const days = refs.map(r => r.marks[k]);
+    const gaps = days.map((d, i) => (d === undefined ? NaN : d - prev[i]));
+    days.forEach((d, i) => { if (d !== undefined) prev[i] = d; });
+    const avg = gaps.filter(g => !isNaN(g));
+    console.log(name.padEnd(9) + days.map(d => String(d ?? '-').padStart(9)).join('') +
+      '   ' + String(Math.round(avg.reduce((a, b) => a + b, 0) / (avg.length || 1))).padStart(6) + '일');
   }
 }
 
@@ -147,12 +160,12 @@ console.log('\n=== 전략별 결과 ===');
 console.log('전략        일수   등급        엔딩       계열사   시총      순위  효율  미신  수사');
 const plan = [];
 for (const s of STRATS) {
-  for (let i = 0; i < RUNS; i++) plan.push(s);
+  for (let i = 0; i < RUNS; i++) plan.push([s, SEEDS[i % SEEDS.length]]);
 }
-for (const s of plan) {
-  const r = run(s);
+for (const [s, sd] of plan) {
+  const r = run(s, sd);
   console.log(
-    `${s.padEnd(11)} ${String(r.days).padStart(4)}  ${r.tier.padEnd(10)} ${r.ending.padEnd(9)}` +
+    `${(s + '·' + sd).padEnd(11)} ${String(r.days).padStart(4)}  ${r.tier.padEnd(10)} ${r.ending.padEnd(9)}` +
     ` ${String(r.subs + '/' + r.total).padStart(6)}  ${r.cap.padStart(8)} ${String(r.rank).padStart(5)}` +
     `  ${r.syn}  ${String(r.mistrust).padStart(3)}  ${String(r.probe).padStart(4)}`);
 }

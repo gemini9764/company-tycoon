@@ -2,7 +2,7 @@ import { BAL } from '../core/balance.js';
 import { DIFFS, SECTORS, TIERS } from '../core/data.js';
 import { sfx } from '../core/audio.js';
 import { S } from '../core/state.js';
-import { $, clamp, pick, rint, won } from '../core/util.js';
+import { $, clamp, vpick, vrint, won } from '../core/util.js';
 import { HW, isoX, isoY } from './iso.js';
 import { cityHit, drawCity } from './city.js';
 import { drawStore, spawnCustomers, storeHit } from './store.js';
@@ -349,12 +349,13 @@ function drawLabel(x, y, str, color, size = 10) {
    소수점 위치가 매 프레임 흔들려 발이 떨리는 것처럼 보인다.
    ─────────────────────────────────────────────────────────── */
 
-/** 사람 한 명의 색을 뽑는다. 머리 모양까지 여기서 정해 둔다. */
+/* 사람 한 명의 색. **연출 스트림을 쓴다** — 사옥을 한 번 더 열었다는 이유로
+   그날의 인수 판정이 달라지면 시드 고정이 무의미해진다 (core/rng.js). */
 function newLook(shirt) {
   return {
-    skin: pick(SKINS), shirt: shirt || pick(SHIRTS), hair: pick(HAIRS),
-    pants: pick(['#3A4258', '#4A3F55', '#2F3B4E', '#5A4A3A']),
-    style: rint(0, 3),
+    skin: vpick(SKINS), shirt: shirt || vpick(SHIRTS), hair: vpick(HAIRS),
+    pants: vpick(['#3A4258', '#4A3F55', '#2F3B4E', '#5A4A3A']),
+    style: vrint(0, 3),
   };
 }
 

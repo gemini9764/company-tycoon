@@ -1,5 +1,6 @@
 import { BAL } from './balance.js';
 import { FIRST, GIVEN, LIST_TIER, NAME_A, SECTORS, SECTOR_KEYS, SHAMAN_TIERS, TRAITS, capTier } from './data.js';
+import { randomSeed, rngState, setSeed } from './rng.js';
 import { chance, clamp, pick, rint, rnd } from './util.js';
 import { recalcCap } from '../systems/company.js';
 
@@ -7,16 +8,24 @@ import { recalcCap } from '../systems/company.js';
 /* 세이브 포맷 버전. 상태 구조를 바꾸면 올린다 — 구버전 세이브는 폐기된다.
    newState 의 v 와 storage 의 검사값이 갈라지면 '이어하기'가 조용히 죽으므로
    두 곳이 이 상수 하나만 본다. */
-const SAVE_V = 10;
+const SAVE_V = 11;
 
 let S = null;
 
 /** S 는 게임 전체가 공유하는 단일 상태. 교체는 반드시 이 함수로 한다. */
 function setS(next) { S = next; return S; }
 
-function newState(companyName) {
+/**
+ * 새 판을 만든다. seed 를 주면 그 판이 통째로 재현된다 —
+ * 매물 배치·이벤트·인수 판정이 전부 같은 난수열에서 나온다.
+ */
+function newState(companyName, seed) {
+  const sd = seed === undefined ? randomSeed() : (seed >>> 0) || 1;
+  setSeed(sd);
   const s = {
-    v: SAVE_V,     // v10 — 맵이 10×10 블록으로 넓어져 lot 좌표가 바뀌었다
+    v: SAVE_V,     // v11 — 맵 8×8(간격 4타일) + 시드 고정. 구버전 세이브는 폐기된다
+    seed: sd,      // 이 판을 만든 시드. 재현하려면 game.newState(이름, seed)
+    rng: sd,       // 난수열의 현재 위치. 저장 직전에 갱신한다
     day: 1, speed: 1, mode: 'city', view: 0,   // view = 카메라 방향 0~3 (90°씩)
     co: {
       name: companyName || '한별상사',

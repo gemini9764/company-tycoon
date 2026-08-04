@@ -10,6 +10,7 @@
  */
 import * as audioMod from './core/audio.js';
 import * as balanceMod from './core/balance.js';
+import * as rngMod from './core/rng.js';
 import * as clockMod from './core/clock.js';
 import * as dataMod from './core/data.js';
 import * as deriveMod from './core/derive.js';
@@ -45,7 +46,7 @@ import * as titleMod from './ui/title.js';
 import * as tabsMod from './ui/tabs.js';
 
 const api = {
-  ...audioMod, ...balanceMod, ...clockMod, ...dataMod, ...deriveMod, ...loopMod, ...stateMod, ...storageMod, ...utilMod,
+  ...audioMod, ...balanceMod, ...rngMod, ...clockMod, ...dataMod, ...deriveMod, ...loopMod, ...stateMod, ...storageMod, ...utilMod,
   ...canvasMod, ...cityMod, ...storeRenderMod, ...bankMod, ...companyMod, ...economyMod, ...endingMod, ...eventsMod, ...mnaMod,
   ...rumorMod, ...shamanMod, ...stockMod,
   ...bankPanelMod, ...companyPopupMod, ...dockMod, ...iconsMod, ...hudMod, ...panelLeftMod, ...shopPanelMod, ...deskMod, ...toastMod, ...uiMod, ...modalMod, ...settingsMod, ...tabsMod, ...titleMod,

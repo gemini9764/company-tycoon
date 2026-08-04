@@ -1,6 +1,7 @@
 import { BAL } from '../core/balance.js';
 import { RUMOR_GRADES } from '../core/data.js';
 import { sumStat } from '../core/derive.js';
+import { rand } from '../core/rng.js';
 import { $, chance, pick } from '../core/util.js';
 import { capCeiling } from './company.js';
 import { toast } from '../ui/toast.js';
@@ -11,7 +12,7 @@ function tickRumor(s) {
   const ear = 1 + s.staff.filter(e => e.trait.id === 'ear').length * 0.6;
   if (!chance(intel * BAL.rumorChanceBase * ear)) return;
   const total = RUMOR_GRADES.reduce((a, g) => a + g.w, 0);
-  let r = Math.random() * total, g = RUMOR_GRADES[0];
+  let r = rand() * total, g = RUMOR_GRADES[0];
   for (const x of RUMOR_GRADES) { r -= x.w; if (r <= 0) { g = x; break; } }
   const cands = s.market.filter(c => !c.owned && c.cap <= capCeiling(s) * 2);
   if (!cands.length) return;
