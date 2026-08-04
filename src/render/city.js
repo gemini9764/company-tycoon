@@ -8,13 +8,21 @@ import { CITY_H, CITY_O, CITY_PAD_X, CITY_PAD_Y, CITY_W, MAP_H, MAP_W, X, drawLa
 /* ══════════════════════════════════════════════════════════════
    도시 (M&A) — 쿼터뷰
 
-   30×30 타일. tx 또는 ty 가 3의 배수인 줄이 도로, 나머지 2×2 가 블록이다.
-   블록 100칸 중 81칸을 회사가 쓰고, 남는 칸은 도심일수록 오피스·아파트, 바깥일수록 논밭·주택으로 채운다.
+   32×32 타일. blockPitch(4) 주기로 2칸이 블록, 2칸이 도로다 — 블록 사이 도로가
+   두 줄이라 건물이 서로 붙지 않는다. 블록 64칸 중 45칸을 회사가 쓰고, 남는 칸은
+   도심일수록 오피스·아파트, 바깥일수록 논밭·주택으로 채운다.
    격자가 그대로 드러나지 않도록 블록마다 용도와 건물 실루엣을 다르게 준다.
    ══════════════════════════════════════════════════════════════ */
 
 /* 좌표만 넣으면 항상 같은 값이 나오는 해시. 소품 배치를 랜덤처럼 보이게 하되
    프레임마다 자리가 바뀌지 않도록 쓴다. */
+/* 블록은 pitch 주기의 1·2번 칸이고 나머지(0·3번)가 도로다.
+   pitch 가 4의 배수라 이 판정은 gx → W-1-gx 로 뒤집어도 그대로 성립한다 — 회전해도 안 깨진다. */
+function isRoad(g) { const m = ((g % BAL.blockPitch) + BAL.blockPitch) % BAL.blockPitch; return m === 0 || m === BAL.blockPitch - 1; }
+
+/** 그 타일이 속한 블록의 좌상단 타일 */
+function blockOrigin(g) { return g - (((g - 1) % BAL.blockPitch) + BAL.blockPitch) % BAL.blockPitch; }
+
 function h2(x, y) {
   let n = (x * 374761393 + y * 668265263) ^ 0x5bf03635;
   n = (n ^ (n >>> 13)) * 1274126177;
@@ -86,7 +94,7 @@ function cityGround() {
     drawOutskirts(g, O, LW, LH);
     for (let gy = 0; gy < MAP_H; gy++) for (let gx = 0; gx < MAP_W; gx++) {
       const x = cityX(O, gx, gy), y = cityY(O, gx, gy);
-      let rx = gx % 3 === 0, ry = gy % 3 === 0;
+      let rx = isRoad(gx), ry = isRoad(gy);
       if (viewOf() & 1) [rx, ry] = [ry, rx];         // 홀수 뷰에서는 도로 방향이 바뀐다
       if (rx || ry) drawRoadTile(g, x, y, rx, ry);
       else drawBlockTile(g, x, y, gx, gy);
@@ -172,7 +180,7 @@ function buildEmpties() {
   empties = [];
   const N = BAL.cityBlocks;
   for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-    const tx = 1 + i * 3, ty = 1 + j * 3;
+    const tx = 1 + i * BAL.blockPitch, ty = 1 + j * BAL.blockPitch;
     if (used.has(`${tx},${ty}`)) continue;
     empties.push({ tx, ty, kind: emptyKind(i, j, h2(tx, ty)) });
   }
@@ -201,7 +209,7 @@ function drawRoadTile(g, x, y, rx, ry) {
 
 /* 블록 바닥 — 용도마다 색과 무늬가 다르다 */
 function drawBlockTile(g, x, y, gx, gy) {
-  const tx = gx - (gx - 1) % 3, ty = gy - (gy - 1) % 3;   // 블록 좌상단 타일
+  const tx = blockOrigin(gx), ty = blockOrigin(gy);       // 블록 좌상단 타일
   const floor = KIND_FLOOR[kindOf(tx, ty)] || 'pave';
   if (floor === 'grass') { rhomb(g, x, y, HW, HH, '#3B7048'); speckle(g, x, y, '#48864F', 5); }
   else if (floor === 'soil') {
@@ -225,9 +233,9 @@ function speckle(g, x, y, color, n) {
 /* ── 차량 · 보행자 ───────────────────────────────────────── */
 /* 도로가 3칸 간격이라 이동 축과 차선 번호만 있으면 위치가 나온다. */
 function ensureTraffic() {
-  /* 도로는 3칸 간격이다. 맨 바깥 둘레는 오프셋이 맵 밖으로 나가므로 뺀다. */
+  /* 블록 사이 도로 두 줄을 차선으로 쓴다. 맨 바깥 둘레는 오프셋이 맵 밖으로 나가므로 뺀다. */
   const lanes = [];
-  for (let n = 1; n < BAL.cityBlocks; n++) lanes.push(n * 3);
+  for (let n = 1; n < BAL.cityBlocks; n++) { lanes.push(n * BAL.blockPitch - 1); lanes.push(n * BAL.blockPitch); }
   traffic = [];
   for (let i = 0; i < BAL.cityBlocks * 2; i++) {
     const kind = chance(0.16) ? 'bus' : chance(0.24) ? 'truck' : 'car';
@@ -754,4 +762,4 @@ function myGeom() {
   return { x, y, rx, ry: rx / 2, h: MY_H[S.co.tier] };
 }
 
-export { bboxOf, boxHits, focusOf, isoHit, plateHit, bldgGeom, flushPlates, drawOutskirts, emptyKind, drawFillApart, drawFillOffice, drawFillShops, drawRoofProps, KIND_FLOOR, FILL_BODY, buildEmpties, cityGround, cityHit, drawApron, drawBench, drawBlockTile, drawBuilding, drawCar, drawCity, drawCrop, drawFountain, drawHouse, drawLab, drawMyBuilding, drawNamePlate, drawNegoMark, drawNeon, drawPlant, drawPond, drawRoadTile, drawShed, drawShop, drawSign, drawTerrain, drawTower, drawTree, ensureTraffic, h2, kindOf, lotC, lotY, moveTraffic, myGeom, pedFace, speckle, trafficPos };
+export { isRoad, blockOrigin, bboxOf, boxHits, focusOf, isoHit, plateHit, bldgGeom, flushPlates, drawOutskirts, emptyKind, drawFillApart, drawFillOffice, drawFillShops, drawRoofProps, KIND_FLOOR, FILL_BODY, buildEmpties, cityGround, cityHit, drawApron, drawBench, drawBlockTile, drawBuilding, drawCar, drawCity, drawCrop, drawFountain, drawHouse, drawLab, drawMyBuilding, drawNamePlate, drawNegoMark, drawNeon, drawPlant, drawPond, drawRoadTile, drawShed, drawShop, drawSign, drawTerrain, drawTower, drawTree, ensureTraffic, h2, kindOf, lotC, lotY, moveTraffic, myGeom, pedFace, speckle, trafficPos };

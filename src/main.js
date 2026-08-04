@@ -6,7 +6,7 @@ import { frameLoop } from './core/loop.js';
 import { S, newState, setS } from './core/state.js';
 import { SAVE_KEY, Store, loadGame, loadPrefs, saveInfo } from './core/storage.js';
 import { $, won } from './core/util.js';
-import { initCanvas, rotateCity, setMode, zoomInto } from './render/canvas.js';
+import { initCanvas, rotateCity, setMode, zoomBy, zoomInto } from './render/canvas.js';
 import { renderHud } from './ui/hud.js';
 import { closePanel, renderAll } from './ui/index.js';
 import { closeModal, modalStack, openModal } from './ui/modal.js';
@@ -30,6 +30,8 @@ async function boot() {
     const k = e.key.toLowerCase();
     if (k === 'q') rotateCity(-1);
     if (k === 'e') rotateCity(1);
+    if (e.key === '+' || e.key === '=') zoomBy(1);
+    if (e.key === '-' || e.key === '_') zoomBy(-1);
     if (e.key === 'Escape') {
       if (modalStack.length) { if (modalStack[modalStack.length - 1].dismissable !== false) closeModal(); }
       else closePanel();
@@ -100,7 +102,8 @@ function intro() {
         · 협상 중에도 사옥의 장사는 계속됩니다. 진행도 100%에서 <b>성공도만큼의 확률</b>로 인수가 결정됩니다.<br>
         · 인수가를 못 내면 인수는 불발됩니다. 은행 대출로 메울 수 있지만 원리금은 갚아야 합니다.<br>
         · 화면 위 아이콘 버튼으로 회사·직원·주식·은행 창을 엽니다.<br>
-        · <span class="c-dim">Space 일시정지 · Tab 모드 전환 · Esc 창 닫기</span>
+        · 도시는 <b>드래그로 이동</b>, <b>휠로 확대</b>합니다 (1x~3x).<br>
+        · <span class="c-dim">Space 일시정지 · Tab 모드 전환 · Q·E 회전 · +·− 확대 · Esc 창 닫기</span>
       </div>`,
     actions: [{ label: '창업하기', cls: 'gold', run: () => {
       const v = ($('co-name')?.value || '').trim();

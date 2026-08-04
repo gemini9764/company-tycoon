@@ -26,17 +26,16 @@ const CV = document.getElementById('cv');
 
 const X = CV.getContext('2d');
 
-/* 도시 — 3칸 격자에서 2×2 자리가 한 블록. 타일 수 = cityBlocks × 3.
-   현재 10×10 = 100블록 / 30×30 타일.
+/* 도시 — blockPitch(4)칸 격자에서 2×2 자리가 한 블록, 나머지 2칸이 도로다.
+   현재 8×8 = 64블록 / 32×32 타일 / 월드 1536×824.
 
-   **배율 정책이 바뀌었다 (GRAPHICS.md 2단계).** 타일이 48×24 라 월드가 1440×792 이고
-   1080p 브라우저의 캔버스(약 1904×865)에서 PX=1 로 딱 맞는다. PX 는 1 이 하한이므로
-   창이 줄어도 배율이 더 떨어질 곳이 없다 — 대신 좁은 화면에서는 가장자리가 잘린다.
-   블록을 더 늘리려면 세로 예산(865px)부터 다시 짜야 한다. */
-const MAP_W = BAL.cityBlocks * 3, MAP_H = BAL.cityBlocks * 3;
-const CITY_HEAD = 60;                              // 위쪽 헤드룸 — 첫 블록의 고층이 잘리지 않을 만큼
+   **배율은 카메라가 쥔다 (`camera.js`).** 기본이 1x 이고 휠로 3x 까지 간다.
+   1x 에서 1080p 캔버스(약 1904×828)에 세로가 딱 들어가도록 여백을 잡아 뒀다.
+   여기를 키우면 1x 전체 보기가 깨진다 — 늘릴 거면 CITY_HEAD 부터 다시 계산할 것. */
+const MAP_W = BAL.cityBlocks * BAL.blockPitch, MAP_H = BAL.cityBlocks * BAL.blockPitch;
+const CITY_HEAD = 56;                              // 위쪽 헤드룸 — 첫 블록의 고층이 잘리지 않을 만큼
 const CITY_W = (MAP_W + MAP_H) * HW;
-const CITY_H = CITY_HEAD + (MAP_W + MAP_H - 2) * HH + 36;  // + 36 = 맨 앞 상호판 자리
+const CITY_H = CITY_HEAD + (MAP_W + MAP_H - 2) * HH + 24;  // + 24 = 맨 앞 상호판 자리
 const CITY_O = { x: MAP_H * HW, y: CITY_HEAD };
 
 /* 월드 밖 여백에도 시골 풍경을 깐다. 월드 변환은 캔버스를 자르지 않으므로,
@@ -70,11 +69,33 @@ const SKINS = ['#F0D9B5', '#E8C39E', '#C98A64', '#D4A574'];
 let hoverId = null, customers = [], pops = [], frame = 0;
 let DPR = 1, PX = 1, OX = 0, OY = 0;               // 디바이스 배율 / 월드 정수 배율 / 원점
 
+/* ── 카메라 ──────────────────────────────────────────────────
+   맵이 화면보다 커질 수 있으므로 이동(드래그)과 확대(휠)를 준다.
+
+   **배율은 정수만 쓴다.** 분수 배율이면 어떤 월드 픽셀은 2칸, 어떤 픽셀은 3칸을
+   차지해서 도트가 울렁거린다 (RENDER.md §3). 그래서 휠은 1x → 2x → 3x 로 끊어 간다.
+   `cam` 은 화면 한가운데에 오는 월드 좌표다.
+
+   사옥은 카메라가 없다 — 방 하나가 통째로 들어오는 고정 배치가 읽기 쉽다. */
+const ZOOM_MIN = 1, ZOOM_MAX = 3;
+let zoom = 1, camX = 0, camY = 0, camFor = null, fitPX = 1;
+let drag = null, dragged = false;
+
 function initCanvas() {
   window.addEventListener('resize', fitCanvas);
+  /* 최초 fitCanvas 가 레이아웃이 잡히기 전에 돌면 래퍼보다 큰 캔버스가 그대로 굳는다.
+     실제로 백킹이 래퍼보다 150px 컸고, 모드를 한 번 바꿔야 제자리로 왔다.
+     크기가 실제로 바뀔 때마다 다시 잡는 게 유일한 확실한 방법이다. */
+  if (typeof ResizeObserver === 'function') {
+    new ResizeObserver(fitCanvas).observe(document.getElementById('canvas-wrap'));
+  }
   CV.addEventListener('mousemove', onCanvasMove);
   CV.addEventListener('mouseleave', () => { hoverId = null; hideTip(); });
   CV.addEventListener('click', onCanvasClick);
+  CV.addEventListener('mousedown', onDragStart);
+  CV.addEventListener('wheel', onWheel, { passive: false });
+  window.addEventListener('mousemove', onDragMove);
+  window.addEventListener('mouseup', onDragEnd);
 }
 
 function setMode(m) {
@@ -90,20 +111,97 @@ function worldW() { return S && S.mode === 'store' ? STORE_W : CITY_W; }
 
 function worldH() { return S && S.mode === 'store' ? STORE_H : CITY_H; }
 
-/* 캔버스를 래퍼 크기에 1:1로 맞추고, 월드는 그 안에서 정수 배율로 키운다.
-   배율이 정수가 아니면 어떤 월드 픽셀은 2칸, 어떤 픽셀은 3칸을 차지해서
-   도트가 울렁거린다. 남는 여백은 레터박스로 두고 배경색으로 채운다. */
+/* 캔버스 백킹스토어를 래퍼 크기에 맞춘다. 월드는 그 안에서 정수 배율로 키운다.
+
+   **CSS 크기는 여기서 건드리지 않는다.** 스타일시트가 100% 로 쥐고 있는데
+   여기서 px 를 박으면, 레이아웃이 잡히기 전에 잰 값이 그대로 굳어 래퍼보다 큰
+   캔버스가 남는다. 모드를 바꿔야 제자리로 오던 버그의 원인이 이것이었다. */
 function fitCanvas() {
   const wrap = document.getElementById('canvas-wrap');
   const cw = wrap.clientWidth, ch = wrap.clientHeight;
   if (cw <= 0 || ch <= 0) return;
   DPR = clamp(Math.round(window.devicePixelRatio || 1), 1, 3);
-  CV.style.width = cw + 'px'; CV.style.height = ch + 'px';
-  CV.width = cw * DPR; CV.height = ch * DPR;
+  const bw = Math.round(cw * DPR), bh = Math.round(ch * DPR);
+  if (CV.width !== bw || CV.height !== bh) { CV.width = bw; CV.height = bh; }
+  applyCamera();
+}
+
+/** 배율과 원점을 다시 계산한다. 카메라를 움직인 뒤에도 부른다. */
+function applyCamera() {
   const w = worldW(), h = worldH();
-  PX = Math.max(1, Math.floor(Math.min(CV.width / w, CV.height / h)));
-  OX = Math.floor((CV.width - w * PX) / 2);
-  OY = Math.floor((CV.height - h * PX) * 0.34);   // 살짝 위로 — 아래는 상호판이라 덜 비어 보인다
+  fitPX = Math.max(1, Math.floor(Math.min(CV.width / w, CV.height / h)));
+  if (!S || S.mode !== 'city') {                  // 사옥 — 화면 맞춤 고정
+    PX = fitPX;
+    OX = Math.floor((CV.width - w * PX) / 2);
+    OY = Math.floor((CV.height - h * PX) * 0.34); // 살짝 위로 — 아래는 상호판이라 덜 비어 보인다
+    return;
+  }
+  if (camFor !== S) { camFor = S; zoom = 1; camX = w / 2; camY = h / 2; }
+  PX = fitPX * zoom;
+  clampCam();
+  OX = Math.round(CV.width / 2 - camX * PX);
+  OY = Math.round(CV.height / 2 - camY * PX);
+}
+
+/* 맵이 화면보다 작으면 가운데 고정, 크면 가장자리 밖으로 못 나가게 잡는다.
+   여유는 지면 레이어가 구워진 만큼(CITY_PAD)만 허용한다 — 그 밖은 검은 화면이다. */
+function spanClamp(v, half, size, pad) {
+  if (half >= size / 2 + pad) return size / 2;
+  return clamp(v, half - pad, size - half + pad);
+}
+
+function clampCam() {
+  camX = spanClamp(camX, CV.width / 2 / PX, CITY_W, CITY_PAD_X * 0.6);
+  camY = spanClamp(camY, CV.height / 2 / PX, CITY_H, CITY_PAD_Y * 0.6);
+}
+
+/** 휠 확대·축소. 포인터 밑에 있던 월드 좌표가 제자리에 남도록 카메라를 옮긴다. */
+function zoomBy(dir, ev) {
+  if (!S || S.mode !== 'city') return;
+  const next = clamp(zoom + dir, ZOOM_MIN, ZOOM_MAX);
+  if (next === zoom) return;
+  const before = ev ? toLogical(ev) : null;
+  zoom = next;
+  applyCamera();
+  if (before) {
+    const after = toLogical(ev);
+    camX += before.x - after.x; camY += before.y - after.y;
+    applyCamera();
+  }
+  hideTip();
+}
+
+function onWheel(ev) {
+  if (!S || S.mode !== 'city') return;
+  ev.preventDefault();
+  zoomBy(ev.deltaY < 0 ? 1 : -1, ev);
+}
+
+/* 드래그와 클릭을 가른다. 4 CSS 픽셀을 넘게 움직이면 그 뒤의 click 이벤트는 버린다 —
+   안 그러면 맵을 끌 때마다 회사 창이 열린다. */
+function onDragStart(ev) {
+  if (!S || S.mode !== 'city' || ev.button !== 0) return;
+  drag = { x: ev.clientX, y: ev.clientY, camX, camY, moved: false };
+  dragged = false;
+}
+
+function onDragMove(ev) {
+  if (!drag) return;
+  const r = CV.getBoundingClientRect();
+  if (!r.width) return;
+  const k = CV.width / r.width / PX;               // CSS 픽셀 → 월드 픽셀
+  const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y;
+  if (!drag.moved && Math.abs(dx) + Math.abs(dy) > 4) { drag.moved = true; CV.style.cursor = 'grabbing'; hideTip(); }
+  if (!drag.moved) return;
+  camX = drag.camX - dx * k; camY = drag.camY - dy * (CV.height / r.height / PX);
+  applyCamera();
+}
+
+function onDragEnd() {
+  if (!drag) return;
+  dragged = drag.moved;
+  drag = null;
+  CV.style.cursor = 'default';
 }
 
 /* ── 좌표 변환 ───────────────────────────────────────────── */
@@ -125,6 +223,7 @@ function hitLot(p) {
 }
 
 function onCanvasMove(ev) {
+  if (drag && drag.moved) return;                 // 끄는 중에는 호버를 잡지 않는다
   if (S.mode === 'store') {                       // 사옥 — 핫스팟만 안내한다
     const sh = storeHit(toLogical(ev));
     CV.style.cursor = sh ? 'pointer' : 'default';
@@ -147,6 +246,7 @@ function onCanvasMove(ev) {
 }
 
 function onCanvasClick(ev) {
+  if (dragged) { dragged = false; return; }       // 맵을 끈 것이지 누른 게 아니다
   if (S.mode === 'store') {
     const sh = storeHit(toLogical(ev));
     if (sh) { sfx('tap'); sh.k === 'boss' ? openDesk() : setTab('shop'); }
@@ -361,4 +461,4 @@ function shade(hex, amt) {
   return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`;
 }
 
-export { CITY_HEAD, CITY_H, CITY_O, CITY_PAD_X, CITY_PAD_Y, CITY_W, CV, DPR, FONT, FOOT_Y, HAIRS, MAP_H, MAP_W, OUT, OX, OY, PX, ROOM_H, ROOM_W, SHIRTS, SKINS, SPLIT_GX, STORE_H, STORE_O, STORE_W, X, customers, draw, drawHead, drawLabel, drawPerson, drawPops, drawSitter, drawText, drawTorso, faceOf, fitCanvas, frame, hideTip, hitLot, hoverId, initCanvas, lotPos, mix, moveTip, newLook, onCanvasClick, onCanvasMove, pops, setMode, shade, showTip, textW, tipEl, toLogical, worldH, worldW, zoomInto, rotateCity };
+export { applyCamera, zoomBy, CITY_HEAD, CITY_H, CITY_O, CITY_PAD_X, CITY_PAD_Y, CITY_W, CV, DPR, FONT, FOOT_Y, HAIRS, MAP_H, MAP_W, OUT, OX, OY, PX, ROOM_H, ROOM_W, SHIRTS, SKINS, SPLIT_GX, STORE_H, STORE_O, STORE_W, X, customers, draw, drawHead, drawLabel, drawPerson, drawPops, drawSitter, drawText, drawTorso, faceOf, fitCanvas, frame, hideTip, hitLot, hoverId, initCanvas, lotPos, mix, moveTip, newLook, onCanvasClick, onCanvasMove, pops, setMode, shade, showTip, textW, tipEl, toLogical, worldH, worldW, zoomInto, rotateCity };

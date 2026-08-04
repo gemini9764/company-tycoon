@@ -56,12 +56,12 @@ function newState(companyName) {
 }
 
 /* NPC 회사를 도시 맵 격자에 배치. 규모는 셔플해 위치와 무관하게 흩뿌린다.
-   블록은 cityBlocks² 칸이고 그중 npcCount+1 칸을 회사가 쓴다. 남는 칸은 렌더가
+   블록은 cityBlocks² 칸이고 그중 npcCount+1 칸을 회사가 쓴다. 블록 좌표는 blockPitch 주기다. 남는 칸은 렌더가
    도심 오피스·아파트·상가·공원·논밭으로 채운다. */
 function seedMarket(s) {
   const N = BAL.cityBlocks;
   const lots = [];
-  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) lots.push({ tx: 1 + i * 3, ty: 1 + j * 3 });
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) lots.push({ tx: 1 + i * BAL.blockPitch, ty: 1 + j * BAL.blockPitch });
   for (let i = lots.length - 1; i > 0; i--) { const j = rint(0, i); [lots[i], lots[j]] = [lots[j], lots[i]]; }
   s.co.lot = lots.pop();   // 기획서: 초기 설립 위치 랜덤
 

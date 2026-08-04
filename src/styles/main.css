@@ -108,6 +108,8 @@ canvas{
   display:block;width:100%;height:100%;
   transition:transform .28s cubic-bezier(.3,1.4,.5,1),opacity .18s;
 }
+/* 도시는 드래그로 끌 수 있다. 끄는 중 텍스트 선택이 잡히면 커서가 튄다. */
+#canvas-wrap{user-select:none}
 canvas.zooming{transform:scale(1.8);opacity:0}
 
 #canvas-tip{

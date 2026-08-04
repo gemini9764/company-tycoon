@@ -1,7 +1,7 @@
 import { sfx } from '../core/audio.js';
 import { S } from '../core/state.js';
 import { $ } from '../core/util.js';
-import { rotateCity, zoomInto } from '../render/canvas.js';
+import { rotateCity, zoomBy, zoomInto } from '../render/canvas.js';
 import { fillIcons } from './icons.js';
 import { openSettings } from './settings.js';
 import { TAB, setTab } from './tabs.js';
@@ -79,6 +79,10 @@ function renderDock() {
       <button class="rot" data-rot="-1">◀</button>
       <button class="rot" data-rot="1">▶</button>
     </div>
+    <div class="rot-seg ${s.mode === 'city' ? '' : 'off'}" title="확대 · 축소 (휠 · + −). 드래그로 이동">
+      <button class="rot" data-zoom="-1">−</button>
+      <button class="rot" data-zoom="1">+</button>
+    </div>
     <div class="dock-btns">${FIXED.map(d => btnHtml(d, s)).join('')}</div>`;
 
   fillIcons($('dock'));
@@ -87,6 +91,9 @@ function renderDock() {
   });
   $('dock').querySelectorAll('[data-rot]').forEach(b => b.onclick = () => {
     sfx('tap'); rotateCity(+b.dataset.rot);
+  });
+  $('dock').querySelectorAll('[data-zoom]').forEach(b => b.onclick = () => {
+    sfx('tap'); zoomBy(+b.dataset.zoom);
   });
   bindBtns($('dock'));
 
