@@ -2,7 +2,7 @@ import { BAL } from '../core/balance.js';
 import { DIFFS, SECTORS, TIERS } from '../core/data.js';
 import { sfx } from '../core/audio.js';
 import { S } from '../core/state.js';
-import { $, clamp, pick, won } from '../core/util.js';
+import { $, clamp, pick, rint, won } from '../core/util.js';
 import { HW, isoX, isoY } from './iso.js';
 import { cityHit, drawCity } from './city.js';
 import { drawStore, spawnCustomers, storeHit } from './store.js';
@@ -61,7 +61,7 @@ const FONT = {
   15: '"Galmuri14","Malgun Gothic",sans-serif',
 };
 
-const OUT = '#2A2233';                             // 스프라이트 아웃라인
+const OUT = '#40384F';                             // 스프라이트 아웃라인 — 파스텔 바닥에서도 실루엣이 남는 진하기
 const HAIRS = ['#2C2418', '#4A3728', '#1A1A22', '#6B4A2E', '#8A6A4A', '#5C3A5A'];
 const SHIRTS = ['#4A86C7', '#D0453B', '#2FA37A', '#8B5CB8', '#F2B233', '#E8E4D8', '#C96A9B', '#5FA8D3'];
 const SKINS = ['#F0D9B5', '#E8C39E', '#C98A64', '#D4A574'];
@@ -298,7 +298,7 @@ function draw() {
   frame++;
   X.setTransform(1, 0, 0, 1, 0, 0);
   X.imageSmoothingEnabled = false;
-  X.fillStyle = S.mode === 'city' ? '#25402F' : '#151928';   // 여백도 배경과 같은 색
+  X.fillStyle = S.mode === 'city' ? '#8FBE8C' : '#151928';   // 여백도 배경과 같은 색
   X.fillRect(0, 0, CV.width, CV.height);
   X.setTransform(PX, 0, 0, PX, OX, OY);
   S.mode === 'city' ? drawCity() : drawStore();
@@ -349,12 +349,21 @@ function drawLabel(x, y, str, color, size = 10) {
    소수점 위치가 매 프레임 흔들려 발이 떨리는 것처럼 보인다.
    ─────────────────────────────────────────────────────────── */
 
-/** 사람 한 명의 색을 뽑는다. */
+/** 사람 한 명의 색을 뽑는다. 머리 모양까지 여기서 정해 둔다. */
 function newLook(shirt) {
   return {
     skin: pick(SKINS), shirt: shirt || pick(SHIRTS), hair: pick(HAIRS),
     pants: pick(['#3A4258', '#4A3F55', '#2F3B4E', '#5A4A3A']),
+    style: rint(0, 3),
   };
+}
+
+/* 모서리 한 픽셀을 깎은 사각형. 카이로소프트 톤의 둥근 실루엣이 전부 여기서 나온다 —
+   각진 fillRect 를 그대로 쌓으면 사람이 아니라 상자로 보인다. */
+function rrect(x, y, w, h, color) {
+  X.fillStyle = color;
+  X.fillRect(x + 1, y, w - 2, h);
+  X.fillRect(x, y + 1, w, h - 2);
 }
 
 /** 화면상 이동 방향으로 얼굴 방향을 정한다. */
@@ -364,6 +373,7 @@ function faceOf(vx, vy, fallback) {
 }
 
 /**
+ * 사람 한 명. 발밑이 (x, y) 다.
  * @param dir  's'(앞) 'n'(뒤) 'e'(우) 'w'(좌)
  * @param step 걷기 위상(정수). 서 있으면 1을 넘긴다.
  */
@@ -372,69 +382,96 @@ function drawPerson(x, y, look, dir = 's', step = 1) {
   const f = ((step % 4) + 4) % 4;
   const sw = f === 1 ? 1 : f === 3 ? -1 : 0;       // 다리 벌어짐
   const b = y + (f % 2 === 0 ? -1 : 0);            // 모을 때 몸이 살짝 뜬다
-  const { skin, shirt, hair, pants } = look;
 
-  X.fillStyle = 'rgba(0,0,0,.22)';
-  X.fillRect(x - 8, y, 17, 3); X.fillRect(x - 5, y - 2, 11, 2); X.fillRect(x - 5, y + 3, 11, 2);
+  X.fillStyle = 'rgba(0,0,0,.17)';                 // 발밑 그림자
+  X.fillRect(x - 8, y - 1, 18, 4); X.fillRect(x - 6, y - 2, 14, 6);
 
-  X.fillStyle = OUT;                                // 다리
-  X.fillRect(x - 8 - sw, b - 11, 8, 11); X.fillRect(x + 2 + sw, b - 11, 8, 11);
-  X.fillStyle = pants;
-  X.fillRect(x - 6 - sw, b - 11, 5, 6); X.fillRect(x + 3 + sw, b - 11, 5, 6);
-  X.fillStyle = '#20263A';
-  X.fillRect(x - 6 - sw, b - 5, 5, 5); X.fillRect(x + 3 + sw, b - 5, 5, 5);
+  drawLegs(x, b, look, sw);
+  drawTorso(x, b, look.skin, look.shirt, -sw);
+  drawHead(x, b, look.skin, look.hair, dir, look.style | 0);
+}
 
-  drawTorso(x, b, skin, shirt, -sw);
-  drawHead(x, b, skin, hair, dir);
+/** 다리 — 바지 + 신발. 걸을 때 앞뒤로 벌어진다. */
+function drawLegs(x, b, look, sw) {
+  const shoe = '#332E3E';
+  for (const s of [-1, 1]) {
+    const lx = (s < 0 ? x - 7 : x) + s * sw;
+    rrect(lx, b - 13, 7, 13, OUT);
+    X.fillStyle = look.pants; X.fillRect(lx + 1, b - 12, 5, 8);
+    X.fillStyle = shade(look.pants, -0.24); X.fillRect(lx + 1, b - 5, 5, 2);
+    X.fillStyle = shoe; X.fillRect(lx + 1, b - 3, 5, 3);
+    X.fillStyle = shade(shoe, 0.55); X.fillRect(lx + 1, b - 3, 5, 1);
+  }
 }
 
 /** 몸통 + 팔. 선 모습과 앉은 모습이 공유한다. */
 function drawTorso(x, b, skin, shirt, swing) {
-  X.fillStyle = OUT; X.fillRect(x - 12, b - 24, 24, 17);
-  X.fillStyle = shade(shirt, -0.30);
-  X.fillRect(x - 11, b - 23, 3, 12 + swing); X.fillRect(x + 8, b - 23, 3, 12 - swing);
-  X.fillStyle = skin;
-  X.fillRect(x - 11, b - 12 + swing, 3, 3); X.fillRect(x + 8, b - 12 - swing, 3, 3);
-  X.fillStyle = shirt; X.fillRect(x - 8, b - 23, 15, 15);
-  X.fillStyle = shade(shirt, 0.22); X.fillRect(x - 8, b - 23, 15, 3);
-  X.fillStyle = shade(shirt, -0.16); X.fillRect(x - 8, b - 11, 15, 3);
+  const t = b - 25;                                // 어깨선
+  for (const s of [-1, 1]) {                       // 팔 — 몸통보다 먼저 그려 뒤로 보낸다
+    const ax = s < 0 ? x - 12 : x + 9, dy = s * swing;
+    rrect(ax, t + 2 + dy, 4, 11, OUT);
+    X.fillStyle = shade(shirt, -0.28); X.fillRect(ax + 1, t + 3 + dy, 2, 6);
+    X.fillStyle = skin; X.fillRect(ax + 1, t + 9 + dy, 2, 3);
+  }
+  rrect(x - 9, t, 19, 15, OUT);
+  X.fillStyle = shirt; X.fillRect(x - 8, t + 1, 17, 13);
+  X.fillStyle = shade(shirt, 0.20); X.fillRect(x - 8, t + 1, 17, 3);       // 어깨 하이라이트
+  X.fillStyle = shade(shirt, -0.20); X.fillRect(x - 8, t + 11, 17, 3);     // 밑단 그늘
+  X.fillStyle = shade(shirt, -0.36);                                       // 옷깃
+  X.fillRect(x - 3, t + 1, 7, 2); X.fillRect(x - 2, t + 3, 5, 1); X.fillRect(x - 1, t + 4, 3, 1);
 }
 
 /** 큰 머리 + 방향별 얼굴 */
-function drawHead(x, b, skin, hair, dir) {
-  const t = b - 41;
-  X.fillStyle = OUT; X.fillRect(x - 11, t, 21, 20);
-  X.fillStyle = skin; X.fillRect(x - 9, t + 2, 18, 17);
-  X.fillStyle = shade(skin, -0.16); X.fillRect(x - 9, t + 15, 18, 3);
+function drawHead(x, b, skin, hair, dir, style = 0) {
+  const t = b - 44;                                // 정수리
+  rrect(x - 10, t, 21, 20, OUT);
+  X.fillStyle = skin; X.fillRect(x - 9, t + 1, 19, 18);
+  X.fillStyle = shade(skin, 0.12); X.fillRect(x - 9, t + 1, 19, 2);
+  X.fillStyle = shade(skin, -0.15); X.fillRect(x - 9, t + 16, 19, 3);      // 턱 그늘
 
+  drawHair(x, t, hair, dir, style);
+  if (dir === 'n') return;                         // 뒤통수 — 얼굴이 안 보인다
+
+  const eyes = dir === 's' ? [-6, 3] : dir === 'e' ? [3] : [-6];
+  for (const ex of eyes) {
+    X.fillStyle = '#332E3E'; X.fillRect(x + ex, t + 9, 3, 5);
+    X.fillStyle = 'rgba(255,255,255,.7)'; X.fillRect(x + ex, t + 9, 1, 2);
+  }
+  X.fillStyle = 'rgba(232,138,138,.30)';           // 볼
+  if (dir !== 'w') X.fillRect(x + 5, t + 13, 4, 2);
+  if (dir !== 'e') X.fillRect(x - 8, t + 13, 4, 2);
+  X.fillStyle = shade(skin, -0.34);                // 입
+  X.fillRect(x + (dir === 'e' ? 2 : dir === 'w' ? -4 : -1), t + 15, 3, 1);
+}
+
+/* 머리 모양 넷 — 짧은 머리 / 가르마 / 단발 / 넘긴 머리.
+   NPC 가 화면에 수십 명 서 있으므로 실루엣이 갈려야 서로 달라 보인다. */
+function drawHair(x, t, hair, dir, style) {
   X.fillStyle = hair;
-  if (dir === 'n') {                                // 뒤통수 — 얼굴이 안 보인다
-    X.fillRect(x - 9, t + 2, 18, 15);
-    X.fillStyle = shade(hair, 0.28); X.fillRect(x - 9, t + 2, 18, 3);
+  if (dir === 'n') {                               // 뒤통수는 머리로 꽉 찬다
+    X.fillRect(x - 9, t + 1, 19, 15);
+    X.fillStyle = shade(hair, 0.26); X.fillRect(x - 9, t + 1, 19, 2);
     return;
   }
-  X.fillRect(x - 9, t + 2, 18, 6);
-  X.fillRect(x - 9, t + 2, 3, 12); X.fillRect(x + 6, t + 2, 3, 12);
-  if (dir === 'e') X.fillRect(x - 9, t + 2, 8, 11);
-  if (dir === 'w') X.fillRect(x + 2, t + 2, 8, 11);
-  X.fillStyle = shade(hair, 0.28); X.fillRect(x - 9, t + 2, 18, 2);
-
-  X.fillStyle = '#20263A';
-  if (dir === 's') { X.fillRect(x - 6, t + 9, 3, 5); X.fillRect(x + 3, t + 9, 3, 5); }
-  if (dir === 'e') X.fillRect(x + 3, t + 9, 3, 5);
-  if (dir === 'w') X.fillRect(x - 6, t + 9, 3, 5);
+  X.fillRect(x - 9, t + 1, 19, 5);                                          // 앞머리
+  X.fillRect(x - 9, t + 1, 3, 9); X.fillRect(x + 7, t + 1, 3, 9);           // 옆머리
+  if (style === 1) X.fillRect(x - 9, t + 1, 9, 8);                          // 가르마
+  if (style === 2) { X.fillRect(x - 9, t + 1, 3, 17); X.fillRect(x + 7, t + 1, 3, 17); }  // 단발
+  if (style === 3) X.fillRect(x - 9, t + 1, 19, 3);                         // 넘긴 머리 — 이마가 넓다
+  X.fillStyle = shade(hair, 0.26); X.fillRect(x - 8, t + 1, 17, 2);
+  if (style === 3) { X.fillStyle = shade(hair, -0.24); X.fillRect(x - 9, t + 4, 19, 1); }
 }
 
 /** 의자에 앉은 모습 — 하반신은 책상에 가리므로 상반신만 그린다. */
 function drawSitter(x, y, look, dir = 's', busy = 0) {
   x = Math.round(x); y = Math.round(y);
   const b = y + (busy ? -1 : 0);
-  X.fillStyle = 'rgba(0,0,0,.20)'; X.fillRect(x - 9, y - 2, 20, 5);
-  X.fillStyle = OUT; X.fillRect(x - 11, b - 14, 21, 14);
-  X.fillStyle = '#3E4763'; X.fillRect(x - 9, b - 12, 18, 12);
-  X.fillStyle = '#4C5673'; X.fillRect(x - 9, b - 12, 18, 3);
+  X.fillStyle = 'rgba(0,0,0,.17)'; X.fillRect(x - 8, y - 1, 18, 4);
+  rrect(x - 11, b - 16, 23, 16, OUT);              // 의자 등받이
+  X.fillStyle = '#4C5673'; X.fillRect(x - 10, b - 15, 21, 14);
+  X.fillStyle = '#5E6A88'; X.fillRect(x - 10, b - 15, 21, 3);
   drawTorso(x, b, look.skin, look.shirt, busy ? 1 : 0);
-  drawHead(x, b, look.skin, look.hair, dir);
+  drawHead(x, b, look.skin, look.hair, dir, look.style | 0);
 }
 
 function drawPops() {
@@ -461,4 +498,4 @@ function shade(hex, amt) {
   return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`;
 }
 
-export { applyCamera, zoomBy, CITY_HEAD, CITY_H, CITY_O, CITY_PAD_X, CITY_PAD_Y, CITY_W, CV, DPR, FONT, FOOT_Y, HAIRS, MAP_H, MAP_W, OUT, OX, OY, PX, ROOM_H, ROOM_W, SHIRTS, SKINS, SPLIT_GX, STORE_H, STORE_O, STORE_W, X, customers, draw, drawHead, drawLabel, drawPerson, drawPops, drawSitter, drawText, drawTorso, faceOf, fitCanvas, frame, hideTip, hitLot, hoverId, initCanvas, lotPos, mix, moveTip, newLook, onCanvasClick, onCanvasMove, pops, setMode, shade, showTip, textW, tipEl, toLogical, worldH, worldW, zoomInto, rotateCity };
+export { drawHair, drawLegs, rrect, applyCamera, zoomBy, CITY_HEAD, CITY_H, CITY_O, CITY_PAD_X, CITY_PAD_Y, CITY_W, CV, DPR, FONT, FOOT_Y, HAIRS, MAP_H, MAP_W, OUT, OX, OY, PX, ROOM_H, ROOM_W, SHIRTS, SKINS, SPLIT_GX, STORE_H, STORE_O, STORE_W, X, customers, draw, drawHead, drawLabel, drawPerson, drawPops, drawSitter, drawText, drawTorso, faceOf, fitCanvas, frame, hideTip, hitLot, hoverId, initCanvas, lotPos, mix, moveTip, newLook, onCanvasClick, onCanvasMove, pops, setMode, shade, showTip, textW, tipEl, toLogical, worldH, worldW, zoomInto, rotateCity };

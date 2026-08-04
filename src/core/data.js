@@ -26,16 +26,16 @@ const LIST_TIER = 4;
 
 /* ── 업종 ────────────────────────────────────────────────── */
 const SECTORS = {
-  daily:  { name:'생필품', color:'#7FB069', margin:0.26, suf:['상사','물산','유통'] },
-  food:   { name:'식품',   color:'#E0A24A', margin:0.30, suf:['식품','에프앤비','농산'] },
-  fashion:{ name:'의류',   color:'#C96A9B', margin:0.44, suf:['패션','어패럴','섬유'] },
-  retail: { name:'유통',   color:'#5FA8D3', margin:0.18, suf:['유통','리테일','마트'] },
-  tech:   { name:'전자',   color:'#6C7FD4', margin:0.34, suf:['전자','정밀','텍'] },
-  it:     { name:'IT',     color:'#4ECDC4', margin:0.58, suf:['소프트','네트웍스','시스템즈'] },
-  pharma: { name:'제약',   color:'#B08BD4', margin:0.52, suf:['제약','바이오','파마'] },
-  build:  { name:'건설',   color:'#A68A64', margin:0.16, suf:['건설','중공업','산업'] },
-  fin:    { name:'금융',   color:'#D4B24A', margin:0.40, suf:['캐피탈','금융','홀딩스'] },
-  media:  { name:'미디어', color:'#E07A5F', margin:0.46, suf:['미디어','엔터','방송'] },
+  daily:  { name:'생필품', color:'#A8CE93', margin:0.26, suf:['상사','물산','유통'] },
+  food:   { name:'식품',   color:'#F0C48A', margin:0.30, suf:['식품','에프앤비','농산'] },
+  fashion:{ name:'의류',   color:'#E4A9C4', margin:0.44, suf:['패션','어패럴','섬유'] },
+  retail: { name:'유통',   color:'#9BC7E4', margin:0.18, suf:['유통','리테일','마트'] },
+  tech:   { name:'전자',   color:'#A3AEE4', margin:0.34, suf:['전자','정밀','텍'] },
+  it:     { name:'IT',     color:'#8FDCD4', margin:0.58, suf:['소프트','네트웍스','시스템즈'] },
+  pharma: { name:'제약',   color:'#C7ADE4', margin:0.52, suf:['제약','바이오','파마'] },
+  build:  { name:'건설',   color:'#CFB79A', margin:0.16, suf:['건설','중공업','산업'] },
+  fin:    { name:'금융',   color:'#E6D392', margin:0.40, suf:['캐피탈','금융','홀딩스'] },
+  media:  { name:'미디어', color:'#F0A894', margin:0.46, suf:['미디어','엔터','방송'] },
 };
 
 const SECTOR_KEYS = Object.keys(SECTORS);
