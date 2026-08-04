@@ -3,7 +3,7 @@ import { S } from '../core/state.js';
 import { viewRand } from '../core/rng.js';
 import { $, clamp, vpick, vrint, vrnd, won } from '../core/util.js';
 import { HH, HW, faces, isoWin, isoX, isoY, makeLayer, prism, rhomb, rhombEdge } from './iso.js';
-import { FOOT_Y, ROOM_H, ROOM_W, SPLIT_GX, STORE_H, STORE_O, STORE_W, X, customers, drawPerson, drawPops, drawSitter, drawText, faceOf, frame, newLook, pops, shade } from './canvas.js';
+import { FOOT_Y, ROOM_H, ROOM_W, SPLIT_GX, STORE_H, STORE_O, STORE_W, X, customers, drawPerson, drawPops, drawSitter, drawText, faceOf, frame, newLook, pops, rrect, shade } from './canvas.js';
 import { dailyRetail } from '../systems/economy.js';
 
 /* ══════════════════════════════════════════════════════════════
@@ -273,20 +273,27 @@ function drawStore() {
 
 /* 뒤쪽 두 면만 세운 컷어웨이. 앞쪽은 터야 안이 보인다. */
 function drawWalls() {
+  /* 벽은 통짜 상자였다. 걸레받이와 허리 몰딩을 넣어 높이를 읽히게 한다. */
   for (let gx = 0; gx < ROOM_W; gx++) {                 // 북동쪽 벽 (gy = -1)
     const { x, y } = P(gx, -1);
     const shop = gx < SPLIT_GX;
     prism(X, x, y, HW, HH, 51, shop ? '#7D6B53' : '#585140', shop ? '#5C4E3C' : '#3E3A2C', shop ? '#6B5B47' : '#4A4436');
+    faces(X, x, y, HW, HH, 0, 5, shop ? '#4A3E2E' : '#332F24', shop ? '#584A38' : '#3C3829');    // 걸레받이
+    faces(X, x, y, HW, HH, 22, 24, shop ? '#6B5B47' : '#4A4436', shop ? '#8A7659' : '#635944');  // 허리 몰딩
   }
   for (let gy = -1; gy < ROOM_H; gy++) {                // 북서쪽 벽 (gx = -1)
     if (gy === DOOR.gy) continue;                        // 자동문 자리
     const { x, y } = P(-1, gy);
     prism(X, x, y, HW, HH, 51, '#6E5E48', '#5C4E3C', '#4A3E30');
+    faces(X, x, y, HW, HH, 0, 5, '#443A2C', '#3A3025');
+    faces(X, x, y, HW, HH, 22, 24, '#6B5B47', '#584A38');
   }
   const d = P(-1, DOOR.gy);                              // 유리 자동문
   prism(X, d.x, d.y, HW, HH, 51, '#9AB8D0', '#5C4E3C', '#8AB4D8');
-  X.fillStyle = 'rgba(255,255,255,.30)';
-  isoWin(X, d.x, d.y, HW, HH, 'r', 3, 9, 12, 30, 'rgba(255,255,255,.22)');
+  faces(X, d.x, d.y, HW, HH, 0, 5, '#443A2C', '#3A3025');
+  glassPanel(d.x, d.y, HW, HH, 'r', 4, 6, 8, 32, '#A8C8DC');       // 두 짝으로 나뉜 유리
+  glassPanel(d.x, d.y, HW, HH, 'r', 14, 6, 8, 32, '#A8C8DC');
+  faces(X, d.x, d.y, HW, HH, 42, 45, '#6B5B47', '#8A7659');        // 상부 문틀
 
   drawSignboard();
   drawWhiteboard();
@@ -359,71 +366,117 @@ function palette() {
   return ['#7FB069', '#E0A24A', ...S.co.subs.slice(0, 6).map(s => SECTORS[s.sector].color)];
 }
 
+/* ── 매장 집기 (재작화) ──────────────────────────────────────
+   도시에 쓴 방법을 그대로 가져왔다 — 모서리를 깎고, 면을 층으로 나누고,
+   유리에 틀과 반사를 넣는다. **색은 건드리지 않았다.**
+
+   집기가 차지하는 타일과 크기는 그대로다. 손님 경로(`blockedAt`)와 얽혀 있어
+   여기를 건드리면 통행이 막힌다. ─────────────────────────── */
+
+/** 유리 문/면 — 틀 + 유리 + 대각 반사 */
+function glassPanel(x, y, rx, ry, side, off, up, w, hgt, glass) {
+  isoWin(X, x, y, rx, ry, side, off - 2, up - 1, w + 4, hgt + 2, '#8A93A8');
+  isoWin(X, x, y, rx, ry, side, off, up, w, hgt, glass);
+  for (let i = 0; i < 3; i++) {                    // 비스듬한 하이라이트
+    isoWin(X, x, y, rx, ry, side, off + 2 + i * 4, up + hgt - 6 - i * 4, 2, 4, 'rgba(255,255,255,.30)');
+  }
+}
+
 function drawFridge(o) {
   const { x, y } = P(o.gx, o.gy);
   const pal = palette();
+  X.save(); X.globalAlpha = 0.18; rhomb(X, x + 3, y + 2, 20, 10, '#000000'); X.restore();
   prism(X, x, y, 20, 10, 39, '#DDE3F0', '#8A93A8', '#C6CCE2');
-  isoWin(X, x, y, 20, 10, 'r', 5, 6, 27, 27, '#8FB6D6');
+  faces(X, x, y, 20, 10, 0, 4, '#7A8496', '#A6ADBC');            // 킥 플레이트
+  faces(X, x, y, 20, 10, 35, 37, '#B7BFD0', '#D2D8E6');          // 상부 통풍구
+  glassPanel(x, y, 20, 10, 'r', 4, 6, 26, 27, '#8FB6D6');
   const putR = stocked(6);
   for (let i = 0; i < putR; i++) {
     const r = i < 3 ? 0 : 1, k = i % 3;
-    isoWin(X, x, y, 20, 10, 'r', 6 + k * 9, 9 + r * 14, 6, 11, pal[(o.gx + r + k) % pal.length]);
+    const c = pal[(o.gx + r + k) % pal.length];
+    isoWin(X, x, y, 20, 10, 'r', 6 + k * 9, 9 + r * 14, 6, 11, c);
+    isoWin(X, x, y, 20, 10, 'r', 6 + k * 9, 9 + r * 14, 6, 2, shade(c, 0.28));
   }
-  X.fillStyle = '#8A8F9E'; X.fillRect(Math.round(x + 14), Math.round(y - 18), 3, 9);
+  for (let r = 0; r < 2; r++) {                                   // 선반 유리
+    isoWin(X, x, y, 20, 10, 'r', 4, 7 + r * 14, 26, 2, 'rgba(255,255,255,.42)');
+  }
+  X.fillStyle = '#8A8F9E'; X.fillRect(Math.round(x + 14), Math.round(y - 20), 3, 11);   // 손잡이
+  X.fillStyle = '#C6CCE2'; X.fillRect(Math.round(x + 14), Math.round(y - 20), 3, 2);
 }
 
 /* 개방형 냉동고 — 위가 트여 안이 보인다 */
 function drawFreezer(o) {
   const { x, y } = P(o.gx, o.gy);
   const pal = palette();
+  X.save(); X.globalAlpha = 0.18; rhomb(X, x + 3, y + 2, 22, 11, '#000000'); X.restore();
   prism(X, x, y, 22, 11, 18, '#8FA8C4', '#7A8496', '#B7C3D6');
+  faces(X, x, y, 22, 11, 0, 3, '#68727F', '#94A0B0');             // 굽도리
+  rhomb(X, x, y - 18, 17, 8, '#6E7C90');                          // 안쪽 그늘
   const putF = stocked(6);
   for (let i = 0; i < putF; i++) {
     const r = i < 3 ? 0 : 1, k = i % 3, c = pal[(o.gx + r + k) % pal.length];
-    prism(X, x - 9 + k * 9, y - 18 + (k - 1) * 5 + r * 8, 4, 2, 6, c, '#5E6478', shade(c, -0.25));
+    prism(X, x - 9 + k * 9, y - 18 + (k - 1) * 5 + r * 8, 4, 2, 6, shade(c, 0.20), '#5E6478', shade(c, -0.25));
   }
-  faces(X, x, y, 22, 11, 18, 20, '#DDE3F0', '#EEF2FA');
+  faces(X, x, y, 22, 11, 18, 20, '#DDE3F0', '#EEF2FA');           // 테두리
+  X.fillStyle = 'rgba(255,255,255,.34)';                          // 성에
+  X.fillRect(Math.round(x - 12), Math.round(y - 9), 8, 2); X.fillRect(Math.round(x + 5), Math.round(y - 6), 6, 2);
 }
 
 function drawShelf(o) {
   const { x, y } = P(o.gx, o.gy);
   const pal = palette();
-  X.save(); X.globalAlpha = 0.2; rhomb(X, x + 3, y + 2, 22, 11, '#000000'); X.restore();
+  X.save(); X.globalAlpha = 0.18; rhomb(X, x + 3, y + 2, 22, 11, '#000000'); X.restore();
   prism(X, x, y, 22, 11, 26, '#9C7A56', '#6B5136', '#8A6A4A');
+  faces(X, x, y, 22, 11, 0, 3, '#5C452D', '#79593B');             // 받침대
+  for (let r = 0; r < 2; r++) {                                   // 선반 판
+    faces(X, x, y, 22, 11, 5 + r * 11, 7 + r * 11, '#7A5C3E', '#A98A63');
+  }
   const put = stocked(6);
   for (let i = 0; i < put; i++) {
     const r = i < 3 ? 0 : 1, k = i % 3;
     const c = pal[(o.gx * 2 + o.gy + r + k) % pal.length];
-    isoWin(X, x, y, 22, 11, 'r', 5 + k * 9, 5 + r * 11, 6, 8, c);
-    isoWin(X, x, y, 22, 11, 'l', 5 + k * 9, 5 + r * 11, 6, 8, shade(c, -0.2));
+    isoWin(X, x, y, 22, 11, 'r', 5 + k * 9, 7 + r * 11, 6, 8, c);
+    isoWin(X, x, y, 22, 11, 'r', 5 + k * 9, 13 + r * 11, 6, 2, shade(c, 0.30));   // 상품 윗면
+    isoWin(X, x, y, 22, 11, 'l', 5 + k * 9, 7 + r * 11, 6, 8, shade(c, -0.22));
   }
-  faces(X, x, y, 22, 11, 12, 14, '#D8CBA8', '#F5EFDD');           // 가격표 띠
+  faces(X, x, y, 22, 11, 24, 26, '#D8CBA8', '#F5EFDD');           // 가격표 띠
+  X.fillStyle = '#8A6A4A'; X.fillRect(Math.round(x) - 1, Math.round(y) + 9, 3, 3);   // 모서리 기둥
 }
 
 function drawFlat(o) {
   const { x, y } = P(o.gx, o.gy);
   const pal = palette();
+  X.save(); X.globalAlpha = 0.16; rhomb(X, x + 3, y + 2, 22, 11, '#000000'); X.restore();
   prism(X, x, y, 22, 11, 12, '#9C7A56', '#6B5136', '#8A6A4A');
+  faces(X, x, y, 22, 11, 10, 12, '#B08A62', '#C9A272');           // 상판 테두리
+  rhomb(X, x, y - 12, 18, 9, '#A98A63');
   for (let k = 0; k < 3; k++) {
     const c = pal[(o.gx + k) % pal.length];
     prism(X, x - 11 + k * 11, y - 12 + (k - 1) * 5, 6, 3, 8, shade(c, 0.25), shade(c, -0.25), c);
+    isoWin(X, x - 11 + k * 11, y - 12 + (k - 1) * 5, 6, 3, 'r', 1, 2, 4, 4, shade(c, 0.40));
   }
 }
 
 function drawCounter() {
   for (const o of countersNow()) {
     const { x, y } = P(o.gx, o.gy);
-    X.save(); X.globalAlpha = 0.2; rhomb(X, x + 3, y + 2, 22, 11, '#000000'); X.restore();
+    X.save(); X.globalAlpha = 0.18; rhomb(X, x + 3, y + 2, 22, 11, '#000000'); X.restore();
     prism(X, x, y, 22, 11, 21, '#7186AD', '#3E4A66', '#5A6B8C');
-    faces(X, x, y, 22, 11, 21, 23, '#8FA4CC', '#9DB2D8');
+    faces(X, x, y, 22, 11, 0, 3, '#33405A', '#4A5B7B');           // 굽도리
+    faces(X, x, y, 22, 11, 10, 12, '#8FA4CC', '#9DB2D8');         // 허리 몰딩
+    faces(X, x, y, 22, 11, 21, 23, '#8FA4CC', '#9DB2D8');         // 상판
+    isoWin(X, x, y, 22, 11, 'r', 6, 13, 12, 6, '#48597A');        // 앞면 패널
   }
   const a = P(COUNTER[0].gx, COUNTER[0].gy);
   X.fillStyle = '#20263A'; X.fillRect(Math.round(a.x) - 8, Math.round(a.y) - 39, 17, 12);   // POS
   X.fillStyle = '#8AB4D8'; X.fillRect(Math.round(a.x) - 6, Math.round(a.y) - 38, 14, 8);
+  X.fillStyle = 'rgba(255,255,255,.35)'; X.fillRect(Math.round(a.x) - 6, Math.round(a.y) - 38, 14, 2);
+  X.fillStyle = '#3E4A66'; X.fillRect(Math.round(a.x) - 4, Math.round(a.y) - 27, 9, 3);     // 받침
   if (fl('counter') >= 2) {                                    // 셀프 계산 단말 한 대 더
     const b = P(COUNTER[1].gx, COUNTER[1].gy);
     X.fillStyle = '#20263A'; X.fillRect(Math.round(b.x) - 8, Math.round(b.y) - 36, 17, 12);
     X.fillStyle = '#4ECDC4'; X.fillRect(Math.round(b.x) - 6, Math.round(b.y) - 35, 14, 8);
+    X.fillStyle = 'rgba(255,255,255,.35)'; X.fillRect(Math.round(b.x) - 6, Math.round(b.y) - 35, 14, 2);
   }
   const c = P(CLERK.gx, CLERK.gy);
   drawPerson(c.x, c.y, clerk, 'w', 1);                                                     // 점원
@@ -437,12 +490,20 @@ function drawProp(o) {
   const { x, y } = P(o.gx, o.gy);
   if (o.k === 'plant') {
     prism(X, x, y, 10, 5, 11, '#B96A3C', '#7A3E22', '#A0562F');
+    faces(X, x, y, 10, 5, 9, 11, '#C9793F', '#D98A4C');          // 화분 테
     prism(X, x, y - 11, 14, 7, 14, '#3E8A56', '#245239', '#2F6B45');
+    prism(X, x - 3, y - 22, 8, 4, 8, '#4E9A66', '#2C6243', '#3E8A56');
   } else if (o.k === 'carts') {
-    for (let i = 0; i < 3; i++) prism(X, x - 6 + i * 6, y - 3 + i * 3, 10, 5, 14, '#C6CCE2', '#5E6478', '#9AA0B0');
+    for (let i = 0; i < 3; i++) {
+      const cx = x - 6 + i * 6, cy = y - 3 + i * 3;
+      prism(X, cx, cy, 10, 5, 14, '#C6CCE2', '#5E6478', '#9AA0B0');
+      isoWin(X, cx, cy, 10, 5, 'r', 2, 4, 6, 8, '#8A90A4');      // 망
+    }
   } else {
     X.fillStyle = '#59627E'; X.fillRect(Math.round(x), Math.round(y - 21), 2, 21);
-    X.fillStyle = '#D0453B'; X.fillRect(Math.round(x - 12), Math.round(y - 36), 27, 17);
+    X.fillStyle = '#3E4763'; X.fillRect(Math.round(x) - 4, Math.round(y) - 2, 10, 3);      // 받침
+    rrect(Math.round(x - 12), Math.round(y - 36), 27, 17, '#D0453B');
+    X.fillStyle = shade('#D0453B', 0.28); X.fillRect(Math.round(x - 11), Math.round(y - 35), 25, 2);
     X.fillStyle = 'rgba(255,255,255,.78)';
     X.fillRect(Math.round(x - 9), Math.round(y - 32), 21, 3); X.fillRect(Math.round(x - 9), Math.round(y - 27), 14, 3);
   }
@@ -485,24 +546,36 @@ function drawEmptyChair(seat, d) {
 
 function drawDesk(p, on, i) {
   const { x, y } = p;
-  X.save(); X.globalAlpha = 0.22; rhomb(X, x + 3, y + 2, 22, 11, '#000000'); X.restore();
+  X.save(); X.globalAlpha = 0.18; rhomb(X, x + 3, y + 2, 22, 11, '#000000'); X.restore();
   prism(X, x, y, 22, 11, 15, '#B08A62', '#6B5136', '#9C7A56');
+  faces(X, x, y, 22, 11, 13, 15, '#C49A6E', '#D8B184');                                  // 상판 테두리
+  isoWin(X, x, y, 22, 11, 'r', 6, 3, 12, 8, '#8A6A4A');                                  // 서랍
+  isoWin(X, x, y, 22, 11, 'r', 6, 7, 12, 1, '#C9A272');
+  X.fillStyle = '#8A8F9E'; X.fillRect(Math.round(x) - 10, Math.round(y) - 18, 3, 4);     // 모니터 목
   // 모니터는 책상 왼쪽에 둔다. 가운데에 두면 앉은 사람 얼굴을 가린다.
-  X.fillStyle = '#20263A'; X.fillRect(Math.round(x) - 17, Math.round(y) - 30, 15, 12);
+  rrect(Math.round(x) - 17, Math.round(y) - 30, 15, 12, '#20263A');
   X.fillStyle = on ? (Math.floor(frame / 40 + i) % 2 ? '#4ECDC4' : '#4A86C7') : '#2C3550';
   X.fillRect(Math.round(x) - 15, Math.round(y) - 29, 12, 9);
+  X.fillStyle = 'rgba(255,255,255,.28)'; X.fillRect(Math.round(x) - 15, Math.round(y) - 29, 12, 2);
   X.fillStyle = '#C6CCE2'; X.fillRect(Math.round(x) - 12, Math.round(y) - 17, 11, 3);    // 키보드
+  X.fillStyle = '#9AA0B0'; X.fillRect(Math.round(x) - 12, Math.round(y) - 17, 11, 1);
   X.fillStyle = '#F5EFDD'; X.fillRect(Math.round(x) + 3, Math.round(y) - 20, 11, 8);    // 서류
+  X.fillStyle = '#D6D2C4'; X.fillRect(Math.round(x) + 3, Math.round(y) - 18, 11, 1);
   X.fillStyle = '#D0453B'; X.fillRect(Math.round(x) + 12, Math.round(y) - 20, 5, 6);    // 머그
+  X.fillStyle = '#E8837B'; X.fillRect(Math.round(x) + 12, Math.round(y) - 20, 5, 2);
 }
 
 function drawBossDesk(p) {
   const { x, y } = p;
   X.save(); X.globalAlpha = 0.24; rhomb(X, x + 3, y + 2, 28, 14, '#000000'); X.restore();
   prism(X, x, y, 28, 14, 18, '#8A6A4A', '#4E3A24', '#6B5136');
+  faces(X, x, y, 28, 14, 0, 3, '#3E2E1C', '#563F28');                                    // 굽도리
   faces(X, x, y, 28, 14, 18, 20, '#B08A62', '#C69A6E');
-  X.fillStyle = '#20263A'; X.fillRect(Math.round(x) - 21, Math.round(y) - 36, 15, 12);
+  isoWin(X, x, y, 28, 14, 'r', 8, 5, 14, 9, '#75573A');                                  // 서랍
+  isoWin(X, x, y, 28, 14, 'r', 8, 9, 14, 1, '#C69A6E');
+  rrect(Math.round(x) - 21, Math.round(y) - 36, 15, 12, '#20263A');
   X.fillStyle = '#4ECDC4'; X.fillRect(Math.round(x) - 20, Math.round(y) - 35, 12, 9);
+  X.fillStyle = 'rgba(255,255,255,.28)'; X.fillRect(Math.round(x) - 20, Math.round(y) - 35, 12, 2);
   X.fillStyle = '#F2B233'; X.fillRect(Math.round(x) + 6, Math.round(y) - 24, 9, 6);    // 명패
   X.fillStyle = '#F5EFDD'; X.fillRect(Math.round(x) - 5, Math.round(y) - 23, 12, 8);
   drawText(x, y - 45, '사장실', { size: 10, color: '#FFD57A' });
@@ -530,14 +603,24 @@ function drawOfficeProp(p, k) {
     X.fillStyle = '#2FA37A'; X.fillRect(Math.round(x) + 6, Math.round(y) - 26, 5, 3);
   } else if (k === 'cabinet') {
     prism(X, x, y, 16, 8, 33, '#A6ACBC', '#5E6478', '#8A8F9E');
-    for (let i = 0; i < 3; i++) isoWin(X, x, y, 16, 8, 'r', 5, 5 + i * 9, 9, 6, '#6E7488');
+    faces(X, x, y, 16, 8, 31, 33, '#C0C6D4', '#D2D8E4');
+    for (let i = 0; i < 3; i++) {                                  // 서랍 + 손잡이
+      isoWin(X, x, y, 16, 8, 'r', 5, 5 + i * 9, 9, 6, '#6E7488');
+      isoWin(X, x, y, 16, 8, 'r', 7, 7 + i * 9, 4, 1, '#C6CCE2');
+    }
   } else if (k === 'sofa') {
     prism(X, x, y, 20, 10, 9, '#5A6B8C', '#2E3A52', '#46567A');
+    faces(X, x, y, 20, 10, 7, 9, '#6C7EA0', '#7E90B4');            // 방석 선
     X.fillStyle = '#46567A'; X.fillRect(Math.round(x) - 17, Math.round(y) - 21, 17, 14);
+    X.fillStyle = '#5A6B8C'; X.fillRect(Math.round(x) - 17, Math.round(y) - 21, 17, 3);
   } else {
     prism(X, x, y, 16, 8, 30, '#8A6A4A', '#4E3A24', '#6B5136');
     const pal = ['#D0453B', '#4A86C7', '#2FA37A', '#F2B233'];
-    for (let i = 0; i < 3; i++) isoWin(X, x, y, 16, 8, 'r', 5 + i * 8, 8, 6, 14, pal[i % 4]);
+    for (let r = 0; r < 2; r++) faces(X, x, y, 16, 8, 7 + r * 11, 9 + r * 11, '#5C4630', '#7A5C40');
+    for (let i = 0; i < 3; i++) {                                  // 책등
+      isoWin(X, x, y, 16, 8, 'r', 5 + i * 8, 9, 6, 12, pal[i % 4]);
+      isoWin(X, x, y, 16, 8, 'r', 5 + i * 8, 19, 6, 1, shade(pal[i % 4], 0.3));
+    }
   }
 }
 
@@ -561,4 +644,4 @@ function drawFoot() {
   });
 }
 
-export { BOSS, CLERK, CLERK2, COUNTER, DESKS, DOOR, EXTRA_COUNTER, EXTRA_FRIDGE, EXTRA_SHELF, FLATS, FREEZERS, FRIDGES, HOTSPOTS, P, QUEUE, SHELVES, SHOP_BLOCK, SHOP_PROPS, SPAWN_GX, addOffice, advancePhase, bar, blockedAt, countersNow, drawBossDesk, drawCounter, drawDesk, drawEmptyChair, drawFlat, drawFoot, drawFreezer, drawFridge, drawOfficeProp, drawPartition, drawProp, drawShelf, drawSignboard, drawStore, drawWalls, drawWhiteboard, facilKey, findPath, fl, fridgesNow, inBossRoom, invRatio, newCustomer, offFloorPal, palette, retarget, shelvesNow, shopFloorPal, spawnCustomers, stepCustomers, stocked, storeFloor, storeHit, tileOf, walkable };
+export { glassPanel, BOSS, CLERK, CLERK2, COUNTER, DESKS, DOOR, EXTRA_COUNTER, EXTRA_FRIDGE, EXTRA_SHELF, FLATS, FREEZERS, FRIDGES, HOTSPOTS, P, QUEUE, SHELVES, SHOP_BLOCK, SHOP_PROPS, SPAWN_GX, addOffice, advancePhase, bar, blockedAt, countersNow, drawBossDesk, drawCounter, drawDesk, drawEmptyChair, drawFlat, drawFoot, drawFreezer, drawFridge, drawOfficeProp, drawPartition, drawProp, drawShelf, drawSignboard, drawStore, drawWalls, drawWhiteboard, facilKey, findPath, fl, fridgesNow, inBossRoom, invRatio, newCustomer, offFloorPal, palette, retarget, shelvesNow, shopFloorPal, spawnCustomers, stepCustomers, stocked, storeFloor, storeHit, tileOf, walkable };

@@ -362,6 +362,23 @@ canvas.zooming{transform:scale(1.8);opacity:0}
 #title-cv{
   width:640px;height:300px;image-rendering:pixelated;display:block;margin:0 auto;
 }
+/* 조작 안내. 모달 바탕이 밝으므로 키 캡도 밝게 간다 —
+   어두운 캡에 어두운 글자를 얹으면 안 읽힌다(한 번 그렇게 냈다). */
+.set-keys{
+  margin-top:14px;padding-top:12px;border-top:2px solid var(--paper-3);
+}
+.set-keys h4{
+  margin:0 0 8px;font-family:var(--f-sm);font-size:10px;font-weight:normal;
+  letter-spacing:2px;color:var(--ink-3);
+}
+.set-key{display:flex;align-items:center;gap:10px;padding:3px 0}
+.set-key kbd{
+  flex:0 0 92px;text-align:center;font-family:var(--f-sm);font-size:10px;
+  background:var(--paper-2);border:2px solid var(--paper-3);border-bottom-width:3px;
+  padding:3px 0;color:var(--ink);
+}
+.set-key span{font-family:var(--f-sm);font-size:10px;color:var(--ink-2)}
+
 #title-box h1{
   font-family:var(--f-lg);font-size:45px;font-weight:normal;letter-spacing:4px;
   color:var(--gold);margin-top:6px;text-shadow:3px 3px 0 #0B0F1B,6px 6px 0 rgba(0,0,0,.4);
@@ -405,11 +422,3 @@ canvas.zooming{transform:scale(1.8);opacity:0}
   width:14px;height:20px;background:var(--gold);border:2px solid var(--ink);border-radius:0;
 }
 
-/* 카메라 회전 — 도시 모드에서만 쓴다. 사옥은 고정 배치가 읽기 쉬워 회전하지 않는다 */
-.rot-seg{display:flex;gap:3px;margin-left:6px}
-.rot-seg.off{visibility:hidden}
-.rot{
-  width:26px;padding:0;height:100%;background:var(--ink-2);border:2px solid var(--ink-3);
-  color:var(--paper-3);font-size:12px;line-height:1;
-}
-.rot:hover{border-color:var(--gold);color:var(--gold)}

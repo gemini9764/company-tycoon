@@ -1,7 +1,7 @@
 import { sfx } from '../core/audio.js';
 import { S } from '../core/state.js';
 import { $ } from '../core/util.js';
-import { rotateCity, zoomBy, zoomInto } from '../render/canvas.js';
+import { zoomInto } from '../render/canvas.js';
 import { fillIcons } from './icons.js';
 import { openSettings } from './settings.js';
 import { TAB, setTab } from './tabs.js';
@@ -75,25 +75,11 @@ function renderDock() {
       <button class="mode-tab ${s.mode === 'city' ? 'on' : ''}" data-mode="city"><i data-ico="city"></i><b>도시</b></button>
       <button class="mode-tab ${s.mode === 'store' ? 'on' : ''}" data-mode="store"><i data-ico="store"></i><b>사옥</b></button>
     </div>
-    <div class="rot-seg ${s.mode === 'city' ? '' : 'off'}" title="카메라 회전 (Q · E)">
-      <button class="rot" data-rot="-1">◀</button>
-      <button class="rot" data-rot="1">▶</button>
-    </div>
-    <div class="rot-seg ${s.mode === 'city' ? '' : 'off'}" title="확대 · 축소 (휠 · + −). 드래그로 이동">
-      <button class="rot" data-zoom="-1">−</button>
-      <button class="rot" data-zoom="1">+</button>
-    </div>
     <div class="dock-btns">${FIXED.map(d => btnHtml(d, s)).join('')}</div>`;
 
   fillIcons($('dock'));
   $('dock').querySelectorAll('[data-mode]').forEach(b => b.onclick = () => {
     if (b.dataset.mode !== S.mode) zoomInto(b.dataset.mode);
-  });
-  $('dock').querySelectorAll('[data-rot]').forEach(b => b.onclick = () => {
-    sfx('tap'); rotateCity(+b.dataset.rot);
-  });
-  $('dock').querySelectorAll('[data-zoom]').forEach(b => b.onclick = () => {
-    sfx('tap'); zoomBy(+b.dataset.zoom);
   });
   bindBtns($('dock'));
 

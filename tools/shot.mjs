@@ -122,6 +122,17 @@ for (let v = 0; v < 4; v++) {
 win.eval('game.S.view = 0');
 console.log('views → shots/view0..3.png');
 
+/* 회전 전환의 중간 프레임. 시작·끝 모습은 view0..3 로 보이지만, 이 연출에서
+   정작 확인해야 하는 건 '도는 도중'이다 — 지면과 건물이 어긋나지 않는지. */
+{
+  win.eval("game.setMode('city'); game.S.view = 0; game.draw(); game.beginRotate(1)");
+  for (let i = 0; i < 9; i++) win.eval('game.draw()');
+  await writeFile(join(ROOT, 'shots/rot-mid.png'), surface.toBuffer('image/png'));
+  for (let i = 0; i < 14; i++) win.eval('game.draw()');   // 전환을 끝까지 돌린다
+  win.eval('game.S.view = 0; game.draw()');
+  console.log('rot → shots/rot-mid.png  (전환 50%)');
+}
+
 /* 건물 5종을 한 종류씩 몰아서 본다. 3단계 재작화는 "한 종류씩 고치고 대조"라
    섞여 있는 도시 그림으로는 확인이 안 된다. 업종을 통째로 바꿔 다시 그리고,
    3x 로 확대해 마감(기단·층 띠·창틀·파라펫)이 실제로 들어갔는지 본다. */

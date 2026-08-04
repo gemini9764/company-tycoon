@@ -4,7 +4,7 @@ import { sfx } from '../core/audio.js';
 import { S } from '../core/state.js';
 import { $, clamp, vpick, vrint, won } from '../core/util.js';
 import { HH, HW, isoX, isoY } from './iso.js';
-import { cityHit, drawCity } from './city.js';
+import { beginRotate, cityHit, drawCity, rotating } from './city.js';
 import { drawStore, spawnCustomers, storeHit } from './store.js';
 import { openCompany } from '../ui/companyPopup.js';
 import { openDesk } from '../ui/desk.js';
@@ -223,6 +223,7 @@ function hitLot(p) {
 }
 
 function onCanvasMove(ev) {
+  if (rotating()) return hideTip();               // 도는 중에는 툴팁을 붙잡지 않는다
   if (drag && drag.moved) return;                 // 끄는 중에는 호버를 잡지 않는다
   if (S.mode === 'store') {                       // 사옥 — 핫스팟만 안내한다
     const sh = storeHit(toLogical(ev));
@@ -246,6 +247,7 @@ function onCanvasMove(ev) {
 }
 
 function onCanvasClick(ev) {
+  if (rotating()) return;
   if (dragged) { dragged = false; return; }       // 맵을 끈 것이지 누른 게 아니다
   if (S.mode === 'store') {
     const sh = storeHit(toLogical(ev));
@@ -264,17 +266,12 @@ function zoomInto(m) {
 }
 
 /* ── 카메라 회전 ─────────────────────────────────────────────
-   2D 라 중간 각도를 그릴 수 없다. 회전 프레임을 보여 주려 하면 어색하므로
-   zoomInto 와 같은 페이드로 한 번 덮고 그 사이에 방향을 바꾼다.
-   지면 레이어는 city.js 가 bakedView 를 보고 알아서 다시 굽는다. */
+   화면을 어둡게 덮고 그 사이에 방향을 바꾸던 걸 걷어냈다. 연출은 city.js 가
+   쥔다 — 타일 좌표를 실수로 돌려 맵이 실제로 도는 전환을 그린다. */
 function rotateCity(dir) {
   if (!S || S.mode !== 'city') return;
-  CV.classList.add('zooming');
-  setTimeout(() => {
-    S.view = (((S.view | 0) + dir) % 4 + 4) % 4;
-    hideTip();
-    CV.classList.remove('zooming');
-  }, 130);
+  beginRotate(dir);
+  hideTip();
 }
 
 /* ── 툴팁 ────────────────────────────────────────────────── */

@@ -34,6 +34,34 @@ function rotG(gx, gy, view, W, H) {
   }
 }
 
+/**
+ * 회전 애니메이션용 — view 를 **실수**로 받아 타일 좌표를 연속으로 돌린다.
+ * 정수 view 에서는 `rotG` 와 정확히 같은 값이 나온다(90°씩이므로 검산됨).
+ *
+ * "2D 라 중간 각도를 못 그린다"고 봤던 게 틀렸다. 투영식은 그대로 두고
+ * **타일 좌표만 연속으로 돌리면** 건물이 호를 그리며 제자리를 찾아간다.
+ */
+function rotGf(gx, gy, view, W, H) {
+  const v = ((view % 4) + 4) % 4;
+  if (Number.isInteger(v)) return rotG(gx, gy, v, W, H);
+  const cx = (W - 1) / 2, cy = (H - 1) / 2;
+  const a = -v * Math.PI / 2, s = Math.sin(a), c = Math.cos(a);
+  const dx = gx - cx, dy = gy - cy;
+  return [cx + dx * c - dy * s, cy + dx * s + dy * c];
+}
+
+/**
+ * 타일 좌표를 a 만큼 돌리는 것과 **같은 일을 하는 화면 좌표 선형변환**.
+ * 지면 레이어는 프레임마다 다시 구울 수 없으므로, 구워 둔 비트맵에 이 행렬을
+ * 걸어 돌린다. M = P·R(a)·P⁻¹ 를 풀면 [[cos, -k·sin], [sin/k, cos]] 이고
+ * k = HW/HH = 2 다. 평평한 타일에 대해서는 기하학적으로 정확하다 —
+ * 즉 호를 그리는 건물과 어긋나지 않는다.
+ */
+function isoRotMat(a) {
+  const k = HW / HH, s = Math.sin(a), c = Math.cos(a);
+  return [c, s / k, -k * s, c];        // ctx.transform(a, b, c, d, ...) 순서
+}
+
 /* 보행자·차량이 향한 쪽. 화면 기준 라벨이라 회전하면 같이 돌아야 한다.
    'e' 우하(SE) · 's' 좌하(SW) · 'w' 좌상(NW) · 'n' 우상(NE) — 반시계 순서다. */
 const FACES4 = ['e', 's', 'w', 'n'];
@@ -138,4 +166,4 @@ function makeLayer(w, h) {
   return { c, ctx };
 }
 
-export { FACES4, HH, HW, TH, TW, depth, rotFace, rotG, faces, isoShadow, isoWin, isoX, isoY, makeLayer, prism, rhomb, rhombEdge, unIso };
+export { FACES4, HH, HW, TH, TW, depth, isoRotMat, rotFace, rotG, rotGf, faces, isoShadow, isoWin, isoX, isoY, makeLayer, prism, rhomb, rhombEdge, unIso };

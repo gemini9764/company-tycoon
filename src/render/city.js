@@ -3,7 +3,7 @@ import { SECTORS } from '../core/data.js';
 import { S } from '../core/state.js';
 import { viewRand } from '../core/rng.js';
 import { $, clamp, vchance, vpick, vrnd } from '../core/util.js';
-import { HH, HW, faces, isoWin, isoX, isoY, makeLayer, prism, rhomb, rhombEdge, rotFace, rotG } from './iso.js';
+import { HH, HW, faces, isoRotMat, isoWin, isoX, isoY, makeLayer, prism, rhomb, rhombEdge, rotFace, rotG, rotGf } from './iso.js';
 import { CITY_H, CITY_O, CITY_PAD_X, CITY_PAD_Y, CITY_W, MAP_H, MAP_W, X, drawLabel, drawPerson, drawPops, drawText, frame, hoverId, mix, newLook, shade, textW } from './canvas.js';
 
 /* ══════════════════════════════════════════════════════════════
@@ -64,15 +64,62 @@ const ROAD = '#A2A8BC', ROAD_EDGE = '#9096AC', WALK = '#C6CAD6';
 
 let ground = null, builtFor = null, bakedView = -1, empties = [], traffic = [], plates = [];
 
+/* ── 회전 전환 ────────────────────────────────────────────────
+   예전에는 화면을 한 번 어둡게 덮고 그 사이에 방향을 바꿨다. "2D 라 중간 각도를
+   못 그린다"고 봤기 때문인데, 그게 틀렸다 — **타일 좌표를 실수로 돌리면 중간
+   각도가 나온다** (`rotGf`). 건물은 그 궤적을 따라 호를 그리며 옮겨 가고,
+   스프라이트 자체는 세워 둔다.
+
+   지면 레이어만 프레임마다 다시 구울 수 없다. 그래서 굽어 둔 비트맵 두 장
+   (이전 방향 · 새 방향)에 같은 회전의 **화면 좌표 변환**(`isoRotMat`)을 걸어
+   교차 페이드한다. 두 변환은 같은 회전이라 건물과 지면이 어긋나지 않는다.
+   교외에 구워 둔 집·나무만 전환 중 잠깐 기울어지는데, 0.3초짜리라 넘어간다. */
+const ROT_FRAMES = 18;
+let rot = null, prevGround = null, baking = false;
+
+const rotEase = p => (p < 0.5 ? 2 * p * p : 1 - 2 * (1 - p) * (1 - p));
+
+/** 회전 시작. 새 방향으로 지면을 다시 굽고, 이전 지면은 전환 동안 붙잡아 둔다. */
+function beginRotate(dir) {
+  if (rot || !S || S.mode !== 'city') return;
+  prevGround = cityGround();
+  S.view = (((S.view | 0) + dir) % 4 + 4) % 4;
+  ground = null;                                   // 새 방향으로 다시 굽는다
+  rot = { dir, p: 0 };
+}
+
+function rotating() { return !!rot; }
+
 /* ── 회전 ────────────────────────────────────────────────────
    모든 타일→월드 변환이 이 두 함수를 지난다. 여기서만 회전을 먹이면
    건물 배치·정렬·클릭 판정·차량 경로가 전부 같이 돈다.
    (건물 몸통은 prism 이 좌우 대칭이라 방향을 안 탄다 — 그래서 회전이 싸다) */
 const viewOf = () => (S && S.view | 0) & 3;
 
-function cityX(O, gx, gy) { const [a, b] = rotG(gx, gy, viewOf(), MAP_W, MAP_H); return isoX(O, a, b); }
+/* 전환 중에는 실수 방향을 쓴다. **단 지면을 굽는 동안은 정수여야 한다** —
+   중간 각도로 구우면 그 프레임의 그림이 통째로 캐시에 박힌다. */
+function viewA() {
+  if (!rot || baking) return viewOf();
+  return viewOf() - rot.dir * (1 - rotEase(rot.p));
+}
 
-function cityY(O, gx, gy) { const [a, b] = rotG(gx, gy, viewOf(), MAP_W, MAP_H); return isoY(O, a, b); }
+function cityX(O, gx, gy) { const [a, b] = rotGf(gx, gy, viewA(), MAP_W, MAP_H); return isoX(O, a, b); }
+
+function cityY(O, gx, gy) { const [a, b] = rotGf(gx, gy, viewA(), MAP_W, MAP_H); return isoY(O, a, b); }
+
+/** 구워 둔 지면을 a(타일 공간 각도)만큼 돌려 붙인다 */
+function drawGroundRot(layer, a, alpha) {
+  if (!layer || !layer.c || alpha <= 0) return;
+  const px = CITY_O.x, py = CITY_O.y + (MAP_H - 1) * HH;   // 맵 한가운데 타일의 월드 좌표
+  const m = isoRotMat(a);
+  X.save();
+  X.globalAlpha = Math.min(1, alpha);
+  X.translate(px, py);
+  X.transform(m[0], m[1], m[2], m[3], 0, 0);
+  X.translate(-px, -py);
+  X.drawImage(layer.c, -CITY_PAD_X, -CITY_PAD_Y);
+  X.restore();
+}
 
 /* 상호판의 화면상 사각형. flushPlates 가 매 프레임 다시 채운다.
    상호판은 건물을 전부 그린 뒤 맨 위에 얹히므로 절대 가려지지 않는다.
@@ -84,6 +131,7 @@ const plateBoxes = [];
 function cityGround() {
   if (ground && builtFor === S && bakedView === viewOf()) return ground;
   builtFor = S; bakedView = viewOf();
+  baking = true;
   buildEmpties();
   ensureTraffic();
   const LW = CITY_W + CITY_PAD_X * 2, LH = CITY_H + CITY_PAD_Y * 2;
@@ -101,6 +149,7 @@ function cityGround() {
       else drawBlockTile(g, x, y, gx, gy);
     }
   }
+  baking = false;
   ground = layer;
   return ground;
 }
@@ -305,7 +354,13 @@ function drawCar(t, x, y) {
 /* ── 그리기 ──────────────────────────────────────────────── */
 function drawCity() {
   const g = cityGround();
-  if (g && g.c) X.drawImage(g.c, -CITY_PAD_X, -CITY_PAD_Y);
+  if (rot) {
+    const e = rotEase(rot.p), q = Math.PI / 2;
+    drawGroundRot(prevGround, -rot.dir * e * q, 1 - e);      // 이전 방향이 빠져나가고
+    drawGroundRot(g, rot.dir * (1 - e) * q, e);              // 새 방향이 들어온다
+  } else if (g && g.c) {
+    X.drawImage(g.c, -CITY_PAD_X, -CITY_PAD_Y);
+  }
   moveTraffic();
 
   /* 쿼터뷰는 화면 아래쪽이 앞이다. 바닥 y 로 정렬해야 앞뒤가 맞는다. */
@@ -336,6 +391,8 @@ function drawCity() {
   flushPlates();
   drawNegoMark();
   drawPops();
+
+  if (rot && (rot.p += 1 / ROT_FRAMES) >= 1) { rot = null; prevGround = null; }
 }
 
 function lotY(lot) { return cityY(CITY_O, lot.tx + 1, lot.ty + 1); }
@@ -910,4 +967,4 @@ function myGeom() {
   return { x, y, rx, ry: rx / 2, h: MY_H[S.co.tier] };
 }
 
-export { awning, cornerPost, floorBands, pane, parapet, roofDeck, windowGrid, isRoad, blockOrigin, bboxOf, boxHits, focusOf, isoHit, plateHit, bldgGeom, flushPlates, drawOutskirts, emptyKind, drawFillApart, drawFillOffice, drawFillShops, drawRoofProps, KIND_FLOOR, FILL_BODY, buildEmpties, cityGround, cityHit, drawApron, drawBench, drawBlockTile, drawBuilding, drawCar, drawCity, drawCrop, drawFountain, drawHouse, drawLab, drawMyBuilding, drawNamePlate, drawNegoMark, drawNeon, drawPlant, drawPond, drawRoadTile, drawShed, drawShop, drawSign, drawTerrain, drawTower, drawTree, ensureTraffic, h2, kindOf, lotC, lotY, moveTraffic, myGeom, pedFace, speckle, trafficPos };
+export { beginRotate, rotating, awning, cornerPost, floorBands, pane, parapet, roofDeck, windowGrid, isRoad, blockOrigin, bboxOf, boxHits, focusOf, isoHit, plateHit, bldgGeom, flushPlates, drawOutskirts, emptyKind, drawFillApart, drawFillOffice, drawFillShops, drawRoofProps, KIND_FLOOR, FILL_BODY, buildEmpties, cityGround, cityHit, drawApron, drawBench, drawBlockTile, drawBuilding, drawCar, drawCity, drawCrop, drawFountain, drawHouse, drawLab, drawMyBuilding, drawNamePlate, drawNegoMark, drawNeon, drawPlant, drawPond, drawRoadTile, drawShed, drawShop, drawSign, drawTerrain, drawTower, drawTree, ensureTraffic, h2, kindOf, lotC, lotY, moveTraffic, myGeom, pedFace, speckle, trafficPos };

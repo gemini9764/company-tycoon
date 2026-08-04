@@ -21,6 +21,17 @@ const ROWS = [
   { k: 'sfx', n: '효과음' },
 ];
 
+/* 조작은 전부 키와 마우스로 한다. 독에 회전·확대 버튼을 두면 상시 자리를
+   차지하면서 정작 드래그·휠은 안 알려 주게 되어, 안내를 여기로 모았다. */
+const KEYS = [
+  ['드래그', '도시 맵 이동'],
+  ['휠 · + −', '확대 · 축소 (1x ~ 3x)'],
+  ['Q · E', '카메라 90° 회전'],
+  ['Tab', '도시 ↔ 사옥 전환'],
+  ['Space', '일시정지'],
+  ['Esc', '창 닫기'],
+];
+
 function settingsBody() {
   return `
     <div class="set-row set-mute">
@@ -36,6 +47,10 @@ function settingsBody() {
       </div>`).join('')}
     <p class="c-dim" style="margin-top:10px;font-family:var(--f-sm);font-size:10px">
       효과음은 슬라이더를 놓을 때 한 번 들려줍니다. 설정은 저장 데이터와 따로 보관되어 새 게임에서도 유지됩니다.</p>
+    <div class="set-keys">
+      <h4>조작</h4>
+      ${KEYS.map(([k, d]) => `<div class="set-key"><kbd>${k}</kbd><span>${d}</span></div>`).join('')}
+    </div>
     ${canExit() ? `<div class="set-exit">
       <button class="btn wide" id="set-title">메인 타이틀로</button>
       <p class="c-dim" style="margin-top:6px;font-family:var(--f-sm);font-size:10px">
