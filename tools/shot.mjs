@@ -122,6 +122,23 @@ for (let v = 0; v < 4; v++) {
 win.eval('game.S.view = 0');
 console.log('views → shots/view0..3.png');
 
+/* 건물 5종을 한 종류씩 몰아서 본다. 3단계 재작화는 "한 종류씩 고치고 대조"라
+   섞여 있는 도시 그림으로는 확인이 안 된다. 업종을 통째로 바꿔 다시 그리고,
+   3x 로 확대해 마감(기단·층 띠·창틀·파라펫)이 실제로 들어갔는지 본다. */
+{
+  const STYLES = [['tower', 'it'], ['lab', 'pharma'], ['plant', 'build'], ['neon', 'media'], ['shop', 'daily']];
+  const keep = win.eval('game.S.market.map(c => c.sector)');
+  win.eval("game.setMode('city'); game.zoomBy(1); game.zoomBy(1)");   // 1x → 3x
+  for (const [tag, sector] of STYLES) {
+    win.eval(`game.S.market.forEach(c => c.sector = '${sector}')`);
+    for (let i = 0; i < 40; i++) win.eval('game.draw()');
+    await writeFile(join(ROOT, `shots/style-${tag}.png`), surface.toBuffer('image/png'));
+  }
+  win.eval(`game.S.market.forEach((c, i) => c.sector = ${JSON.stringify(Array.from(keep))}[i]);`);
+  win.eval('game.zoomBy(-1); game.zoomBy(-1)');
+  console.log('styles → shots/style-{tower,lab,plant,neon,shop}.png');
+}
+
 /* 시설 0단계 / 최대 단계를 나란히 — 증설이 그림에 반영되는지 눈으로 본다 */
 for (const [tag, lv] of [['facil0', 0], ['facil3', 3]]) {
   win.eval(`game.S.co.inv = 100; game.S.co.facil = { shelf:${lv}, counter:${lv}, cold:${lv}, office:${lv} }; game.setMode('store')`);

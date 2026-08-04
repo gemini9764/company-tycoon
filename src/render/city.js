@@ -2,7 +2,7 @@ import { BAL } from '../core/balance.js';
 import { SECTORS } from '../core/data.js';
 import { S } from '../core/state.js';
 import { viewRand } from '../core/rng.js';
-import { $, vchance, vpick, vrnd } from '../core/util.js';
+import { $, clamp, vchance, vpick, vrnd } from '../core/util.js';
 import { HH, HW, faces, isoWin, isoX, isoY, makeLayer, prism, rhomb, rhombEdge, rotFace, rotG } from './iso.js';
 import { CITY_H, CITY_O, CITY_PAD_X, CITY_PAD_Y, CITY_W, MAP_H, MAP_W, X, drawLabel, drawPerson, drawPops, drawText, frame, hoverId, mix, newLook, shade, textW } from './canvas.js';
 
@@ -554,86 +554,231 @@ function drawApron(x, y, lot) {
   }
 }
 
-/** 1층 간판띠 + 출입문 — 모든 스타일이 공유 */
+/* ── 건물 마감 프리미티브 (3단계 재작화) ────────────────────
+   다섯 종이 공유하는 뼈대다. 새 해상도의 이득이 여기서 나온다 —
+   32×16 시절엔 넣을 자리가 없던 기단·층 띠·창틀·파라펫·모서리 기둥이
+   48×24 에서는 전부 들어간다. 종류별 함수는 이 위에 특징만 얹는다.
+
+   `off` 는 면의 바깥 끝에서부터의 거리이고 **짝수여야** 벽에 붙는다 (RENDER.md §4).
+   ─────────────────────────────────────────────────────────── */
+
+/** 창 한 장 — 유리에 창틀을 두르고 아랫변에 반사를 넣는다 */
+function pane(x, y, rx, ry, side, off, up, w, hgt, glass, frm) {
+  isoWin(X, x, y, rx, ry, side, off - 2, up - 1, w + 4, hgt + 2, frm);
+  isoWin(X, x, y, rx, ry, side, off, up, w, hgt, glass);
+  isoWin(X, x, y, rx, ry, side, off, up, w, 1, shade(glass, 0.30));
+}
+
+/**
+ * 창을 면 폭에 맞춰 고르게 배치한다.
+ * **열 수를 rx 로 계산하는 게 핵심이다.** 열 자리를 상수로 박으면 작은 건물에서
+ * 바깥 열이 `d > rx - 2` 로 잘려 나가 창이 두 개만 남는다 — 재작화 전 그림이
+ * 휑했던 직접 원인이 이것이었다.
+ */
+function windowGrid(x, y, rx, ry, from, to, rowGap, ww, wh, colOf, frm) {
+  const cols = clamp(Math.floor((rx - 10) / (ww + 4)), 2, 4);
+  const step = ww + 6, span = (cols - 1) * step + ww;
+  const start = Math.max(4, Math.round((rx - 2 - span) / 4) * 2);
+  let r = 0;
+  for (let up = from; up + wh <= to; up += rowGap, r++) {
+    for (let i = 0; i < cols; i++) {
+      const col = colOf(r, i);
+      pane(x, y, rx, ry, 'l', start + i * step, up, ww, wh, shade(col, -0.16), shade(frm, -0.12));
+      pane(x, y, rx, ry, 'r', start + i * step, up, ww, wh, col, frm);
+    }
+  }
+}
+
+/** 옥상 파라펫 — 테두리 한 겹. 없으면 상자를 잘라 놓은 것처럼 보인다 */
+function parapet(x, y, rx, h, body) {
+  prism(X, x, y - h, rx + 2, (rx + 2) / 2, 4, shade(body, 0.30), shade(body, -0.32), shade(body, 0.06));
+}
+
+/**
+ * 옥상 바닥 — 파라펫 안쪽을 한 겹 깔고 설비를 얹는다.
+ * 쿼터뷰는 지붕이 화면의 3분의 1을 먹는다. 여기가 빈 마름모 한 장이면
+ * 아무리 벽을 잘 그려도 건물이 '잘라 놓은 상자'로 보인다.
+ */
+function roofDeck(x, y, rx, h, body, k) {
+  const top = y - h - 4;
+  rhomb(X, x, top, rx - 6, (rx - 6) / 2, shade(body, -0.10));
+  rhombEdge(X, x, top, rx - 12, (rx - 12) / 2, shade(body, -0.20));
+  prism(X, x - 10, top + 5, 8, 4, 8, '#D2D7E0', '#A6ABBC', '#C0C6D2');            // 물탱크
+  for (let i = 0; i < 2; i++) {                                                    // 실외기
+    prism(X, x + 6 + i * 9, top - 3 + i * 5, 5, 2, 4, '#CED3DC', '#A6ABBC', '#C0C6D2');
+  }
+  if (k > 0.6) rhomb(X, x + 2, top + 1, 12, 6, shade(body, -0.24));                // 채광창
+}
+
+/** 층 구분 띠 */
+function floorBands(x, y, rx, ry, from, to, gap, body) {
+  for (let up = from; up < to; up += gap) {
+    faces(X, x, y, rx, ry, up, up + 2, shade(body, -0.30), shade(body, -0.14));
+  }
+}
+
+/** 가까운 모서리의 세로 기둥. 두 면이 만나는 선을 살려 준다 */
+function cornerPost(x, y, rx, ry, h, color) {
+  X.fillStyle = color;
+  X.fillRect(Math.round(x) - 2, Math.round(y) + ry - 1 - h, 4, h);
+}
+
+/** 면의 일부 구간에만 얹는 줄무늬 차양. 출입구·쇼윈도 위에 쓴다 */
+function awning(x, y, rx, ry, side, off, w, up, a, b) {
+  for (let i = 0; i < w; i += 2) {
+    const d = off + i;
+    if (d < 0 || d > rx - 2) continue;
+    const px = side === 'l' ? x - rx + d : x + rx - d - 2;
+    const by = side === 'l' ? y + ry - (rx - d) / 2 : y + ry - 1 - (rx - d - 2) / 2;
+    X.fillStyle = (i >> 1) % 2 ? a : b;
+    X.fillRect(Math.round(px), Math.round(by - up), 2, 4);
+    X.fillStyle = 'rgba(64,56,79,.35)';
+    X.fillRect(Math.round(px), Math.round(by - up + 4), 2, 1);
+  }
+}
+
+/** 1층 — 돌 기단 · 간판띠 · 유리 출입문 · 차양. 모든 스타일이 공유한다. */
 function drawSign(x, y, rx, ry, sec, cursed) {
   const c = cursed ? '#A88CB4' : sec.color;
-  faces(X, x, y, rx, ry, 0, 12, shade(c, -0.32), c);
-  faces(X, x, y, rx, ry, 12, 14, shade(c, 0.22), shade(c, 0.34));
-  isoWin(X, x, y, rx, ry, 'r', rx - 18, 0, 12, 11, '#5C6580');
-  isoWin(X, x, y, rx, ry, 'r', rx - 15, 2, 6, 8, '#B6D8EE');
+  /* 1층은 **얇아야 한다.** 상가는 몸통이 33px 뿐이라 여기서 18px 를 쓰면
+     창을 넣을 벽이 안 남는다. 기단 4 + 띠 9 + 립 2 = 15px 로 잡았다. */
+  faces(X, x, y, rx, ry, 0, 4, '#B4BAC8', '#C8CEDA');                     // 돌 기단
+  faces(X, x, y, rx, ry, 4, 13, shade(c, -0.30), c);                      // 간판띠
+  faces(X, x, y, rx, ry, 13, 15, shade(c, 0.26), shade(c, 0.40));         // 띠 윗 립
+
+  const d = rx - 22;                                                       // 출입구는 가까운 모서리 쪽
+  pane(x, y, rx, ry, 'r', d, 4, 12, 8, '#B6D8EE', '#6E7788');
+  isoWin(X, x, y, rx, ry, 'r', d + 4, 4, 2, 8, '#8E97A8');                 // 문틀 가운데
+  awning(x, y, rx, ry, 'r', d - 2, 16, 14, shade(c, 0.34), '#F5F2EA');
 }
 
+/* ── 고층 (IT · 금융 · 전자) ─────────────────────────────────
+   실루엣: 수직 멀리언으로 위로 뻗고, 높으면 옥탑이 한 단 물러난다. */
 function drawTower(c, g, sec, seed, body) {
   const { x, y, rx, ry, h } = g;
-  faces(X, x, y, rx, ry, h - 5, h, shade(sec.color, -0.45), shade(sec.color, -0.30));
-  const rows = Math.floor((h - 33) / 12);
-  for (let r = 0; r < rows; r++) for (let i = 0; i < 3; i++) {
+  const glass = c.curse > 0 ? '#A890AC' : '#B6D8EE';
+  const frm = shade(body, -0.34);
+  const top = h - 10;
+
+  floorBands(x, y, rx, ry, 16, top, 11, body);
+  for (let i = 4; i < rx - 6; i += 12) {                                   // 수직 멀리언
+    isoWin(X, x, y, rx, ry, 'l', i, 15, 2, Math.max(0, top - 15), shade(body, -0.22));
+    isoWin(X, x, y, rx, ry, 'r', i, 15, 2, Math.max(0, top - 15), shade(body, -0.12));
+  }
+  windowGrid(x, y, rx, ry, 18, top, 11, 6, 7, (r, i) => {
     const lit = ((seed + i * 3 + r * 5 + Math.floor(frame / 90)) % 5) < 2;
-    const col = c.curse > 0 ? '#A890AC' : lit ? '#FFE79E' : '#7F8DAB';
-    isoWin(X, x, y, rx, ry, 'l', 9 + i * 12, 20 + r * 12, 6, 6, shade(col, -0.14));
-    isoWin(X, x, y, rx, ry, 'r', 9 + i * 12, 20 + r * 12, 6, 6, col);
+    return c.curse > 0 ? '#A890AC' : lit ? '#FFE79E' : glass;
+  }, frm);
+  cornerPost(x, y, rx, ry, top, shade(body, 0.34));
+  faces(X, x, y, rx, ry, top, top + 3, shade(sec.color, -0.34), shade(sec.color, -0.14));   // 상단 로고 띠
+  parapet(x, y, rx, h, body);
+  roofDeck(x, y, rx, h, body, ((seed % 10) / 10));
+
+  if (h > 72) {                                                            // 물러난 옥탑
+    const rr = rx - 14;
+    prism(X, x, y - h - 4, rr, rr / 2, 14, shade(body, 0.32), shade(body, -0.26), body);
+    faces(X, x, y - h - 4, rr, rr / 2, 10, 12, shade(body, -0.34), shade(body, -0.18));
+    parapet(x, y - h - 4, rr, 14, body);
   }
-  if (h > 72) {
-    const rr = rx - 12;
-    prism(X, x, y - h, rr, (rr) / 2, 12, shade(body, 0.30), shade(body, -0.24), body);
-  }
-  X.fillStyle = '#AAB2C4'; X.fillRect(Math.round(x + 9), Math.round(y - h - 18), 9, 8);
-  X.fillStyle = '#E2E6F0'; X.fillRect(Math.round(x - 9), Math.round(y - h - 26), 2, 20);
-  X.fillStyle = Math.floor(frame / 30) % 2 ? '#EE8C82' : '#B06E68';
-  X.fillRect(Math.round(x - 11), Math.round(y - h - 29), 5, 3);
+  const ty = y - h - (h > 72 ? 22 : 4);
+  X.fillStyle = '#E2E6F0'; X.fillRect(Math.round(x - 9), Math.round(ty - 24), 2, 24);       // 안테나
+  X.fillStyle = Math.floor(frame / 30) % 2 ? '#EE8C82' : '#B06E68';                          // 항공장애등
+  X.fillRect(Math.round(x - 11), Math.round(ty - 27), 5, 3);
 }
 
+/* ── 연구소 (제약) ───────────────────────────────────────────
+   실루엣: 낮고 넓다. 가로로 긴 유리 띠와 흰 외벽. */
 function drawLab(c, g, sec) {
   const { x, y, rx, ry, h } = g;
-  faces(X, x, y, rx, ry, 14, h - 6, '#DCD8CA', '#EFEBDD');
-  for (let r = 0; r * 14 < h - 30; r++) {
-    const col = c.curse > 0 ? '#A890AC' : '#B6D8EE';
-    isoWin(X, x, y, rx, ry, 'l', 6, 21 + r * 14, rx - 12, 8, shade(col, -0.18));
-    isoWin(X, x, y, rx, ry, 'r', 6, 21 + r * 14, rx - 12, 8, col);
+  const wall = '#EFEBDD', glass = c.curse > 0 ? '#A890AC' : '#B6D8EE';
+  const top = h - 8;
+  faces(X, x, y, rx, ry, 15, top, shade(wall, -0.12), wall);
+  for (let up = 18; up + 9 <= top; up += 14) {                             // 가로 유리 띠
+    pane(x, y, rx, ry, 'l', 8, up, rx - 16, 9, shade(glass, -0.18), '#9AA2B0');
+    pane(x, y, rx, ry, 'r', 8, up, rx - 16, 9, glass, '#AEB6C4');
   }
-  faces(X, x, y, rx, ry, h - 6, h, shade(sec.color, -0.28), shade(sec.color, -0.1));
-  X.fillStyle = '#F5F2EA';
-  X.fillRect(Math.round(x - 6), Math.round(y - h - 15), 14, 5);
-  X.fillRect(Math.round(x - 2), Math.round(y - h - 20), 5, 14);
+  cornerPost(x, y, rx, ry, top, shade(wall, 0.16));
+  faces(X, x, y, rx, ry, top, h, shade(sec.color, -0.26), shade(sec.color, -0.06));
+  parapet(x, y, rx, h, wall);
+  roofDeck(x, y, rx, h, wall, 0.9);
+  rhomb(X, x + 6, y - h - 18, 12, 6, '#E2E6F0');                           // 접시 안테나
+  X.fillStyle = '#AAB2C4'; X.fillRect(Math.round(x + 5), Math.round(y - h - 18), 2, 9);
 }
 
+/* ── 공장 (건설·중공업) ──────────────────────────────────────
+   실루엣: 낮고 길다. 골판 외벽 + 톱니 지붕 + 굴뚝. */
 function drawPlant(c, g) {
   const { x, y, rx, ry, h } = g;
-  for (let i = 0; i < 3; i++)                            // 톱니 지붕
-    prism(X, x - 20 + i * 20, y - h - 9 + i * 9, 10, 5, 8, '#C0C4D2', '#A6ABBC', '#C4C8D6');
-  const col = c.curse > 0 ? '#A890AC' : '#B6D8EE';
-  for (let i = 0; i < 3; i++) isoWin(X, x, y, rx, ry, 'r', 9 + i * 14, 18, 9, 8, col);
-  prism(X, x - rx + 18, y - 6, 8, 4, Math.round(h * 0.7) + 12, '#AFB8CC', '#9CA2B4', '#AAB0C6');  // 굴뚝
-  X.fillStyle = '#EE8C82'; X.fillRect(Math.round(x - rx + 11), Math.round(y - Math.round(h * 0.7) - 24), 15, 5);
-  const ct = y - Math.round(h * 0.7) - 30;
+  const wall = '#C4C9D4', glass = c.curse > 0 ? '#A890AC' : '#B6D8EE';
+  const wallH = Math.max(0, h - 17);
+  for (let i = 2; i < rx - 4; i += 6) {                                    // 골판 외벽
+    isoWin(X, x, y, rx, ry, 'l', i, 15, 2, wallH, shade(wall, -0.24));
+    isoWin(X, x, y, rx, ry, 'r', i, 15, 2, wallH, shade(wall, -0.12));
+  }
+  for (let i = 0; i < 3; i++) pane(x, y, rx, ry, 'r', 10 + i * 14, 17, 8, Math.min(9, wallH), glass, '#9AA2B0');
+  pane(x, y, rx, ry, 'l', 8, 16, 18, Math.min(12, wallH), '#AEB6C4', '#8E97A8');   // 셔터
+  cornerPost(x, y, rx, ry, h - 2, shade(wall, 0.24));
+
+  for (let i = 0; i < 3; i++) {                                            // 톱니 지붕
+    const sx = x - 22 + i * 22, sy = y - h - 11 + i * 11;
+    prism(X, sx, sy, 14, 7, 10, '#C0C4D2', '#A6ABBC', '#C4C8D6');
+    isoWin(X, sx, sy, 14, 7, 'r', 2, 3, 10, 6, glass);                     // 채광창
+    faces(X, sx, sy, 14, 7, 10, 12, '#9CA2B4', '#AAB0C6');
+  }
+  const ch = Math.round(h * 0.7) + 14;
+  prism(X, x - rx + 18, y - 6, 8, 4, ch, '#AFB8CC', '#9CA2B4', '#AAB0C6');  // 굴뚝
+  X.fillStyle = '#EE8C82'; X.fillRect(Math.round(x - rx + 11), Math.round(y - 6 - ch + 8), 15, 5);
+  const ct = y - 6 - ch;
   X.save(); X.globalAlpha = 0.16 + Math.sin(frame / 26) * 0.07;
   rhomb(X, x - rx + 18, ct - 9, 12, 6, '#E2E6F0');
   rhomb(X, x - rx + 26, ct - 21, 10, 5, '#E2E6F0'); X.restore();
 }
 
+/* ── 전광판 (미디어) ─────────────────────────────────────────
+   실루엣: 벽 한 면이 통째로 화면이다. 네온 테두리가 깜빡인다. */
 function drawNeon(c, g, sec, seed) {
   const { x, y, rx, ry, h } = g;
   const col = c.curse > 0 ? '#A890AC' : shade(sec.color, 0.05);
-  const bh = Math.max(9, h - 36);
-  isoWin(X, x, y, rx, ry, 'r', 6, 20, rx - 12, bh, col);                  // 전광판
-  isoWin(X, x, y, rx, ry, 'r', 6, 20 + Math.floor(frame / 12 + seed) % bh, rx - 12, 3, 'rgba(11,15,27,.5)');
-  for (let i = 0; i < 3; i++)
-    if ((i + Math.floor(frame / 18)) % 3 === 0) isoWin(X, x, y, rx, ry, 'l', 9 + i * 12, 23, 6, 15, '#FFE79E');
-  faces(X, x, y, rx, ry, h - 5, h, shade(sec.color, -0.42), shade(sec.color, -0.26));
+  const top = h - 8;
+  const bh = Math.max(12, top - 20);
+  isoWin(X, x, y, rx, ry, 'r', 4, 16, rx - 8, bh + 4, '#5C6580');           // 전광판 프레임
+  isoWin(X, x, y, rx, ry, 'r', 6, 18, rx - 12, bh, col);
+  for (let i = 0; i < 3; i++) {                                            // 흐르는 주사선
+    const off = (Math.floor(frame / 6 + seed) + i * 9) % bh;
+    isoWin(X, x, y, rx, ry, 'r', 6, 18 + off, rx - 12, 2, shade(col, 0.34));
+  }
+  isoWin(X, x, y, rx, ry, 'r', 6, 18 + Math.floor(frame / 12 + seed) % bh, rx - 12, 3, 'rgba(40,36,56,.45)');
+  for (let i = 0; i < 4; i++) {                                            // 좌면 네온 세로등
+    const on = (i + Math.floor(frame / 18)) % 3 === 0;
+    isoWin(X, x, y, rx, ry, 'l', 8 + i * 10, 18, 6, bh, on ? '#FFE79E' : shade(sec.color, -0.16));
+  }
+  cornerPost(x, y, rx, ry, top, shade(sec.color, 0.36));
+  const blink = Math.floor(frame / 20) % 2;
+  faces(X, x, y, rx, ry, top, top + 3, blink ? shade(sec.color, 0.30) : shade(sec.color, -0.34),
+        blink ? '#FFE79E' : shade(sec.color, -0.12));
+  parapet(x, y, rx, h, sec.color);
+  roofDeck(x, y, rx, h, shade(sec.color, -0.06), 0.2);
+  X.fillStyle = '#AAB2C4'; X.fillRect(Math.round(x - 6), Math.round(y - h - 20), 3, 17);   // 광고탑
+  X.fillStyle = Math.floor(frame / 24) % 2 ? '#FFE79E' : shade(sec.color, -0.20);
+  X.fillRect(Math.round(x - 12), Math.round(y - h - 26), 16, 9);
 }
 
+/* ── 상가 (생필품·식품·유통·의류) ────────────────────────────
+   실루엣: 낮고 통통하다. 큰 쇼윈도 + 차양 + 옥상 간판. */
 function drawShop(c, g, sec, seed) {
   const { x, y, rx, ry, h } = g;
-  const rows = Math.max(1, Math.floor((h - 24) / 12));
-  for (let r = 0; r < rows; r++) for (let i = 0; i < 3; i++) {
+  const glass = c.curse > 0 ? '#A890AC' : '#B6D8EE';
+  const top = h - 6;
+  windowGrid(x, y, rx, ry, 18, top, 13, 8, 8, (r, i) => {
     const lit = ((seed + i * 3 + r * 5 + Math.floor(frame / 90)) % 5) < 3;
-    const col = c.curse > 0 ? '#A890AC' : lit ? '#FFE79E' : '#7F8DAB';
-    isoWin(X, x, y, rx, ry, 'l', 9 + i * 12, 18 + r * 12, 6, 8, shade(col, -0.14));
-    isoWin(X, x, y, rx, ry, 'r', 9 + i * 12, 18 + r * 12, 6, 8, col);
-  }
-  faces(X, x, y, rx, ry, h - 5, h, shade(sec.color, -0.42), shade(sec.color, -0.24));            // 처마
+    return c.curse > 0 ? '#A890AC' : lit ? '#FFE79E' : glass;
+  }, '#AEB6C4');
+  awning(x, y, rx, ry, 'l', 6, rx - 10, 28, sec.color, '#F5F2EA');
+  cornerPost(x, y, rx, ry, top, '#E4E0D4');
+  faces(X, x, y, rx, ry, top, h, shade(sec.color, -0.40), shade(sec.color, -0.20));         // 처마
   const rr = rx + 4;
-  prism(X, x, y - h, rr, (rr) / 2, 2, shade(sec.color, 0.2), shade(sec.color, -0.25), sec.color);
+  prism(X, x, y - h, rr, rr / 2, 3, shade(sec.color, 0.24), shade(sec.color, -0.28), sec.color);
+  prism(X, x - 2, y - h - 3, 14, 7, 10, '#F5F2EA', shade(sec.color, -0.30), shade(sec.color, 0.16));  // 옥상 간판
 }
 
 function drawNamePlate(x, y, name, color, hit) { plates.push({ x, y, name, color, hit }); }
@@ -765,4 +910,4 @@ function myGeom() {
   return { x, y, rx, ry: rx / 2, h: MY_H[S.co.tier] };
 }
 
-export { isRoad, blockOrigin, bboxOf, boxHits, focusOf, isoHit, plateHit, bldgGeom, flushPlates, drawOutskirts, emptyKind, drawFillApart, drawFillOffice, drawFillShops, drawRoofProps, KIND_FLOOR, FILL_BODY, buildEmpties, cityGround, cityHit, drawApron, drawBench, drawBlockTile, drawBuilding, drawCar, drawCity, drawCrop, drawFountain, drawHouse, drawLab, drawMyBuilding, drawNamePlate, drawNegoMark, drawNeon, drawPlant, drawPond, drawRoadTile, drawShed, drawShop, drawSign, drawTerrain, drawTower, drawTree, ensureTraffic, h2, kindOf, lotC, lotY, moveTraffic, myGeom, pedFace, speckle, trafficPos };
+export { awning, cornerPost, floorBands, pane, parapet, roofDeck, windowGrid, isRoad, blockOrigin, bboxOf, boxHits, focusOf, isoHit, plateHit, bldgGeom, flushPlates, drawOutskirts, emptyKind, drawFillApart, drawFillOffice, drawFillShops, drawRoofProps, KIND_FLOOR, FILL_BODY, buildEmpties, cityGround, cityHit, drawApron, drawBench, drawBlockTile, drawBuilding, drawCar, drawCity, drawCrop, drawFountain, drawHouse, drawLab, drawMyBuilding, drawNamePlate, drawNegoMark, drawNeon, drawPlant, drawPond, drawRoadTile, drawShed, drawShop, drawSign, drawTerrain, drawTower, drawTree, ensureTraffic, h2, kindOf, lotC, lotY, moveTraffic, myGeom, pedFace, speckle, trafficPos };

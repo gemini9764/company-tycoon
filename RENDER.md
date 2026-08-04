@@ -195,8 +195,9 @@ DOM 쪽 흐림의 직접 원인이었다.
 ## 6. 검수
 
 ```bash
-npm run smoke   # 62 케이스. 캔버스는 스텁이라 "안 터진다"까지만 본다
+npm run smoke   # 64 케이스. 캔버스는 스텁이라 "안 터진다"까지만 본다
 npm run shot    # shots/{title,city,store,icons,view0..3,facil0,facil3}.png
+                # + shots/style-{tower,lab,plant,neon,shop}.png (건물 5종 3x)
                 # — 실제 픽셀로 그려서 눈으로 본다
 ```
 
@@ -220,7 +221,24 @@ PNG로 떨군다. 노드에는 Galmuri가 없어 시스템 CJK 폰트를 같은 
   파스텔로 같이 눕히면 글자가 사라진다.
 - 아웃라인(`OUT`)은 파스텔 바닥에서도 실루엣이 남는 진하기여야 한다 (`#40384F`).
 
-## 8. 캐릭터
+## 8. 건물 — 마감 프리미티브
+
+다섯 종(`tower`/`lab`/`plant`/`neon`/`shop`)이 `pane`·`windowGrid`·`floorBands`·
+`cornerPost`·`parapet`·`roofDeck`·`awning` 을 공유하고, 그 위에 특징만 얹는다.
+새 건물을 만들 때도 이 뼈대를 먼저 깐다.
+
+- **창 열 자리를 상수로 박지 말 것.** `isoWin` 은 `d > rx - 2` 인 열을 조용히
+  버린다. `10 + i*12` 처럼 고정 좌표를 쓰면 `rx=30` 짜리 건물에서 바깥 열이
+  통째로 사라진다. `windowGrid` 가 rx 로 열 수를 계산하니 그걸 쓸 것.
+- **`off` 는 짝수여야 한다.** `isoWin` 이 2px 단위로 훑기 때문이다.
+- **1층(`drawSign`)은 15px 를 넘기지 말 것.** 상가는 몸통이 33px 뿐이라
+  여기가 두꺼우면 창을 넣을 벽이 안 남는다.
+- **지붕을 비워 두지 말 것.** 쿼터뷰는 지붕이 화면의 3분의 1을 먹는다.
+  `parapet` + `roofDeck` 없이는 아무리 벽을 잘 그려도 잘라 놓은 상자로 보인다.
+- 검수는 `shots/style-*.png` 다섯 장. 업종을 통째로 바꿔 3x 로 찍으므로
+  섞여 있는 도시 그림에서는 안 보이던 마감이 드러난다.
+
+## 9. 캐릭터
 
 `drawPerson(x, y, look, dir, step)` — 22×44. 발밑이 (x, y) 다.
 
