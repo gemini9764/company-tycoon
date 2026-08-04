@@ -3,7 +3,7 @@ import { DIFFS, SECTORS, TIERS } from '../core/data.js';
 import { sfx } from '../core/audio.js';
 import { S } from '../core/state.js';
 import { $, clamp, vpick, vrint, won } from '../core/util.js';
-import { HW, isoX, isoY } from './iso.js';
+import { HH, HW, isoX, isoY } from './iso.js';
 import { cityHit, drawCity } from './city.js';
 import { drawStore, spawnCustomers, storeHit } from './store.js';
 import { openCompany } from '../ui/companyPopup.js';
