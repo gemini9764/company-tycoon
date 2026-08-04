@@ -32,8 +32,8 @@ function openCompany(c) {
       <div class="kv" style="border-top:2px solid var(--paper-3);margin-top:6px;padding-top:6px">
         <span>예상 인수가</span><b class="c-gold">${won(est)}</b></div>
       <div class="kv"><span>보유 자금</span><b class="${short ? 'c-blood' : 'c-jade'}">${won(s.co.cash)}</b></div>
-      ${short ? `<p style="margin-top:8px;font-size:11px">자금이 <b class="c-blood">${won(short)}</b> 모자랍니다. 그래도 협상은 시작할 수 있고, 성사 시점에 <b>인수금융</b>으로 메울 수 있습니다 — 한도 ${won(finLimit)}, 금리 ${loanRate(s, 'acq').toFixed(1)}%. 인수 기업이 담보라 상환에 실패하면 압류됩니다.</p>`
-              : '<p style="margin-top:8px;font-size:11px" class="c-jade">자기자금으로 지불할 수 있습니다.</p>'}` }
+      ${short ? `<p style="margin-top:8px;font-size:12px">자금이 <b class="c-blood">${won(short)}</b> 모자랍니다. 그래도 협상은 시작할 수 있고, 성사 시점에 <b>인수금융</b>으로 메울 수 있습니다 — 한도 ${won(finLimit)}, 금리 ${loanRate(s, 'acq').toFixed(1)}%. 인수 기업이 담보라 상환에 실패하면 압류됩니다.</p>`
+              : '<p style="margin-top:8px;font-size:12px" class="c-jade">자기자금으로 지불할 수 있습니다.</p>'}` }
       ${c.owned ? '<p style="margin-top:10px" class="c-jade">이미 우리 그룹 계열사입니다.</p>' : ''}
       ${overCap ? `<p style="margin-top:10px" class="c-blood">현재 등급(${TIERS[s.co.tier].name})으로는 인수할 수 없는 규모입니다. 상한 ${won(capCeiling(s))}</p>` : ''}
       ${c.curse ? '<p style="margin-top:10px" class="c-mauve">살(煞)이 걸려 있습니다 — 협상 성공도 증가율 +45%</p>' : ''}

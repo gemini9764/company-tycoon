@@ -99,7 +99,7 @@ function finishNego(s) {
       title: '협상 결렬',
       body: `<p><b>${tgt.name}</b> 인수 협상이 최종 결렬됐습니다.</p>
              <div class="kv" style="margin-top:10px"><span>최종 성공도</span><b>${pct(n.success)}</b></div>
-             <p style="margin-top:10px;font-size:11px" class="c-dim">협상단 능력, 대상 난이도, 이벤트 선택이 성공도를 결정합니다. 살굿이나 찌라시로 난이도를 낮춰볼 수 있습니다.</p>`,
+             <p style="margin-top:10px;font-size:12px" class="c-dim">협상단 능력, 대상 난이도, 이벤트 선택이 성공도를 결정합니다. 살굿이나 찌라시로 난이도를 낮춰볼 수 있습니다.</p>`,
       actions: [{ label: '확인', run: resume }],
     });
   }

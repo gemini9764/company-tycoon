@@ -1,2 +1,9 @@
 node_modules/
 dist/
+
+# OS / 에디터
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
