@@ -44,14 +44,28 @@ export { buyStock, sellStock, tickStock };
    판정은 전부 여기 순수 함수에 있다. sim 봇이 같은 함수를 부른다.
    ══════════════════════════════════════════════════════════════ */
 
-/** 구버전 세이브에는 stake 가 없다. 읽는 쪽마다 여기를 거친다 */
+/** 구버전 세이브에는 stake·priv 가 없다. 읽는 쪽마다 여기를 거친다 */
 const stakeMap = s => (s.stock.stake ||= {});
+/** 비상장 지분 투입 누계 { 회사id: 금액 } */
+const privMap  = s => (s.stock.priv ||= {});
 
-/** 보유 지분율. 주가 × 수량 / 시총 — 기존 holds 를 그대로 쓴다 */
+/**
+ * 보유 지분율.
+ * - 상장사: 주가 × 수량 / 시총 — 기존 holds 를 그대로 쓴다
+ * - 비상장사: **장외 지분 매입**. 주가가 없으므로 투입 금액 누계 / 시총 으로 센다
+ *
+ * 287일이 걸리는 중소기업 구간에서 사는 매물(2억~110억)은 전부 비상장이라,
+ * 상장사만 열어 두면 이 기능이 후반에만 걸린다. 상장 기준(LIST_TIER)을 낮추는
+ * 대신 비상장 경로를 따로 뚫었다 — 상장 기준은 사용자 요구사항이다.
+ */
 function stakeRatio(s, c) {
+  if (!c.listed) return (privMap(s)[c.id] || 0) / Math.max(1, c.cap);
   const h = s.stock.holds[c.id];
   return h ? (h.qty * c.price) / Math.max(1, c.cap) : 0;
 }
+
+/** 비상장 지분 투입액 (되팔기·표시용) */
+const privAmt = (s, c) => privMap(s)[c.id] || 0;
 
 /** 0~5. 비율을 % 로 보여주지 않는 이유는 기획서 §2 원칙 3 */
 function stakeStars(s, c) {
@@ -61,10 +75,10 @@ function stakeStars(s, c) {
 const staking = (s, c) => !!stakeMap(s)[c.id];
 
 function toggleStake(s, c) {
-  if (!c.listed) return toast('비상장 회사는 주식을 사둘 수 없습니다', 'bad');
   const m = stakeMap(s);
+  const what = c.listed ? '주식' : '지분';
   if (m[c.id]) { delete m[c.id]; toast(`${c.name} 매집 중단`); }
-  else { m[c.id] = true; toast(`${c.name} 주식을 조금씩 사둡니다`, 'good'); }
+  else { m[c.id] = true; toast(`${c.name} ${what}을(를) 조금씩 사둡니다`, 'good'); }
 }
 
 /**
@@ -75,22 +89,27 @@ function tickStake(s) {
   const m = stakeMap(s);
   for (const id of Object.keys(m)) {
     const c = s.market.find(x => x.id === id);
-    if (!c || c.owned || !c.listed) { delete m[id]; continue; }
+    if (!c || c.owned) { delete m[id]; continue; }
     if (stakeStars(s, c) >= BAL.stakeStars) continue;          // 상한에 닿으면 쉰다
 
     const spend = c.cap * BAL.stakeStep;
     if (s.co.cash < spend) {
       delete m[id];
       toast(`자금 부족 — ${c.name} 매집을 멈췄습니다`, 'bad');
-      pushInbox(s, '매집 중단', `${c.name} 주식 매집에 필요한 ${won(spend)}이(가) 모자라 자동으로 멈췄습니다. 사둔 지분은 그대로 남아 있습니다.`, 'bad');
+      pushInbox(s, '매집 중단', `${c.name} ${c.listed ? '주식' : '지분'} 매집에 필요한 ${won(spend)}이(가) 모자라 자동으로 멈췄습니다. 사둔 지분은 그대로 남아 있습니다.`, 'bad');
       continue;
     }
-    const qty = Math.floor(spend / c.price);
-    if (qty <= 0) continue;
-    s.co.cash -= qty * c.price;
-    const h = s.stock.holds[c.id] || { qty: 0, avg: 0 };
-    h.avg = (h.avg * h.qty + qty * c.price) / (h.qty + qty); h.qty += qty;
-    s.stock.holds[c.id] = h;
+    if (c.listed) {
+      const qty = Math.floor(spend / c.price);
+      if (qty <= 0) continue;
+      s.co.cash -= qty * c.price;
+      const h = s.stock.holds[c.id] || { qty: 0, avg: 0 };
+      h.avg = (h.avg * h.qty + qty * c.price) / (h.qty + qty); h.qty += qty;
+      s.stock.holds[c.id] = h;
+    } else {
+      s.co.cash -= spend;
+      privMap(s)[c.id] = (privMap(s)[c.id] || 0) + spend;
+    }
     if (stakeStars(s, c) >= BAL.stakeLeakAt) leak(s, c);
   }
 }
@@ -100,11 +119,12 @@ function tickStake(s) {
 function leak(s, c) {
   if (c.leak) return;
   c.leak = true;
-  c.price = Math.round(c.price * (1 + BAL.stakeLeakPrice));
+  // 비상장사는 주가가 없다. 인수가 상승(stakeLeakPrem)과 난이도만 걸린다
+  if (c.listed) c.price = Math.round(c.price * (1 + BAL.stakeLeakPrice));
   c.diff = Math.min(3, c.diff + 1);
   news(`${s.co.name}, ${c.name} 지분 확대 관측`);
-  toast(`${c.name} 주가 급등 — 인수가가 올랐습니다`, 'bad');
-  pushInbox(s, '지분 확대 관측', `${c.name} 주식을 사 모으는 것이 알려졌습니다. 주가가 오르고 인수 난이도가 한 단계 올라갔습니다.`, 'bad');
+  toast(c.listed ? `${c.name} 주가 급등 — 인수가가 올랐습니다` : `${c.name} 인수가가 올랐습니다`, 'bad');
+  pushInbox(s, '지분 확대 관측', `${c.name} 지분을 사 모으는 것이 알려졌습니다. ${c.listed ? '주가가 오르고 ' : '인수가가 오르고 '}인수 난이도가 한 단계 올라갔습니다.`, 'bad');
 }
 
 /** 협상 시작 시 얹히는 값. mna.js 가 이것만 보면 된다 */
@@ -118,6 +138,22 @@ function stakeBonus(s, c) {
 function clearStake(s, id) {
   delete stakeMap(s)[id];
   delete s.stock.holds[id];
+  delete privMap(s)[id];
 }
 
-export { clearStake, stakeBonus, stakeRatio, stakeStars, staking, tickStake, toggleStake };
+/**
+ * 비상장 지분 되팔기. 장외라 제값을 못 받는다 —
+ * 결렬이 전손은 아니되 공짜 옵션도 아니게 만드는 지점.
+ */
+function sellPrivStake(s, c) {
+  const amt = privAmt(s, c);
+  if (!amt) return;
+  const back = Math.round(amt * BAL.stakePrivSell);
+  s.co.cash += back;
+  delete privMap(s)[c.id];
+  delete stakeMap(s)[c.id];
+  const pl = back - amt;
+  toast(`${c.name} 지분 매각 · 손익 ${pl >= 0 ? '+' : ''}${won(pl)}`, pl >= 0 ? 'good' : 'bad');
+}
+
+export { clearStake, privAmt, sellPrivStake, stakeBonus, stakeRatio, stakeStars, staking, tickStake, toggleStake };

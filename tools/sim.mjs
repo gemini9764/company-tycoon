@@ -139,7 +139,7 @@ window.runSim = function (strategy, maxDays, seed) {
        소문 문턱 직전에서 멈춘다 — 넘기면 난이도가 올라 매집한 값어치를 반납한다. */
     if (window.__stake) {
       /* 지금 협상 중인 회사는 제외한다. 인수되면 지분이 흡수되므로 헛돈이다 */
-      const ok = x => x && !x.owned && x.listed && !avoid.has(x.id)
+      const ok = x => x && !x.owned && !avoid.has(x.id)
         && x.id !== (S.nego && S.nego.id) && x.cap <= g.capCeiling(S);
       let t = S.market.find(x => x.id === nextId);
       if (!ok(t)) {
@@ -147,10 +147,8 @@ window.runSim = function (strategy, maxDays, seed) {
            현재 현금 기준으로 고르면 인수 대금이 빠진 뒤 그 대상을 못 사고
            매집한 돈이 통째로 버려진다.
 
-           **그래도 평균 ★는 1을 못 넘는다.** 상장 기준이 시총 1,000억(중견기업)
-           이상이라, 중소기업 구간에서 사는 2억~109억짜리 매물은 전부 비상장이다.
-           미리 사두기는 원리적으로 후반 콘텐츠다 — 낮은 ★는 봇 정책의 결함이
-           아니라 상장 기준과 매물 규모가 만든 구조다. */
+           비상장 매물도 대상이다 — 장외 지분 매입 경로가 열려 있다.
+           (그 전에는 상장사만 대상이라 중소기업 구간에서 평균 ★0.7 이었다.) */
         const cur = S.nego ? (S.market.find(x => x.id === S.nego.id)?.cap || 0) * 1.4 : 0;
         const left = Math.max(0, S.co.cash - cur);
         t = S.market.filter(x => ok(x) && x.cap * 1.55 <= left * 0.62)

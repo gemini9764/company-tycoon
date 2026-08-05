@@ -448,9 +448,21 @@ try {
     const S = g.setS(g.newState('매집', 1001));
     S.co.cash = 1e13; S.staff.forEach(e => e.onTeam = true);
 
-    const un = S.market.find(c => !c.listed);
+    /* 비상장사는 장외 지분 매입 경로로 간다 — 주가가 없으므로 투입 누계로 센다.
+       287일이 걸리는 중소기업 구간 매물은 전부 비상장이라 여기가 막히면
+       기능 자체가 후반에만 걸린다. */
+    const un = S.market.filter(c => !c.listed && c.cap > 1e9).sort((a, b) => a.cap - b.cap)[0];
     g.toggleStake(S, un);
-    r.push(['비상장은 매집 불가', !S.stock.stake[un.id], '상장 기준 = 중견기업 이상']);
+    r.push(['비상장도 매집 가능 — 장외 지분', !!S.stock.stake[un.id], '']);
+    for (let i = 0; i < 3; i++) g.tickStake(S);
+    r.push(['장외 매집 ★ 적립', g.stakeStars(S, un) >= 1, '3일 → ★' + g.stakeStars(S, un)]);
+    r.push(['장외는 주가를 만들지 않는다', un.price === 0, 'price ' + un.price]);
+    const put = g.privAmt(S, un), cash0 = S.co.cash;
+    g.sellPrivStake(S, un);
+    const back = S.co.cash - cash0;
+    r.push(['장외 지분 되팔기 = 투입 × ' + B.stakePrivSell,
+            Math.abs(back / put - B.stakePrivSell) < 0.02 && g.stakeStars(S, un) === 0,
+            Math.round(back / put * 100) + '% 회수']);
 
     const c = S.market.filter(x => x.listed).sort((a, b) => a.cap - b.cap)[0];
     g.toggleStake(S, c);

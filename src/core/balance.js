@@ -80,6 +80,7 @@ const BAL = {
   stakeLeakAt: 4,            // 이 칸에 닿으면 소문이 난다
   stakeLeakPrice: 0.25,      // 소문 — 대상 주가 상승
   stakeLeakPrem: 0.08,       // 소문 — 인수가 프리미엄 상승
+  stakePrivSell: 0.85,       // 비상장 지분을 되팔 때 회수율. 장외라 제값을 못 받는다
 
   baseRate: 3.5,             // 기준금리 %
   rankTop: 4.5e13,           // 시총 1위 기업 규모 (순위 곡선 기준점)
