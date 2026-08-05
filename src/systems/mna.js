@@ -2,7 +2,7 @@ import { BAL } from '../core/balance.js';
 import { pause, resume } from '../core/clock.js';
 import { DIFFS, SECTORS } from '../core/data.js';
 import { sumStat, teamOf } from '../core/derive.js';
-import { bumpPerks, divisionName, divisionsOf, subPriceMul, tagsOf } from '../core/tags.js';
+import { bumpPerks, divisionName, divisionsOf, SUB_TAGS, subPriceMul, tagsOf } from '../core/tags.js';
 import { rand } from '../core/rng.js';
 import { $, clamp, pct, pick, rnd, won } from '../core/util.js';
 import { capCeiling, checkTier, loanRate, recalcCap, teamPower } from './company.js';
@@ -31,6 +31,7 @@ function startNego(s, target) {
     progress: 0, success: 12 + sumStat(team, 'nego') * 0.08,
     prem: Math.max(0.02, prem), tagMul, team: team.map(e => e.id),
     marks: [25, 50, 75], blessed: 0,
+    acts: BAL.negoActs, done: [],   // 능동 개입 잔여 횟수와 이력
   };
   news(`${s.co.name} 협상단, ${target.name} 인수 협상 착수`);
   toast(`${target.name} 협상 시작 — 협상 중에도 경영은 계속됩니다`);
@@ -54,6 +55,108 @@ function tickNego(s) {
     negoEvent(s, n, team);
   }
   if (n.progress >= 100) finishNego(s);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   협상 중 능동 개입 — 협상 1건에 3회
+
+   협상 15일이 '지켜보기'뿐이라 두 가지가 따라왔다. 결렬이 **전손**이었고
+   (15일과 협상단 기회비용이 통째로 증발), 3억짜리와 1조짜리 인수의 절차가
+   완전히 같았다. 개입을 넣으면 그 15일이 판단 구간이 된다.
+
+   sim 계측상 중소기업 구간(전체의 34%)은 놀고 있는 날이 1~14% 뿐이고
+   나머지는 전부 협상 중이다 — **협상 슬롯이 진짜 병목이다.**
+   `push`(시한 제시)와 `quit`(중단)이 그 슬롯을 성공 확률과 맞바꾼다.
+
+   판정은 전부 여기 있는 순수 함수다. UI 는 negoAct 를 부르는 껍데기이고
+   sim 봇도 같은 함수를 부른다 — 이 분리가 깨지면 밸런스 기준선이 무효가 된다.
+
+   '협상단 교체'는 넣지 않았다. 성공도 증가율은 이미 teamOf(s) 를 매일 읽으므로
+   직원 창에서 편성을 바꾸면 그 즉시 반영된다. 교체 버튼은 진행도만 깎는
+   순손실 버튼이 된다.
+   ══════════════════════════════════════════════════════════════ */
+
+/** 개입 비용. 시총 비례로만 잡으면 후반에 즉사한다 — 보유 자금 상한을 같이 둔다
+    (HANDOFF §8 '세무조사로 즉사'와 같은 함정). */
+const negoBill = (s, r) => Math.round(Math.min(s.co.cap * r, Math.max(1e6, s.co.cash * 0.20)));
+
+/** 지금 조건으로 계산한 예상 인수가 */
+function estPrice(s, n) {
+  const t = s.market.find(c => c.id === n.id);
+  return t ? Math.round(t.cap * (1 + n.prem) * (n.tagMul ?? 1)) : 0;
+}
+
+/** 남은 개입 횟수. 구버전 세이브의 진행 중 협상에는 acts 가 없다 */
+const negoLeft = n => n.acts ?? BAL.negoActs;
+
+const NEGO_ACTS = {
+  wine: {
+    n: '접대비 집행', d: '성공도 +12 · 수사 압박 +5',
+    cost: s => negoBill(s, BAL.negoWineCost),
+    can: (s) => s.co.cash < negoBill(s, BAL.negoWineCost) ? '자금이 부족합니다' : null,
+    run: (s, n) => {
+      n.success = clamp(n.success + BAL.negoWineSuccess, 0, 100);
+      s.co.probe += BAL.negoWineProbe;
+      toast(`성공도 +${BAL.negoWineSuccess} · 수사 압박 +${BAL.negoWineProbe}`, 'good');
+    },
+  },
+  push: {
+    n: '시한 제시', d: '진행도 +30 · 성공도 -8',
+    cost: () => 0,
+    can: (s, n) => n.progress >= 100 ? '이미 마무리 단계입니다' : null,
+    run: (s, n) => {
+      n.progress = Math.min(100, n.progress + BAL.negoPushProgress);
+      n.success = clamp(n.success + BAL.negoPushSuccess, 0, 100);
+      toast(`협상을 앞당겼습니다 — 성공도 ${BAL.negoPushSuccess}`, 'bad');
+    },
+  },
+  audit: {
+    n: '실사 요청', d: '숨은 특성을 밝힌다 · 진행도 -10',
+    cost: s => negoBill(s, BAL.negoAuditCost),
+    /* 숨은 태그가 없을 때 버튼을 잠그면 **그 자체가 정보 누설**이다.
+       (누를 수 없다 = 문제가 없다) 항상 누를 수 있고, 없으면 없다고 말한다. */
+    can: (s) => s.co.cash < negoBill(s, BAL.negoAuditCost) ? '자금이 부족합니다' : null,
+    run: (s, n) => {
+      const t = s.market.find(c => c.id === n.id);
+      n.progress = Math.max(0, n.progress - BAL.negoAuditBack);
+      const found = tagsOf(t).filter(k => SUB_TAGS[k].hidden && !(t.seen || []).includes(k));
+      t.seen = [...(t.seen || []), ...found];
+      if (!found.length) return toast('실사 완료 — 특별한 문제는 없습니다');
+      const names = found.map(k => SUB_TAGS[k].n).join(' · ');
+      toast(`실사 — ${names} 발견`, 'bad');
+      pushInbox(s, '실사 결과', `${t.name}의 장부에서 <b>${names}</b>이(가) 확인됐습니다. 이대로 인수할지, 협상을 중단할지 결정해야 합니다.`, 'bad');
+    },
+  },
+  quit: {
+    n: '협상 중단', d: '즉시 종료 · 위약금 = 예상 인수가의 3%',
+    cost: (s, n) => Math.round(estPrice(s, n) * BAL.negoQuitFee),
+    can: (s, n) => s.co.cash < Math.round(estPrice(s, n) * BAL.negoQuitFee) ? '위약금을 낼 자금이 없습니다' : null,
+    run: (s, n) => {
+      news(`${n.name} 인수 협상 중단`);
+      toast(`${n.name} 협상 중단 — 협상단이 복귀했습니다`);
+      s.nego = null;
+    },
+  },
+};
+
+/**
+ * 개입 1회를 실행한다. 성공하면 true.
+ * 횟수 차감 → 비용 지불 → 효과 순서다. 효과 안에서 s.nego 를 지우는 것(quit)이
+ * 있으므로 차감과 이력은 반드시 먼저 해 둔다.
+ */
+function negoAct(s, id) {
+  const n = s.nego, act = NEGO_ACTS[id];
+  if (!n || !act) return false;
+  if (negoLeft(n) <= 0) { toast('이번 협상에서 쓸 수 있는 개입을 모두 썼습니다', 'bad'); return false; }
+  const why = act.can(s, n);
+  if (why) { toast(why, 'bad'); return false; }
+
+  const cost = act.cost(s, n);
+  n.acts = negoLeft(n) - 1;
+  n.done = [...(n.done || []), id];
+  s.co.cash -= cost;
+  act.run(s, n);
+  return true;
 }
 
 function negoEvent(s, n, team) {
@@ -173,3 +276,4 @@ function checkDivisions(s) {
 }
 
 export { checkDivisions, completeAcq, finishNego, negoEvent, startNego, tickNego };
+export { NEGO_ACTS, negoAct, negoLeft };

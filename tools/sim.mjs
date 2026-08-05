@@ -27,12 +27,13 @@ const argS = (k, d) => {
 /* 기준 시드 셋. 바꾸면 §6 기준선 표와 비교가 안 되므로 함부로 건드리지 말 것. */
 const SEEDS = (argS('seeds', null) || ['1001', '2002', '3003']).map(Number);
 const RUNS = arg('runs', SEEDS.length), MAX_DAYS = arg('days', 4000);
-const STRATS = argS('strats', ['normal', 'leveraged', 'reckless', 'occult']);
+const STRATS = argS('strats', ['normal', 'leveraged', 'reckless', 'occult', 'active']);
 const NOREF = process.argv.includes('--noref');
 
 const { win, doc } = await boot();
 startGame(doc, '시뮬');
 win.__desk = process.argv.includes('--desk');
+win.__acts = process.argv.includes('--acts');
 
 // ── 봇 본체는 페이지 안에서 정의한다 ─────────────────────────
 win.eval(`
@@ -62,19 +63,104 @@ window.runSim = function (strategy, maxDays, seed) {
     }
   }
 
+  /* ── 능동 운영 (strategy === 'active') ────────────────────────
+     단계 1 이 넣은 매각·투자·재편을 봇이 한 번도 쓰지 않아, 계측된 것은
+     태그와 업종 퍼크의 **수동적 효과**뿐이었다. 여기서 그 셋을 쓰는 정책을
+     붙인다. 판정은 전부 systems/subs.js 의 함수를 그대로 부른다 —
+     봇 안에 별도 계산을 두면 UI 플레이와 다른 게임을 재게 된다.
+
+     기획서 §12-1 의 미결정(매각 계수 0.85 가 부실 회생 매각을 흑자로
+     만드는가 · 사고팔기 반복이 이득이 되지 않는가)을 재기 위한 정책이다.
+     행동 간격을 3·7·5일로 벌려 둔 이유는 하루에 셋이 겹치면 자금이 순식간에
+     마르기 때문이다. 한 번에 하나만 한다. */
+  const sold = new Set();          // 판 회사를 그날로 되사는 회전을 막는다
+  /* 중단한 매물은 다시 잡지 않는다. 실사 결과(t.seen)는 매물에 남으므로 이걸 안 두면
+     같은 회사를 잡았다 중단했다를 무한 반복한다 — 실제로 180건 중 142건이 그랬다. */
+  const avoid = new Set();
+  const ops = { inv: 0, res: 0, sell: 0, sellSum: 0 };
+  const acts = { fail: 0, buy: 0, use: {}, spend: 0 };
+  function activeOps(day) {
+    const subs = S.co.subs;
+    // 1) 투자 — 부실·노후는 수익을 반 토막 내므로 해소가 거의 항상 이득이다
+    if (day % 3 === 0) {
+      const t = subs.find(c => !c.restruct && g.curableTag(c) && g.pmi(S, c) >= 1
+        && S.co.cash > g.investCost(S, c) * 4);
+      if (t) { ops.inv++; return g.investSub(S, t); }
+    }
+    // 2) 재편 — 사업부 문턱에 1개 모자란 업종으로, 혼자 남은 업종의 계열사를 돌린다
+    if (day % 7 === 0) {
+      const by = g.sectorCount(S);
+      const need = Object.keys(by).find(k => by[k] === g.DIV_AT - 1);
+      if (need) {
+        const from = subs.find(c => !c.restruct && by[c.sector] === 1 && g.pmi(S, c) >= 1
+          && !g.subPledged(S, c) && S.co.cash > g.restructCost(S, c) * 6);
+        if (from) { ops.res++; return g.restructSub(S, from, need); }
+      }
+    }
+    /* 3) 매각 — **갈아타기가 될 때만** 판다.
+       "작은 계열사를 정리한다" 로 잡으면 조건이 사문이 되거나(자금이 남아도는
+       후반엔 팔 이유가 없다) 헐값 처분만 반복한다. 매각을 자금원으로 쓰는
+       판단은 하나뿐이다 — 지금 살 수 있는 것보다 확실히 큰 매물이 팔면
+       손에 들어오는가. 사업부가 깨지는 매각(그 업종이 정확히 3개)은 제외한다. */
+    if (!S.nego && subs.length > 5) {
+      const ceil = g.capCeiling(S), by = g.sectorCount(S);
+      const reach = cash => {
+        const t = S.market.filter(x => !x.owned && !sold.has(x.id) && x.cap <= ceil
+          && x.cap * 1.55 <= cash * 0.62).sort((a, b) => b.cap - a.cap)[0];
+        return t ? t.cap : 0;
+      };
+      const now = reach(S.co.cash);
+      const c = subs.filter(x => !g.canSellSub(S, x) && g.pmi(S, x) >= 1 && by[x.sector] !== g.DIV_AT)
+        .sort((a, b) => a.cap - b.cap)
+        .find(x => reach(S.co.cash + g.subSellValue(S, x)) > Math.max(now, x.cap) * 2.0);
+      if (c) { ops.sell++; ops.sellSum += g.subSellValue(S, c); sold.add(c.id); return g.sellSub(S, c); }
+    }
+  }
+
   const marks = {};
+  let prevNego = null;
   /* 성공은 더 이상 엔딩이 아니다(무한 진행). 계측은 '시총 1위 도달'에서 끊는다. */
   const done = () => S.flags.ending || S.flags.ms.includes('rank1');
   for (let day = 1; day <= maxDays && !done(); day++) {
     g.tickDay();
     resolve();
+    /* 협상 결과 집계 — startNego 보다 **먼저** 봐야 한다. 같은 날 다음 협상이
+       시작되면 S.nego 가 다시 차서 방금 끝난 건이 집계에서 사라진다. */
+    if (prevNego && !S.nego) (S.co.subs.some(c => c.id === prevNego) ? acts.buy++ : acts.fail++);
 
     // 인수 판단 — 전략별로 감당할 자금 배수가 다르다
+    if (strategy === 'active') activeOps(day);
+
+    /* 협상 중 능동 개입 — 기본 봇은 쓰지 않는다(기준선을 바꾸지 않으려고).
+       --acts 로 켜면 '개입까지 챙기는 플레이'를 잰다. --desk 와 같은 관례다.
+
+       **봇은 숨은 태그를 미리 보지 않는다.** hasHidden 으로 실사 여부를
+       정하면 정보를 공짜로 얻는 셈이라 실사의 대가가 계측에서 사라진다.
+       자금이 넉넉하면 무조건 한 번 실사하고, 드러난 것만 판단에 쓴다. */
+    if (window.__acts && S.nego) {
+      const n = S.nego, t = S.market.find(c => c.id === n.id);
+      const did = k => (n.done || []).includes(k);
+      const rich = m => S.co.cash > g.NEGO_ACTS[m].cost(S, n) * 8;
+      const use = k => { const c = g.NEGO_ACTS[k].cost(S, n); if (g.negoAct(S, k)) { acts.use[k] = (acts.use[k] || 0) + 1; acts.spend += c; } };
+      const bad = (t?.seen || []).includes('debt');
+      /* 실사를 협상마다 쓰면 개입 3회 중 1회가 고정 소모된다 (기획서 §12-3의 우려).
+         계측해 보니 습관적 실사는 진행도만 깎아 순손실이었다 — **큰 건에만** 쓴다. */
+      const heavy = g.NEGO_ACTS.quit.cost(S, n) / g.BAL.negoQuitFee > S.co.cash * 0.35;
+      if (!did('audit') && heavy && n.progress >= 15 && n.progress < 45 && rich('audit')) use('audit');
+      /* 손절 조건. 진행 50% 시점에 성공도로 판단하면 **너무 이르다** — 성공도는
+         남은 날 동안 계속 오르므로 아직 진 판이 아니다(초기 정책이 이걸 놓쳐
+         180건 중 155건을 중단했다). 중단의 값어치는 두 곳에만 있다:
+         정말 진 판(진행 60%에 성공도 20 미만)과, 실사로 우발채무를 본 직후. */
+      else if ((n.progress >= 60 && n.success < 20) || (bad && n.progress < 60)) { avoid.add(n.id); use('quit'); }
+      else if (!did('wine') && n.progress >= 65 && n.success < 60 && rich('wine')) use('wine');
+      else if (n.success >= 88 && n.progress < 65) use('push');
+    }
+
     if (!S.nego && !done()) {
       const mult = strategy === 'reckless' ? 3 : strategy === 'leveraged' ? 1.5 : 0.62;
       const budget = S.co.cash * mult;
       const c = S.market
-        .filter(x => !x.owned && x.cap <= g.capCeiling(S) && x.cap * 1.55 <= budget)
+        .filter(x => !x.owned && !sold.has(x.id) && !avoid.has(x.id) && x.cap <= g.capCeiling(S) && x.cap * 1.55 <= budget)
         .sort((a, b) => b.cap - a.cap)[0];
       if (c) g.startNego(S, c);
     }
@@ -123,13 +209,14 @@ window.runSim = function (strategy, maxDays, seed) {
         if (S.co.cash > c * 6) { S.co.cash -= c; S.co.deskDay = S.day; it.run(S); }
       }
     }
+    prevNego = S.nego ? S.nego.id : null;
     if (marks['t' + S.co.tier] === undefined) marks['t' + S.co.tier] = day;
   }
   return {
     seed: S.seed, days: S.day, tier: g.TIERS[S.co.tier].name, ending: S.flags.ending || '미종료',
     subs: S.co.subs.length, total: S.market.length, cap: g.won(S.co.cap), rank: S.co.rank,
     syn: S.co.synergy.toFixed(2), mistrust: Math.round(S.co.mistrust),
-    probe: Math.round(S.co.probe), marks,
+    probe: Math.round(S.co.probe), marks, ops, acts,
   };
 };
 `);
@@ -143,12 +230,18 @@ if (!NOREF) {
   console.log('등급'.padEnd(11) + SEEDS.map(sd => String(sd).padStart(9)).join('') + '     구간(평균)');
   const keys = [...new Set(refs.flatMap(r => Object.keys(r.marks)))]
     .sort((a, b) => refs[0].marks[a] - refs[0].marks[b]);
-  const prev = SEEDS.map(() => 0);
-  for (const k of keys) {
+  /* 한 줄의 '구간' 은 **그 등급에 머문 일수** 다 — 다음 등급 도달일에서 이 등급
+     도달일을 뺀다. 예전에는 직전 줄의 도달일을 빼서 한 칸씩 밀려 있었고,
+     그래서 "중견기업 287일" 로 읽히던 값이 실제로는 중소기업 구간이었다.
+     라벨과 계산을 다시 어긋내지 말 것. */
+  for (let x = 0; x < keys.length; x++) {
+    const k = keys[x], next = keys[x + 1];
     const name = win.game.TIERS[+k.slice(1)].name;
     const days = refs.map(r => r.marks[k]);
-    const gaps = days.map((d, i) => (d === undefined ? NaN : d - prev[i]));
-    days.forEach((d, i) => { if (d !== undefined) prev[i] = d; });
+    const gaps = days.map((d, i) => {
+      const end = next ? refs[i].marks[next] : refs[i].days;
+      return (d === undefined || end === undefined) ? NaN : end - d;
+    });
     const avg = gaps.filter(g => !isNaN(g));
     console.log(name.padEnd(9) + days.map(d => String(d ?? '-').padStart(9)).join('') +
       '   ' + String(Math.round(avg.reduce((a, b) => a + b, 0) / (avg.length || 1))).padStart(6) + '일');
@@ -164,6 +257,9 @@ for (const s of STRATS) {
 }
 for (const [s, sd] of plan) {
   const r = run(s, sd);
+  if (r.ops && (r.ops.inv + r.ops.res + r.ops.sell)) console.log(`   \u2514 \uB2A5\uB3D9 \uC6B4\uC601: \uD22C\uC790 ${r.ops.inv} \u00B7 \uC7AC\uD3B8 ${r.ops.res} \u00B7 \uB9E4\uAC01 ${r.ops.sell} (${win.game.won(r.ops.sellSum)})`);
+  console.log(`   \u2514 \uD611\uC0C1: \uC131\uC0AC ${r.acts.buy} \u00B7 \uACB0\uB82C/\uC911\uB2E8 ${r.acts.fail} (\uACB0\uB82C\uB960 ${Math.round(r.acts.fail / Math.max(1, r.acts.buy + r.acts.fail) * 100)}%)` +
+    (r.acts.spend ? ` \u00B7 \uAC1C\uC785 ${JSON.stringify(r.acts.use)} \uC9C0\uCD9C ${win.game.won(r.acts.spend)}` : ''));
   console.log(
     `${(s + '·' + sd).padEnd(11)} ${String(r.days).padStart(4)}  ${r.tier.padEnd(10)} ${r.ending.padEnd(9)}` +
     ` ${String(r.subs + '/' + r.total).padStart(6)}  ${r.cap.padStart(8)} ${String(r.rank).padStart(5)}` +

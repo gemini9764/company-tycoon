@@ -54,6 +54,20 @@ const BAL = {
   negoSuccessBase: 1.1,      // 성공도 기본 증가량
   premiumBase: 0.35,         // 인수가 프리미엄 기본값
 
+  /* ── 협상 중 능동 개입 ────────────────────────────────────
+     협상 1건당 3회. **이 제한이 시스템의 전부다** — 무제한이면 접대비를 자금
+     한도까지 붓는 게 항상 정답이 되고, 제한이 있으면 "지금 쓸까 아낄까"가
+     매번 판단이 된다. 늘리기 전에 반드시 sim --acts 로 완주일을 볼 것. */
+  negoActs: 3,
+  negoWineCost: 0.008,       // 접대비 = 자사 시총 × 이 값 (보유 자금 20% 상한)
+  negoWineSuccess: 12,
+  negoWineProbe: 3,          // 수사 압박을 **일당이 아니라 행위당** 올리는 첫 축
+  negoPushProgress: 30,      // 시한 제시 — 진행도 즉시 상승
+  negoPushSuccess: -8,
+  negoAuditCost: 0.004,      // 실사
+  negoAuditBack: 10,         // 실사에 드는 진행도
+  negoQuitFee: 0.03,         // 협상 중단 위약금 = 예상 인수가 × 이 값
+
   baseRate: 3.5,             // 기준금리 %
   rankTop: 4.5e13,           // 시총 1위 기업 규모 (순위 곡선 기준점)
   rankFloor: 1e8,            // 5,000위 기업 규모

@@ -380,6 +380,66 @@ try {
   })()`);
   tagOk.forEach(([n, ok, d]) => check(n, ok, d));
 
+  /* ── 협상 중 능동 개입 (단계 2) ──────────────────────────
+     판정은 systems/mna.js 의 순수 함수다. 먼저 그것만 직접 부르고,
+     그 다음 회사 창의 버튼이 같은 함수에 실제로 닿는지 UI 로 확인한다. */
+  const actOk = win.eval(`(() => {
+    const g = window.game, r = [];
+    const S = g.setS(g.newState('개입', 1001));
+    S.staff.forEach(e => e.onTeam = true);
+    S.co.cash = 1e13;
+    // 숨은 태그를 가진 매물을 만들어 실사 대상으로 쓴다
+    const t = S.market.find(c => c.cap <= g.capCeiling(S));
+    t.tags = ['debt']; t.seen = [];
+    g.startNego(S, t);
+    r.push(['개입 초기 횟수', g.negoLeft(S.nego) === g.BAL.negoActs, g.negoLeft(S.nego) + '회']);
+
+    const s0 = S.nego.success, p0 = S.co.probe, cash0 = S.co.cash;
+    g.negoAct(S, 'wine');
+    r.push(['접대비 — 성공도와 수사', S.nego.success > s0 && S.co.probe === p0 + g.BAL.negoWineProbe
+            && S.co.cash < cash0, '수사 +' + (S.co.probe - p0)]);
+
+    const pr0 = S.nego.progress, sc0 = S.nego.success;
+    g.negoAct(S, 'push');
+    r.push(['시한 제시 — 진행도↑ 성공도↓', S.nego.progress > pr0 && S.nego.success < sc0, '']);
+
+    g.negoAct(S, 'audit');
+    r.push(['실사가 숨은 특성을 깐다', t.seen.includes('debt') && !g.hasHidden(t), '우발채무 공개']);
+    r.push(['개입 3회 소진', g.negoLeft(S.nego) === 0, '']);
+
+    const before = S.nego.success;
+    g.negoAct(S, 'wine');
+    r.push(['소진 후 개입 거부', S.nego.success === before, '4회차는 반영되지 않는다']);
+
+    // 중단 — 위약금을 내고 협상단이 즉시 풀린다
+    const S2 = g.setS(g.newState('중단', 2002));
+    S2.staff.forEach(e => e.onTeam = true); S2.co.cash = 1e13;
+    const t2 = S2.market.find(c => c.cap <= g.capCeiling(S2));
+    g.startNego(S2, t2);
+    const c0 = S2.co.cash;
+    g.negoAct(S2, 'quit');
+    r.push(['협상 중단', S2.nego === null && S2.co.cash < c0, '위약금 ' + g.won(c0 - S2.co.cash)]);
+    r.push(['중단 후 재파견 가능', (g.startNego(S2, t2), !!S2.nego), '']);
+    return r;
+  })()`);
+  actOk.forEach(([n, ok, d]) => check(n, ok, d));
+
+  // 회사 창의 개입 버튼이 실제로 판정 함수에 닿는가
+  win.eval(`(() => {
+    const g = window.game, S = g.S;
+    S.staff.forEach(e => e.onTeam = true); S.co.cash = 1e13;
+    if (!S.nego) g.startNego(S, S.market.find(c => c.cap <= g.capCeiling(S)));
+  })()`);
+  openTab(win, doc, 'co');
+  win.eval('game.renderAll()');
+  const nactBtns = [...doc.querySelectorAll('[data-nact]')];
+  check('개입 버튼 렌더', nactBtns.length === Object.keys(game.NEGO_ACTS).length,
+        nactBtns.length + '종');
+  const sBefore = game.S.nego.success;
+  nactBtns.find(b => b.dataset.nact === 'wine').click();
+  check('개입 버튼 → 판정 함수', game.S.nego.success > sBefore,
+        `성공도 ${Math.round(sBefore)} → ${Math.round(game.S.nego.success)}`);
+
   check('출력 무결성', !/NaN|undefined|Infinity/.test(all),
         (all.match(/.{0,30}(NaN|undefined|Infinity)/) || [''])[0]);
 } catch (e) {

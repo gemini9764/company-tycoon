@@ -4,10 +4,31 @@ import { S } from '../core/state.js';
 import { divisionName, divisionsOf, isHolding, tagChips } from '../core/tags.js';
 import { $, esc, pct, won } from '../core/util.js';
 import { capCeiling } from '../systems/company.js';
+import { NEGO_ACTS, negoAct, negoLeft } from '../systems/mna.js';
 import { goalText } from '../systems/ending.js';
 import { managersHave, managersNeeded, pmi, synergyParts } from '../systems/economy.js';
+import { renderAll } from './index.js';
+import { openModal } from './modal.js';
 import { openSub } from './subPanel.js';
 import { TAB } from './tabs.js';
+
+/* ── 협상 중 능동 개입 ────────────────────────────────────
+   남은 횟수는 숫자가 아니라 마름모로 낸다 (기획서 §2 원칙 3 — 새 게이지 대신
+   아이콘 개수). 판정은 전부 systems/mna.js 에 있고 여기는 버튼만 그린다. */
+function negoActsHtml(s, n) {
+  const left = negoLeft(n);
+  const pips = '◆'.repeat(left) + '◇'.repeat(Math.max(0, BAL.negoActs - left));
+  const btn = ([id, a]) => {
+    const cost = a.cost(s, n);
+    const off = left <= 0 || !!a.can(s, n);
+    return `<button class="btn ${id === 'quit' ? 'blood' : ''}" data-nact="${id}"
+      ${off ? 'disabled' : ''} title="${a.d}${cost ? ` · 비용 ${won(cost)}` : ''}">
+      ${a.n}${cost ? `<span class="c-dim" style="font-size:10px"> ${won(cost)}</span>` : ''}</button>`;
+  };
+  return `<div class="meta" style="margin-top:7px">개입 <b class="c-gold">${pips}</b>
+      — 협상 1건에 ${BAL.negoActs}회. 남은 횟수는 다음 협상으로 넘어가지 않습니다.</div>
+    <div class="btn-row">${Object.entries(NEGO_ACTS).map(btn).join('')}</div>`;
+}
 
 /* ── 회사 현황 창 ────────────────────────────────────────── */
 function renderLeft() {
@@ -44,6 +65,7 @@ function renderLeft() {
       <div style="margin-top:5px;font-size:10px;font-family:var(--f-sm)">성공도</div>
       <div class="gauge"><i style="width:${n.success}%;background:${n.success > 60 ? 'var(--jade)' : n.success > 30 ? 'var(--gold)' : 'var(--blood)'}"></i><span>${pct(n.success)}</span></div>
       <div class="meta">진행도 100% 도달 시 성공도 확률로 인수 여부가 결정됩니다.</div>
+      ${negoActsHtml(s, n)}
     </div>`;
   } else {
     h += `<div class="row"><h4>진행 중 M&amp;A</h4>
@@ -94,6 +116,25 @@ function renderLeft() {
   }
 
   $('panel-body').innerHTML = h;
+
+  $('panel-body').querySelectorAll('[data-nact]').forEach(el => {
+    el.onclick = () => {
+      const id = el.dataset.nact;
+      // 중단만 되돌릴 수 없다. 위약금을 보여주고 한 번 묻는다
+      if (id === 'quit') {
+        const fee = NEGO_ACTS.quit.cost(S, S.nego);
+        return openModal({
+          title: '협상 중단',
+          body: `<p><b>${esc(S.nego.name)}</b> 인수 협상을 중단합니다. 협상단이 즉시 복귀해 다른 매물에 파견할 수 있습니다.</p>
+                 <div class="kv" style="margin-top:10px"><span>위약금</span><b class="c-blood">${won(fee)}</b></div>`,
+          choices: [{ label: `중단하고 위약금을 낸다 — ${won(fee)}`,
+                      run: () => { negoAct(S, 'quit'); renderAll(); } },
+                    { label: '계속 진행한다' }],
+        });
+      }
+      if (negoAct(S, id)) renderAll();
+    };
+  });
 
   $('panel-body').querySelectorAll('[data-sub]').forEach(el => {
     el.onclick = () => {
