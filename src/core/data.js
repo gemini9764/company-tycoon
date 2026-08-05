@@ -76,7 +76,7 @@ const TRAITS = [
   { id:'shark',  name:'승부사',   desc:'협상력 +15%',            },
   { id:'ear',    name:'마당발',   desc:'찌라시 획득률 +60%',      },
   { id:'calm',   name:'포커페이스', desc:'협상 악재 이벤트 완화',  },
-  { id:'cheap',  name:'짠돌이',   desc:'인수가 프리미엄 -6%p',    },
+  { id:'cheap',  name:'짠돌이',   desc:'인수가 웃돈 -6%p',    },
   { id:'star',   name:'간판스타', desc:'매장 매출 +12%',          },
   { id:'none',   name:'평범',     desc:'특이사항 없음',           },
 ];

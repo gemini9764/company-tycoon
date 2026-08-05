@@ -41,12 +41,10 @@ function openTable(s, n, tgt, team, demands, i = 0, acc = { dS: 0, dP: 0, log: [
     title: `${tgt.name} — 협상 테이블 ${i + 1}/${demands.length}`,
     body: `
       <p>상대 대표단이 말한다.<br><b class="c-blood">"${DEMANDS[dem].n}"</b></p>
-      <div style="margin-top:10px">
+      <div style="margin-top:10px" title="성공도 ${pct(nowS)} · 예상 인수가 ${won(Math.round(tgt.cap * (1 + nowP) * (n.tagMul ?? 1)))}">
         ${gauge('성공도', nowS, 100, nowS >= 60 ? 'c-jade' : 'c-blood')}
         ${gauge('인수가', nowP, 0.6, 'c-gold')}
       </div>
-      <div class="kv"><span>현재 성공도</span><b>${pct(nowS)}</b></div>
-      <div class="kv"><span>예상 인수가</span><b class="c-gold">${won(Math.round(tgt.cap * (1 + nowP) * (n.tagMul ?? 1)))}</b></div>
       <p style="margin-top:8px;font-size:12px" class="c-dim">누구를 내보낼지 고르세요. 상대의 요구에 맞는 접근이면 성공도가 크게 오르고 인수가도 내려갑니다. 빗나가면 값을 양보하게 됩니다.</p>`,
     choices: [
       ...team.map((e, idx) => {

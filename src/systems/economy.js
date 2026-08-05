@@ -162,7 +162,7 @@ function tickMonth(s) {
       l.months--;
       if (l.months <= 0 || l.left < 1) {
         s.bank.loans.splice(s.bank.loans.indexOf(l), 1);
-        lines.push(`${l.kind === 'acq' ? '인수금융' : '운영자금'} 완제`);
+        lines.push(`${l.kind === 'acq' ? '인수 대출' : '운영자금'} 완제`);
       }
     } else if (l.collateral) {
       // 인수금융 상환 실패 → 담보로 잡힌 계열사 압류

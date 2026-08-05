@@ -59,7 +59,7 @@ function renderLeft() {
     h += `<div class="row" style="border-color:var(--sky)">
       <h4 class="c-sky">진행 중 M&amp;A</h4>
       <div style="font-size:12px;margin:3px 0">${esc(n.name)}</div>
-      <div class="meta">난이도 ${DIFFS[n.diff].name} · 협상단 ${n.team.length}명 · 예상 프리미엄 +${Math.round(n.prem * 100)}%${n.direct ? ' · 직접 협상' : ' · 위임'}</div>
+      <div class="meta">난이도 ${DIFFS[n.diff].name} · 협상단 ${n.team.length}명 · 예상 웃돈 +${Math.round(n.prem * 100)}%${n.direct ? ' · 직접 협상' : ' · 위임'}</div>
       ${n.rivalDue ? `<div class="meta c-blood" style="font-size:11px">다른 그룹도 접근 중 — <b>${Math.max(0, n.rivalDue - s.day)}일</b> 안에 마쳐야 합니다</div>` : ''}
       <div style="margin-top:6px;font-size:10px;font-family:var(--f-sm)">진행도</div>
       <div class="gauge"><i style="width:${n.progress}%;background:var(--sky)"></i><span>${pct(n.progress)}</span></div>
@@ -84,23 +84,26 @@ function renderLeft() {
 
   if (s.co.subs.length) {
     const sp = synergyParts(s), syn = s.co.synergy;
-    const line = (label, v) => v ? `<div class="kv"><span>${label}</span><b class="${v > 0 ? 'c-jade' : 'c-blood'}">${v > 0 ? '+' : ''}${(v * 100).toFixed(0)}%</b></div>` : '';
+    /* 분해 항목 5줄을 상시로 띄우면 이 창에만 게이지가 6개가 된다.
+       배수 하나만 남기고 내역은 툴팁으로 접는다 (기획서 §10-3 숫자 상한). */
+    const part = (label, v) => v ? `${label} ${v > 0 ? '+' : ''}${(v * 100).toFixed(0)}%` : '';
+    const parts = [part('업종 집중', sp.focus), part('계열사 특성', sp.tag), part('통합 중', sp.integ),
+                   part('관리 인력 부족', sp.short), part('점검', sp.audit)].filter(Boolean).join(' · ');
     h += `<div class="row" style="border-color:${syn >= 1 ? 'var(--jade)' : 'var(--blood)'}">
       <h4>그룹 운영 효율<b class="${syn >= 1 ? 'c-jade' : 'c-blood'}">×${syn.toFixed(2)}</b></h4>
-      <div class="gauge sm" style="margin-top:4px">
+      <div class="gauge sm" style="margin-top:4px" title="${parts || '내역 없음'}">
         <i style="width:${(syn - BAL.synMin) / (BAL.synMax - BAL.synMin) * 100}%;background:${syn >= 1 ? 'var(--jade)' : 'var(--blood)'}"></i>
       </div>
-      <div class="meta">계열사 수익 전체에 곱해집니다. 목표 ×${sp.target.toFixed(2)}로 서서히 수렴합니다.</div>
-      ${line('업종 집중', sp.focus)}${line('계열사 특성', sp.tag)}${line('통합 진행 중', sp.integ)}${line('관리 인력 부족', sp.short)}${line('점검 효과', sp.audit)}
+      <div class="meta">계열사 수익 전체에 곱해집니다.${parts ? ` <span class="c-dim">(${parts})</span>` : ''}</div>
       <div class="kv"><span>관리 인력</span><b class="${managersHave(s) < managersNeeded(s) ? 'c-blood' : ''}">${managersHave(s)} / ${managersNeeded(s)}명 필요</b></div>
       <div class="meta">사업부 점검은 <b>사옥 → 매장 → 운영</b> 에서 실행합니다.</div>
     </div>`;
     const divs = divisionsOf(s);
     if (divs.length) {
       h += `<div class="row" style="border-color:var(--gold)">
-        <h4 class="c-gold">사업부 ${divs.length}${isHolding(s) ? ' <b class="c-gold">지주회사 체제</b>' : ''}</h4>
+        <h4 class="c-gold">사업부 ${divs.length}${isHolding(s) ? ' <b class="c-gold">그룹 본사</b>' : ''}</h4>
         ${divs.map(k => `<div class="kv"><span>${divisionName(k)}</span><b class="c-jade">효과 2배</b></div>`).join('')}
-        <div class="meta">같은 업종 계열사 3개면 결성됩니다. 5개 사업부에서 지주회사 체제.</div>
+        <div class="meta">같은 업종 계열사 3개면 결성됩니다. 사업부 5개면 그룹 본사가 섭니다.</div>
       </div>`;
     }
     h += `<div class="row"><h4>계열사 ${s.co.subs.length}</h4>${

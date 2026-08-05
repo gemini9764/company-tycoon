@@ -36,7 +36,7 @@ function useRumor(s, r) {
   const t = s.market.find(c => c.id === r.target);
   if (r.val >= 0.16 && t.diff > 0) t.diff--;
   if (s.nego?.id === r.target) s.nego.prem = Math.max(0.02, s.nego.prem - r.val);
-  toast(`${r.tname} 인수가 프리미엄 -${Math.round(r.val * 100)}%p 적용`, 'good');
+  toast(`${r.tname} 인수가 웃돈 -${Math.round(r.val * 100)}%p 적용`, 'good');
 }
 
 export { tickRumor, useRumor };

@@ -210,7 +210,7 @@ function negoEvent(s, n, team) {
     { t:'창업주 감정', d:'창업주가 회사 매각 자체를 망설이고 있습니다.',
       c:[{ l:'명예회장직 제안', s:+13, m:+0.05, note:'인수가 +5%p, 성공도 +13' },
          { l:'현금 일시불 압박', s:-6, m:-0.08, note:'인수가 -8%p, 성공도 -6' }] },
-    { t:'우발채무 발견', d:`${n.name} 장부에서 누락된 채무가 확인됐습니다.`,
+    { t:'숨은 빚 발견', d:`${n.name} 장부에서 누락된 채무가 확인됐습니다.`,
       c:[{ l:'가격 재협상', s:-5, m:-0.16, note:'인수가 -16%p, 성공도 -5' },
          { l:'모른 척 진행', s:+6, m:0, note:'성공도 +6 (인수 후 부채 승계)' }] },
   ];
@@ -283,14 +283,14 @@ function judgeNego(s) {
     title: '협상 성사 — 인수가 확정',
     body: `<p><b>${tgt.name}</b> 인수 협상이 성사됐습니다. 인수가를 지불하면 인수가 완료됩니다.</p>
       <div class="kv" style="margin-top:10px"><span>대상 시가총액</span><b>${won(tgt.cap)}</b></div>
-      <div class="kv"><span>경영권 프리미엄</span><b>+${(n.prem * 100).toFixed(0)}%</b></div>
+      <div class="kv"><span>경영권 웃돈</span><b>+${(n.prem * 100).toFixed(0)}%</b></div>
       <div class="kv" style="border-top:2px solid var(--paper-3);margin-top:6px;padding-top:6px"><span>최종 인수가</span><b class="c-gold">${won(price)}</b></div>
       <div class="kv"><span>보유 자금</span><b class="${short ? 'c-blood' : 'c-jade'}">${won(s.co.cash)}</b></div>`,
     choices: [
       { label: `자기자금으로 지불 — ${won(price)}`, dis: short > 0,
         sub: short ? `자금 ${won(short)} 부족` : '부채 없이 인수 완료',
         run: () => { s.co.cash -= price; completeAcq(s, tgt, price); resume(); } },
-      { label: '인수금융 대출로 충당', dis: short === 0,
+      { label: '인수 대출로 충당', dis: short === 0,
         sub: short ? `부족액 ${won(short)} · 금리 ${loanRate(s, 'acq').toFixed(1)}% · 인수 기업 담보` : '자기자금으로 충분합니다',
         run: () => { resume(); openAcqLoan(tgt, price); } },
       { label: '인수 포기', sub: '협상 결과를 파기합니다',
@@ -336,8 +336,8 @@ function checkDivisions(s) {
       `같은 업종 계열사가 3개가 되어 <b>${divisionName(k)}</b>가 결성됐습니다. 해당 업종 효과가 <b>2배</b>가 됩니다.`, 'good');
   });
   if (now.length >= 5 && was.length < 5) {
-    news(`${s.co.name}, 지주회사 체제 전환`);
-    toast('지주회사 체제 — 관리 인력 요구 -25%', 'good');
+    news(`${s.co.name}, 그룹 본사 출범`);
+    toast('그룹 본사 — 관리 인력 요구 -25%', 'good');
   }
 }
 

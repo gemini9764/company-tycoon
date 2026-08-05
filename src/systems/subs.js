@@ -137,9 +137,9 @@ function fireHiddenDebt(s, c) {
   s.co.cash -= hit;
   c.tags = tagsOf(c).filter(k => k !== 'debt');
   news(`${c.name}에서 누락된 채무 발견`);
-  pushInbox(s, '우발채무 발생',
+  pushInbox(s, '숨은 빚 발생',
     `${c.name}의 장부에 없던 채무 ${won(hit)}이(가) 확인됐습니다. 인수 전 <b>실사</b>를 했다면 미리 알 수 있었습니다.`, 'bad');
-  toast(`우발채무 -${won(hit)}`, 'bad');
+  toast(`숨은 빚 -${won(hit)}`, 'bad');
 }
 
 /* ── 인수 직후 처리 ──────────────────────────────────────

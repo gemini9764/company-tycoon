@@ -42,7 +42,7 @@ function tabStaff() {
     <h4 class="c-sky">협상단 ${team.length}/3</h4>
     <div class="kv"><span>협상력 합계</span><b>${Math.round(teamPower(s))}</b></div>
     <div class="kv"><span>정보력 합계</span><b>${Math.round(sumStat(team, 'intel'))}</b></div>
-    <div class="meta">협상력은 성공도 상승 속도를, 정보력은 인수가 프리미엄과 찌라시 획득률을 좌우합니다.</div>
+    <div class="meta">협상력은 성공도 상승 속도를, 정보력은 인수가 웃돈과 찌라시 획득률을 좌우합니다.</div>
   </div>
   <div class="row" style="border-color:${managersHave(s) < managersNeeded(s) ? 'var(--blood)' : 'var(--jade)'}">
     <h4>관리 인력 ${managersHave(s)} / ${managersNeeded(s)}</h4>
@@ -219,7 +219,7 @@ function tabRumor() {
   h += s.rumors.length ? s.rumors.map(r => `<div class="row tight" style="${r.used ? 'opacity:.5' : ''}">
       <h4><span class="c-gold">${r.grade}급</span> ${esc(r.tname)}<span class="c-dim" style="font-size:10px;font-family:var(--f-sm)">${r.day}일차</span></h4>
       <div class="meta">${esc(r.text)}</div>
-      <div class="meta">사용 시 인수가 프리미엄 -${Math.round(r.val * 100)}%p${r.val >= 0.16 ? ' · 인수 난이도 1단계 하락' : ''}</div>
+      <div class="meta">사용 시 인수가 웃돈 -${Math.round(r.val * 100)}%p${r.val >= 0.16 ? ' · 인수 난이도 1단계 하락' : ''}</div>
       ${r.used ? '<div class="meta c-dim">사용됨</div>' : `<div class="btn-row"><button class="btn gold" data-rum="${r.id}">정보 활용</button></div>`}
     </div>`).join('')
     : `<div class="row"><div class="empty">입수한 찌라시가 없습니다<br>정보력 높은 직원을 채용해보세요</div></div>`;

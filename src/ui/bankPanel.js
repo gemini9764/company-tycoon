@@ -34,7 +34,7 @@ function tabBank() {
     </div></div>`;
 
   if (s.bank.loans.length) h += s.bank.loans.map((l, i) => `<div class="row tight">
-    <h4>${l.kind === 'acq' ? '인수금융' : '운영자금'}<span style="font-size:10px;font-family:var(--f-sm)" class="c-dim">${l.months}개월 남음</span></h4>
+    <h4>${l.kind === 'acq' ? '인수 대출' : '운영자금'}<span style="font-size:10px;font-family:var(--f-sm)" class="c-dim">${l.months}개월 남음</span></h4>
     <div class="kv"><span>잔액</span><b class="c-blood">${won(l.left)}</b></div>
     <div class="kv"><span>월 상환액</span><b>${won(l.due)} · ${l.rate.toFixed(2)}%</b></div>
     ${l.collateral ? `<div class="meta">담보 — ${esc(l.collateral)} (상환 실패 시 압류)</div>` : ''}
@@ -68,7 +68,7 @@ function openAcqLoan(tgt, price) {
   const need = Math.max(0, price - s.co.cash);
   const rate = loanRate(s, 'acq');
   openModal({
-    title: '인수금융 신청',
+    title: '인수 대출 신청',
     body: `<div class="kv"><span>인수가</span><b>${won(price)}</b></div>
       <div class="kv"><span>보유 자금</span><b>${won(s.co.cash)}</b></div>
       <div class="kv"><span>부족액</span><b class="c-blood">${won(need)}</b></div>

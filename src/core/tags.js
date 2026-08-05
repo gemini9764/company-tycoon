@@ -62,7 +62,7 @@ const SUB_TAGS = {
   brand:  { n:'브랜드',      d:'인지도 +0.4 상시',               mkt: 0.4,                 w:  9 },
   owner:  { n:'오너 일가',   d:'시너지 -0.1 · 매각가 +30%',       syn: -0.10, sell: 1.30,  w:  9 },
   child:  { n:'자회사 보유', d:'인수 시 소형 계열사가 딸려 온다',  spawn: 0.15,              w:  7 },
-  debt:   { n:'우발채무',    d:'인수 후 숨은 빚이 터질 수 있다',   risk: 0.40, hidden: true, w: 13 },
+  debt:   { n:'숨은 빚',      d:'인수 후 숨은 빚이 터질 수 있다',   risk: 0.40, hidden: true, w: 13 },
   global: { n:'해외 법인',   d:'수익 변동폭 2배 · 국가 이벤트 노출', vol: true, evt: 1.5,   w: 10 },
 };
 

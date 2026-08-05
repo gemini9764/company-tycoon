@@ -39,7 +39,7 @@ function seizeSub(s, l) {
   if (origDiff >= 2) s.co.hardAcq = Math.max(0, s.co.hardAcq - 1);
   s.bank.overdue++;
   news(`${s.co.name}, ${sub.name} 채권단에 압류`);
-  pushInbox(s, '계열사 압류', `인수금융 상환에 실패해 <b>${sub.name}</b>이(가) 채권단에 넘어갔습니다. 해당 매출이 그룹에서 빠지고 재인수 난이도가 올라갑니다.`, 'bad');
+  pushInbox(s, '계열사 압류', `인수 대출 상환에 실패해 <b>${sub.name}</b>이(가) 채권단에 넘어갔습니다. 해당 매출이 그룹에서 빠지고 재인수 난이도가 올라갑니다.`, 'bad');
   recalcCap(s);
 }
 

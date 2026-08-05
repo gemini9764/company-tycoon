@@ -129,7 +129,7 @@ const EV_CORP = [
     choices:[
       { label:'맞불 할인', sub:'인지도 +0.35 · 이번 달 매출 마진 감소',
         run:()=>{ s.co.marketing=Math.min(BAL.marketingCap,s.co.marketing+0.35); s.co.cash-=dailyRetail(s)*6; } },
-      { label:'프리미엄 노선 유지', sub:'인지도 -0.2 · 자금 소모 없음',
+      { label:'고급 노선 유지', sub:'인지도 -0.2 · 자금 소모 없음',
         run:()=>{ s.co.marketing=Math.max(1,s.co.marketing-0.2); } },
     ] }),
   s => ({ title:'경쟁사 이벤트 — 인재 유출', news:'그룹 간 인력 쟁탈전',

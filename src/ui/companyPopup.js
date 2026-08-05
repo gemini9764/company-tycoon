@@ -29,17 +29,17 @@ function openCompany(c) {
   openModal({
     title: `${c.name} — ${SECTORS[c.sector].name}`,
     body: `
-      <div class="kv"><span>시가총액</span><b>${won(c.cap)}</b></div>
+      <div class="kv" title="${c.listed ? '상장 · 주가 ' + c.price.toLocaleString() + '원' : '비상장'}">
+        <span>시가총액</span><b>${won(c.cap)}</b></div>
       <div class="kv"><span>인수 난이도</span><b>${d.name}${(c.diff0 ?? c.diff) > c.diff ? ` <span class="c-jade">(원래 ${DIFFS[c.diff0].name})</span>` : ''}</b></div>
-      <div class="kv"><span>예상 프리미엄</span><b>+${Math.round(d.prem * 100)}%</b></div>
-      <div class="kv"><span>상장 여부</span><b>${c.listed ? '상장 · ' + c.price.toLocaleString() + '원' : '비상장'}</b></div>
       ${tagChips(c) || hasHidden(c) ? `<div class="kv"><span>특성</span><b>${tagChips(c)}${
         hasHidden(c) ? `${tagChips(c) ? ' · ' : ''}<span class="c-dim">???</span>` : ''}</b></div>` : ''}
       ${c.owned ? '' : `
-      <div class="kv" style="border-top:2px solid var(--paper-3);margin-top:6px;padding-top:6px">
+      <div class="kv" style="border-top:2px solid var(--paper-3);margin-top:6px;padding-top:6px"
+        title="시가총액에 웃돈 +${Math.round(d.prem * 100)}%가 붙은 값입니다">
         <span>예상 인수가</span><b class="c-gold">${won(est)}</b></div>
       <div class="kv"><span>보유 자금</span><b class="${short ? 'c-blood' : 'c-jade'}">${won(s.co.cash)}</b></div>
-      ${short ? `<p style="margin-top:8px;font-size:12px">자금이 <b class="c-blood">${won(short)}</b> 모자랍니다. 그래도 협상은 시작할 수 있고, 성사 시점에 <b>인수금융</b>으로 메울 수 있습니다 — 한도 ${won(finLimit)}, 금리 ${loanRate(s, 'acq').toFixed(1)}%. 인수 기업이 담보라 상환에 실패하면 압류됩니다.</p>`
+      ${short ? `<p style="margin-top:8px;font-size:12px" title="한도 ${won(finLimit)} · 금리 ${loanRate(s, 'acq').toFixed(1)}%">자금이 <b class="c-blood">${won(short)}</b> 모자랍니다. 협상은 시작할 수 있고, 성사 시점에 <b>인수 대출</b>로 메울 수 있습니다 — 인수한 회사가 담보라 갚지 못하면 넘어갑니다.</p>`
               : '<p style="margin-top:8px;font-size:12px" class="c-jade">자기자금으로 지불할 수 있습니다.</p>'}` }
       ${c.owned ? '<p style="margin-top:10px" class="c-jade">이미 우리 그룹 계열사입니다.</p>' : ''}
       ${overCap ? `<p style="margin-top:10px" class="c-blood">현재 등급(${TIERS[s.co.tier].name})으로는 인수할 수 없는 규모입니다. 상한 ${won(capCeiling(s))}</p>` : ''}
@@ -55,12 +55,12 @@ function openCompany(c) {
         label: `이 회사 ${c.listed ? '주식' : '지분'} 조금씩 사둔다  ${'★'.repeat(stars)}${'☆'.repeat(BAL.stakeStars - stars)}`,
         sub: staking(s, c)
              ? `사는 중 · 하루 ${won(c.cap * BAL.stakeStep)} · ★ 1칸당 성공도 +${BAL.stakeSuccess}, 인수가 -${Math.round(BAL.stakePrem * 100)}%p`
-             : `하루 ${won(c.cap * BAL.stakeStep)}씩 자동으로 나갑니다 · ★★★을 넘기면 소문이 납니다${c.listed ? '' : ' · 비상장이라 장외로 사 모읍니다'}`,
+             : `하루 ${won(c.cap * BAL.stakeStep)}씩 자동으로 나갑니다 · ★★★을 넘기면 소문이 납니다${c.listed ? '' : ' · 비상장이라 조금씩 사 모읍니다'}`,
         run: () => { toggleStake(s, c); renderAll(); } },
       ...(held ? [{ label: '사둔 주식을 되판다', sub: `${held.qty.toLocaleString()}주 · 지금 ${won(held.qty * c.price)}`,
         run: () => { sellStock(s, c, held.qty); renderAll(); } }] : []),
       ...(priv ? [{ label: '사둔 지분을 되판다',
-        sub: `투입 ${won(priv)} · 회수 ${won(Math.round(priv * BAL.stakePrivSell))} — 장외라 제값을 못 받습니다`,
+        sub: `투입 ${won(priv)} · 회수 ${won(Math.round(priv * BAL.stakePrivSell))} — 비상장이라 제값을 못 받습니다`,
         run: () => { sellPrivStake(s, c); renderAll(); } }] : []),
       ...(rumor ? [{ label: `${rumor.grade}급 찌라시 사용`, sub: rumor.text,
         run: () => { useRumor(s, rumor); renderAll(); } }] : []),
