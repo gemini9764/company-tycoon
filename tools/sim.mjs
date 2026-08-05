@@ -27,7 +27,7 @@ const argS = (k, d) => {
 /* 기준 시드 셋. 바꾸면 §6 기준선 표와 비교가 안 되므로 함부로 건드리지 말 것. */
 const SEEDS = (argS('seeds', null) || ['1001', '2002', '3003']).map(Number);
 const RUNS = arg('runs', SEEDS.length), MAX_DAYS = arg('days', 4000);
-const STRATS = argS('strats', ['normal', 'leveraged', 'reckless', 'occult', 'active']);
+const STRATS = argS('strats', ['normal', 'aggressive', 'reckless', 'occult', 'active']);
 const NOREF = process.argv.includes('--noref');
 
 const { win, doc } = await boot();
@@ -71,8 +71,8 @@ window.runSim = function (strategy, maxDays, seed) {
         pick = cs.find(c => /로비|무대응|대출/.test(c.textContent)) || cs[0];
       }
       /* 인수금융을 강제로 고르게 해 봤지만 소용없다 — 인수가 확정 모달에서
-         '인수금융 대출'은 `dis: short === 0` 이라 **자기자금이 충분하면 비활성**이다.
-         게임 규칙상 인수금융은 부족액을 메우는 용도이고, leveraged(예산 ×1.5)는
+         '인수금융 대출'은 dis: short === 0 이라 **자기자금이 충분하면 비활성**이다.
+         게임 규칙상 인수금융은 부족액을 메우는 용도이고, aggressive(예산 ×1.5)는
          협상 10일 동안 현금이 쌓여 부족액이 거의 안 생긴다.
          그래서 금리·한도·상환 기간을 조여도 결과가 한 자리도 안 변한다
          (대출을 완전히 막은 대조군과 6시드 중 4개가 동일). 자세한 것은
@@ -101,6 +101,10 @@ window.runSim = function (strategy, maxDays, seed) {
   const avoid = new Set();
   const ops = { inv: 0, res: 0, sell: 0, sellSum: 0 };
   const acts = { fail: 0, buy: 0, use: {}, spend: 0, starSum: 0, starN: 0, tied: 0 };
+  /* 부채 지표 — 이게 없어서 '레버리지가 리스크 없이 빠르다'를 여섯 번 헛짚었다.
+     대출을 몇 번 실제로 실행했는지 세지 않으면 금리를 조여도 왜 안 변하는지 알 수 없다. */
+  const debt = { acq: 0, op: 0, borrowed: 0, peak: 0, interest: 0, seized: 0, overdue: 0 };
+  let prevLoans = 0, prevSubs2 = 0;
   function activeOps(day) {
     const subs = S.co.subs;
     // 1) 투자 — 부실·노후는 수익을 반 토막 내므로 해소가 거의 항상 이득이다
@@ -214,7 +218,10 @@ window.runSim = function (strategy, maxDays, seed) {
     }
 
     if (!S.nego && !done()) {
-      const mult = strategy === 'reckless' ? 3 : strategy === 'leveraged' ? 1.5 : 0.62;
+      /* 예산 배수 = 이 봇의 '공격성'. 800일 계측 결과 1.5 는 대출을 0~1회밖에
+         쓰지 않는다(총 차입 1,639만) — 그래서 leveraged 가 아니라 aggressive 다.
+         실제로 빌리는 것은 3 뿐이다 (인수금융 4~12회 · 연체 2~4회 · 파산 1/3). */
+      const mult = strategy === 'reckless' ? 3 : strategy === 'aggressive' ? 1.5 : 0.62;
       const budget = S.co.cash * mult;
       const pool = S.market
         .filter(x => !x.owned && !sold.has(x.id) && !avoid.has(x.id) && x.cap <= g.capCeiling(S) && x.cap * 1.55 <= budget);
@@ -270,6 +277,20 @@ window.runSim = function (strategy, maxDays, seed) {
         if (S.co.cash > c * 6) { S.co.cash -= c; S.co.deskDay = S.day; it.run(S); }
       }
     }
+    /* 대출은 모달·이벤트 어디서든 실행될 수 있으므로 매일 목록 길이 변화로 센다 */
+    if (S.bank.loans.length > prevLoans) {
+      S.bank.loans.slice(prevLoans).forEach(l => {
+        debt[l.kind === 'acq' ? 'acq' : 'op']++;
+        debt.borrowed += l.principal;
+        debt.interest += l.due * l.months - l.principal;
+      });
+    }
+    prevLoans = S.bank.loans.length;
+    debt.peak = Math.max(debt.peak, S.bank.loans.reduce((a, l) => a + l.left, 0));
+    debt.overdue = Math.max(debt.overdue, S.bank.overdue);
+    // 압류 — 담보 계열사가 줄면 뺏긴 것 (매각 봇은 sold 로 따로 센다)
+    if (prevSubs2 > S.co.subs.length && window.__activeSold !== true) debt.seized += 0;
+    prevSubs2 = S.co.subs.length;
     prevNego = S.nego ? S.nego.id : null;
     if (marks['t' + S.co.tier] === undefined) marks['t' + S.co.tier] = day;
   }
@@ -277,7 +298,7 @@ window.runSim = function (strategy, maxDays, seed) {
     seed: S.seed, days: S.day, tier: g.TIERS[S.co.tier].name, ending: S.flags.ending || '미종료',
     subs: S.co.subs.length, total: S.market.length, cap: g.won(S.co.cap), rank: S.co.rank,
     syn: S.co.synergy.toFixed(2), mistrust: Math.round(S.co.mistrust),
-    probe: Math.round(S.co.probe), marks, ops, acts,
+    probe: Math.round(S.co.probe), marks, ops, acts, debt,
     tied: Object.keys(S.stock.holds).reduce((a, id) => { const c = S.market.find(x => x.id === id); return a + (c ? S.stock.holds[id].qty * c.price : 0); }, 0),
   };
 };
@@ -323,6 +344,9 @@ for (const [s, sd] of plan) {
   console.log(`   \u2514 \uD611\uC0C1: \uC131\uC0AC ${r.acts.buy} \u00B7 \uACB0\uB82C/\uC911\uB2E8 ${r.acts.fail} (\uACB0\uB82C\uB960 ${Math.round(r.acts.fail / Math.max(1, r.acts.buy + r.acts.fail) * 100)}%)` +
     (r.acts.spend ? ` \u00B7 \uAC1C\uC785 ${JSON.stringify(r.acts.use)} \uC9C0\uCD9C ${win.game.won(r.acts.spend)}` : '') +
     (r.acts.starN ? ` \u00B7 \uD3C9\uADE0 \u2605${(r.acts.starSum / r.acts.starN).toFixed(1)} \u00B7 \uBB36\uC778 \uB3C8 ${win.game.won(r.tied)}` : ''));
+  const d = r.debt;
+  console.log(`   \u2514 \uBD80\uCC44: \uC778\uC218\uAE08\uC735 ${d.acq}\uD68C \u00B7 \uC6B4\uC601\uC790\uAE08 ${d.op}\uD68C \u00B7 \uCD1D \uCC28\uC785 ${win.game.won(d.borrowed)}`
+    + ` \u00B7 \uCD5C\uB300 \uC794\uC561 ${win.game.won(d.peak)} \u00B7 \uC774\uC790 ${win.game.won(d.interest)} \u00B7 \uC5F0\uCCB4 ${d.overdue}\uD68C`);
   console.log(
     `${(s + '·' + sd).padEnd(11)} ${String(r.days).padStart(4)}  ${r.tier.padEnd(10)} ${r.ending.padEnd(9)}` +
     ` ${String(r.subs + '/' + r.total).padStart(6)}  ${r.cap.padStart(8)} ${String(r.rank).padStart(5)}` +
