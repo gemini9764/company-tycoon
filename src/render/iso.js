@@ -147,6 +147,38 @@ function isoWin(X, cx, cy, rx, ry, side, off, up, w, h, color) {
   }
 }
 
+/**
+ * 경사 지붕(모임지붕). 상자 윗면에 얹어 실루엣을 만든다.
+ *
+ * 도시가 단조로워 보이던 가장 큰 이유는 **모든 건물이 평지붕 상자**여서
+ * 위쪽 윤곽선이 전부 같은 마름모였기 때문이다. 꼭짓점 하나만 올려도
+ * 스카이라인이 살아난다.
+ *
+ * 남쪽에서는 네 면 중 좌하·우하 둘만 보이므로 삼각형 두 장만 그린다.
+ * 각 면은 처마(기울기 ry/rx)와 추녀마루(꼭짓점으로 올라가는 선) 사이를
+ * 2px 세로 기둥으로 채운다 — 엔진의 다른 도형과 같은 방식이라 도트가 뭉개지지 않는다.
+ */
+function isoRoof(X, cx, cy, rx, ry, rise, left, right, ridge) {
+  cx = Math.round(cx); cy = Math.round(cy);
+  for (const side of [-1, 1]) {
+    X.fillStyle = side < 0 ? left : right;
+    for (let i = 0; i < rx; i += 2) {
+      const t = side < 0 ? (i + 2) / rx : (rx - i) / rx;   // 처마 끝 0 → 꼭짓점 1
+      const x = side < 0 ? cx - rx + i : cx + i;
+      const top = Math.round(cy - rise * t), bot = Math.round(cy + ry * t);
+      X.fillRect(x, top, 2, Math.max(1, bot - top));
+    }
+  }
+  if (ridge) {                                   // 추녀마루 하이라이트
+    X.fillStyle = ridge;
+    for (let i = 0; i < rx; i += 2) {
+      const t = (i + 2) / rx;
+      X.fillRect(cx - rx + i, Math.round(cy - rise * t), 2, 1);
+      X.fillRect(cx + rx - i - 2, Math.round(cy - rise * t), 2, 1);
+    }
+  }
+}
+
 /** 바닥에 깔리는 그림자. 상자 밑동을 어둡게 눌러 준다. */
 function isoShadow(X, cx, cy, rx, ry) {
   X.save();
@@ -166,4 +198,4 @@ function makeLayer(w, h) {
   return { c, ctx };
 }
 
-export { FACES4, HH, HW, TH, TW, depth, isoRotMat, rotFace, rotG, rotGf, faces, isoShadow, isoWin, isoX, isoY, makeLayer, prism, rhomb, rhombEdge, unIso };
+export { FACES4, HH, HW, TH, TW, depth, isoRotMat, rotFace, rotG, rotGf, faces, isoRoof, isoShadow, isoWin, isoX, isoY, makeLayer, prism, rhomb, rhombEdge, unIso };

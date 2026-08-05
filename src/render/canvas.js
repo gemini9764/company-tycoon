@@ -389,6 +389,47 @@ function drawPerson(x, y, look, dir = 's', step = 1) {
   drawHead(x, b, look.skin, look.hair, dir, look.style | 0);
 }
 
+/**
+ * 도시용 축소 보행자 — 높이 16px.
+ *
+ * 도시 건물이 33~99px 인데 사무실용 28px 인물을 그대로 쓰면 **사람이 3층 건물만
+ * 해진다.** 이게 "NPC 가 어색하다"의 가장 큰 원인이었다.
+ *
+ * 0.5배 변환으로 줄이지 않고 따로 그린다. 월드 캔버스가 672×384 라 변환 축소는
+ * 1px 선을 반픽셀로 만들어 뭉갠다 — 도트 그림에서는 치명적이다.
+ */
+function drawPed(x, y, look, dir = 's', step = 1) {
+  x = Math.round(x); y = Math.round(y);
+  const f = ((step % 4) + 4) % 4;
+  const sw = f === 1 ? 1 : f === 3 ? -1 : 0;       // 다리 벌어짐
+  const b = y + (f % 2 === 0 ? -1 : 0);
+  const back = dir === 'n';
+
+  X.fillStyle = 'rgba(0,0,0,.20)';                 // 발밑 그림자
+  X.fillRect(x - 4, y - 1, 9, 3); X.fillRect(x - 3, y - 2, 7, 5);
+
+  for (const s of [-1, 1]) {                       // 다리
+    const lx = (s < 0 ? x - 3 : x + 1) + s * sw;
+    X.fillStyle = OUT; X.fillRect(lx - 1, b - 6, 4, 6);
+    X.fillStyle = look.pants; X.fillRect(lx, b - 5, 2, 3);
+    X.fillStyle = '#332E3E'; X.fillRect(lx, b - 2, 2, 2);
+  }
+  X.fillStyle = OUT; X.fillRect(x - 5, b - 11, 11, 7);          // 몸통 + 팔
+  X.fillStyle = look.shirt; X.fillRect(x - 4, b - 10, 9, 5);
+  X.fillStyle = shade(look.shirt, 0.22); X.fillRect(x - 4, b - 10, 9, 1);
+  X.fillStyle = shade(look.shirt, -0.24); X.fillRect(x - 4, b - 6, 9, 1);
+  X.fillStyle = look.skin; X.fillRect(x - 4, b - 7, 1, 2); X.fillRect(x + 4, b - 7, 1, 2);
+
+  X.fillStyle = OUT; X.fillRect(x - 4, b - 17, 9, 7);           // 머리
+  X.fillStyle = look.skin; X.fillRect(x - 3, b - 16, 7, 5);
+  X.fillStyle = look.hair; X.fillRect(x - 3, b - 16, 7, back ? 5 : 2);
+  if (!back) {                                                  // 눈 — 뒤돌면 안 그린다
+    X.fillStyle = '#3B3546';
+    const ex = dir === 'e' ? 1 : dir === 'w' ? -1 : 0;
+    X.fillRect(x - 2 + ex, b - 13, 1, 2); X.fillRect(x + 1 + ex, b - 13, 1, 2);
+  }
+}
+
 /** 다리 — 바지 + 신발. 걸을 때 앞뒤로 벌어진다. */
 function drawLegs(x, b, look, sw) {
   const shoe = '#332E3E';
@@ -472,6 +513,36 @@ function drawSitter(x, y, look, dir = 's', busy = 0) {
   drawHead(x, b, look.skin, look.hair, dir, look.style | 0);
 }
 
+/* ── 말풍선 ──────────────────────────────────────────────────
+   참조한 카이로 화면에서 사람이 살아 있게 보이는 이유의 절반은 도트 품질이
+   아니라 **말풍선**이다. 도형 인간이라도 말을 걸면 사람으로 읽힌다.
+   스프라이트를 못 찍는 조건에서 가장 값싼 생동감이다.
+
+   글자는 월드 좌표에 그리면 배율에 눌려 뭉개지므로, 상자만 월드에 그리고
+   글자는 `drawText` 의 화면 좌표 경로를 그대로 탄다. */
+function drawBubble(x, y, txt, tint = '#FFF8E6') {
+  const w = Math.max(20, Math.round(textW(txt, 9)) + 10), h = 14;
+  const bx = Math.round(x - w / 2), by = Math.round(y - h);
+  X.fillStyle = 'rgba(0,0,0,.18)';
+  X.fillRect(bx + 1, by + 2, w, h);
+  rrect(bx, by, w, h, '#3B3546');                   // 테두리
+  rrect(bx + 1, by + 1, w - 2, h - 2, tint);
+  X.fillStyle = '#3B3546';                          // 꼬리
+  X.fillRect(Math.round(x) - 2, by + h - 1, 5, 2);
+  X.fillRect(Math.round(x) - 1, by + h + 1, 3, 2);
+  X.fillStyle = tint; X.fillRect(Math.round(x) - 1, by + h - 1, 3, 2);
+  drawText(x, by + 10, txt, { size: 9, color: '#4A4356' });
+}
+
+/**
+ * 지금 이 대상이 말풍선을 띄울 차례인가. 상태를 따로 들고 다니지 않으려고
+ * 프레임과 씨드로만 정한다 — **연출은 게임 난수열을 건드리면 안 된다**
+ * (core/rng.js 의 원칙: 그림이 판정을 밀면 안 된다).
+ */
+function bubbleTurn(seed, period = 520, span = 110) {
+  return ((frame + seed * 97) % period) < span;
+}
+
 function drawPops() {
   pops = pops.filter(p => p.t-- > 0);
   for (const p of pops) {
@@ -496,4 +567,4 @@ function shade(hex, amt) {
   return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`;
 }
 
-export { drawHair, drawLegs, rrect, applyCamera, zoomBy, CITY_HEAD, CITY_H, CITY_O, CITY_PAD_X, CITY_PAD_Y, CITY_W, CV, DPR, FONT, FOOT_Y, HAIRS, MAP_H, MAP_W, OUT, OX, OY, PX, ROOM_H, ROOM_W, SHIRTS, SKINS, SPLIT_GX, STORE_H, STORE_O, STORE_W, X, customers, draw, drawHead, drawLabel, drawPerson, drawPops, drawSitter, drawText, drawTorso, faceOf, fitCanvas, frame, hideTip, hitLot, hoverId, initCanvas, lotPos, mix, moveTip, newLook, onCanvasClick, onCanvasMove, pops, setMode, shade, showTip, textW, tipEl, toLogical, worldH, worldW, zoomInto, rotateCity };
+export { drawHair, drawLegs, rrect, applyCamera, zoomBy, CITY_HEAD, CITY_H, CITY_O, CITY_PAD_X, CITY_PAD_Y, CITY_W, CV, DPR, FONT, FOOT_Y, HAIRS, MAP_H, MAP_W, OUT, OX, OY, PX, ROOM_H, ROOM_W, SHIRTS, SKINS, SPLIT_GX, STORE_H, STORE_O, STORE_W, X, customers, draw, drawHead, drawLabel, drawPed, drawPerson, drawBubble, bubbleTurn, drawPops, drawSitter, drawText, drawTorso, faceOf, fitCanvas, frame, hideTip, hitLot, hoverId, initCanvas, lotPos, mix, moveTip, newLook, onCanvasClick, onCanvasMove, pops, setMode, shade, showTip, textW, tipEl, toLogical, worldH, worldW, zoomInto, rotateCity };

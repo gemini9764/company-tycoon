@@ -3,7 +3,7 @@ import { S } from '../core/state.js';
 import { viewRand } from '../core/rng.js';
 import { $, clamp, vpick, vrint, vrnd, won } from '../core/util.js';
 import { HH, HW, faces, isoWin, isoX, isoY, makeLayer, prism, rhomb, rhombEdge } from './iso.js';
-import { FOOT_Y, ROOM_H, ROOM_W, SPLIT_GX, STORE_H, STORE_O, STORE_W, X, customers, drawPerson, drawPops, drawSitter, drawText, faceOf, frame, newLook, pops, rrect, shade } from './canvas.js';
+import { FOOT_Y, ROOM_H, ROOM_W, SPLIT_GX, STORE_H, STORE_O, STORE_W, X, bubbleTurn, customers, drawBubble, drawPerson, drawPops, drawSitter, drawText, faceOf, frame, newLook, pops, rrect, shade } from './canvas.js';
 import { dailyRetail } from '../systems/economy.js';
 
 /* ══════════════════════════════════════════════════════════════
@@ -213,6 +213,10 @@ function retarget(p) {
   p.path = findPath(from, to);
 }
 
+/* 손님 대사. 상품군이 붙으면 여기서 실제 상품명을 부르게 하면 된다. */
+const SAY_SHOP = ['이거 맛있겠다', '이것도 담을까', '어느 게 낫지', '오늘 세일인가', '찾았다!'];
+const SAY_PAY = ['이거 주세요', '봉투 하나요', '카드로 할게요', '포인트 적립돼요?'];
+
 function stepCustomers(items) {
   const want = clamp(4 + Math.round(S.co.marketing * 3) + S.co.subs.length, 4, 14);
   while (customers.length < want) customers.push(newCustomer());
@@ -230,9 +234,18 @@ function stepCustomers(items) {
       else { p.x += dx / d * step; p.y += dy / d * step; p.dir = faceOf(dx, dy, p.dir); }
       p.walk += step;
     }
-    const px = p.x, py = p.y, look = p.look, dir = p.dir;
+    const px = p.x, py = p.y, look = p.look, dir = p.dir, ph2 = p.phase;
     const ph = p.wait > 0 ? 1 : Math.floor(p.walk / 8);
-    items.push({ y: py, f: () => drawPerson(px, py, look, dir, ph) });
+    const i = customers.indexOf(p);
+    items.push({ y: py, f: () => {
+      drawPerson(px, py, look, dir, ph);
+      /* 멈춰 선 손님만 말한다 — 걸어가면서 띄우면 풍선이 화면을 가로지른다.
+         진열대 앞과 계산대 앞의 대사가 달라야 "뭘 하는 중"인지가 읽힌다. */
+      if (p.wait > 0 && bubbleTurn(i, 300, 150)) {
+        drawBubble(px, py - 34, ph2 === 'counter' ? SAY_PAY[i % SAY_PAY.length]
+                                                  : SAY_SHOP[i % SAY_SHOP.length]);
+      }
+    } });
   }
 }
 
@@ -247,8 +260,92 @@ function advancePhase(p) {
 }
 
 /* ── 그리기 ──────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════
+   문 밖 거리
+
+   손님이 `SPAWN_GX = -4` 에서 나타나 문으로 걸어 들어오는 동선은 원래 있었다.
+   그런데 **그 자리가 검은 허공이라** 걸어오는 게 아니라 소환되는 것처럼 보였다.
+   길과 인도를 깔면 같은 동선이 "밖에서 들어온다"로 읽힌다.
+
+   배경도 단색 남색을 걷어내고 하늘 + 건너편 건물 실루엣으로 바꾼다. 흐릿하게
+   뒤에 깔리는 것이라 디테일이 필요 없다 — 도트를 안 찍고도 되는 영역이다.
+   ══════════════════════════════════════════════════════════════ */
+function drawBackdrop() {
+  /* 하늘은 단색 한 장이다. 색 띠를 여러 장 깔면 도트 그림에서 **이음매가 선으로
+     보인다** — 실제로 처음엔 셋으로 나눴다가 가로줄이 생겨 되돌렸다. */
+  X.fillStyle = '#161B2C'; X.fillRect(0, 0, STORE_W, STORE_H);
+
+  /* 건너편 건물 — 실루엣과 창문 불빛만. 결정론적이라 프레임마다 흔들리지 않는다 */
+  const base = Math.round(STORE_H * 0.30);
+  for (let i = 0, x = -20; x < STORE_W; i++) {
+    const w = 46 + ((i * 37) % 5) * 14, h = 60 + ((i * 61) % 7) * 22;
+    X.fillStyle = i % 2 ? '#232941' : '#1F2439';
+    X.fillRect(x, base - h, w, h + 40);
+    X.fillStyle = 'rgba(245,225,150,.13)';
+    for (let wy = base - h + 12; wy < base - 8; wy += 16) {
+      for (let wx = x + 8; wx < x + w - 8; wx += 14) {
+        if (((wx * 7 + wy * 13 + i) % 5) < 2) X.fillRect(wx, wy, 6, 7);
+      }
+    }
+    x += w + 6;
+  }
+  X.fillStyle = 'rgba(22,27,44,.62)'; X.fillRect(0, base - 6, STORE_W, 54);   // 안개로 뒤로 민다
+}
+
+/** 매장 서쪽 — 인도와 차도. 손님이 여기서 걸어 들어온다 */
+function drawOutside() {
+  /* 범위를 방보다 훨씬 넓게 잡아 **거리의 끝이 화면 밖으로 나가게** 한다.
+     방 크기에 맞춰 자르면 길이 허공에서 뚝 끊겨, 톱니 모양 가장자리를 가진
+     판때기가 떠 있는 것처럼 보인다. 화면 밖 타일은 그리기 전에 걸러내므로
+     범위를 넓게 잡아도 비용은 늘지 않는다.
+
+     차도 하나만 깔면 길이 아니라 회색 띠다. **건너편 인도까지** 놓아야
+     "길 건너에서 이쪽으로 온다"로 읽힌다. */
+  for (let gy = -22; gy < ROOM_H + 24; gy++) {
+    for (let gx = -30; gx < -1; gx++) {
+      const { x, y } = P(gx, gy);
+      if (x < -40 || x > STORE_W + 40 || y < -40 || y > STORE_H + 40) continue;
+      if (gx >= -3) {                                    // 이쪽 인도
+        rhomb(X, x, y, HW, HH, ((gx + gy) & 1) ? '#4C5164' : '#464B5D');
+        rhombEdge(X, x, y, HW, HH, '#3F4456');
+      } else if (gx >= -7) {                             // 차도
+        rhomb(X, x, y, HW, HH, gx === -4 || gx === -7 ? '#3E4356' : '#363B4C');
+        if (gx === -6 && ((gy % 3) + 3) % 3 === 0) {
+          X.fillStyle = 'rgba(255,248,214,.22)';         // 중앙선
+          X.fillRect(Math.round(x - 4), Math.round(y - 1), 9, 2);
+        }
+      } else if (gx >= -9) {                             // 건너편 인도
+        rhomb(X, x, y, HW, HH, ((gx + gy) & 1) ? '#43485A' : '#3E4354');
+        rhombEdge(X, x, y, HW, HH, '#383D4E');
+      } else {                                            // 건너편 건물 그늘
+        rhomb(X, x, y, HW, HH, '#22273A');
+      }
+    }
+    if (gy === DOOR.gy) {
+      const { x, y } = P(-2, gy);
+      rhomb(X, x, y, HW, HH, '#5E6478');                 // 문 앞 매트
+    }
+  }
+  /* 연석 — 차도와 인도의 단차. 평면감을 줄이는 데 이게 제일 크다 */
+  for (let gy = -10; gy < ROOM_H + 12; gy++) {
+    const { x, y } = P(-4, gy);
+    if (y < -20 || y > STORE_H + 20) continue;
+    X.fillStyle = '#565B6E'; X.fillRect(Math.round(x - HW), Math.round(y - 2), HW * 2, 2);
+  }
+  /* 가로등 두 개 — 거리라는 신호 */
+  for (const gy of [-3, 3, ROOM_H, ROOM_H + 6]) {
+    const { x, y } = P(-3, gy);
+    X.save(); X.globalAlpha = 0.18; rhomb(X, x + 1, y + 1, 5, 3, '#000000'); X.restore();
+    X.fillStyle = '#6E7488'; X.fillRect(Math.round(x) - 1, Math.round(y) - 26, 2, 26);
+    X.fillStyle = '#F5E3A8'; X.fillRect(Math.round(x) - 3, Math.round(y) - 30, 6, 5);
+    X.save(); X.globalAlpha = 0.16; X.fillStyle = '#FFE9A8';
+    X.fillRect(Math.round(x) - 9, Math.round(y) - 28, 18, 24); X.restore();
+  }
+}
+
 function drawStore() {
-  X.fillStyle = '#151928'; X.fillRect(0, 0, STORE_W, STORE_H);
+  drawBackdrop();
+  drawOutside();
   const f = storeFloor();
   if (f && f.c) X.drawImage(f.c, 0, 0);
 
@@ -644,4 +741,4 @@ function drawFoot() {
   });
 }
 
-export { glassPanel, BOSS, CLERK, CLERK2, COUNTER, DESKS, DOOR, EXTRA_COUNTER, EXTRA_FRIDGE, EXTRA_SHELF, FLATS, FREEZERS, FRIDGES, HOTSPOTS, P, QUEUE, SHELVES, SHOP_BLOCK, SHOP_PROPS, SPAWN_GX, addOffice, advancePhase, bar, blockedAt, countersNow, drawBossDesk, drawCounter, drawDesk, drawEmptyChair, drawFlat, drawFoot, drawFreezer, drawFridge, drawOfficeProp, drawPartition, drawProp, drawShelf, drawSignboard, drawStore, drawWalls, drawWhiteboard, facilKey, findPath, fl, fridgesNow, inBossRoom, invRatio, newCustomer, offFloorPal, palette, retarget, shelvesNow, shopFloorPal, spawnCustomers, stepCustomers, stocked, storeFloor, storeHit, tileOf, walkable };
+export { drawBackdrop, drawOutside, glassPanel, BOSS, CLERK, CLERK2, COUNTER, DESKS, DOOR, EXTRA_COUNTER, EXTRA_FRIDGE, EXTRA_SHELF, FLATS, FREEZERS, FRIDGES, HOTSPOTS, P, QUEUE, SHELVES, SHOP_BLOCK, SHOP_PROPS, SPAWN_GX, addOffice, advancePhase, bar, blockedAt, countersNow, drawBossDesk, drawCounter, drawDesk, drawEmptyChair, drawFlat, drawFoot, drawFreezer, drawFridge, drawOfficeProp, drawPartition, drawProp, drawShelf, drawSignboard, drawStore, drawWalls, drawWhiteboard, facilKey, findPath, fl, fridgesNow, inBossRoom, invRatio, newCustomer, offFloorPal, palette, retarget, shelvesNow, shopFloorPal, spawnCustomers, stepCustomers, stocked, storeFloor, storeHit, tileOf, walkable };
