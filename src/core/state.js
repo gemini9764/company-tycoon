@@ -51,7 +51,7 @@ function newState(companyName, seed) {
     market: [],            // NPC 회사
     nego: null,            // 진행 중 협상
     bank: { rateDelta_: 0, loans: [], insured: false, overdue: 0 },
-    stock: { holds: {}, watch: [] },
+    stock: { holds: {}, watch: [], stake: {} },   // stake = 미리 사두기를 켠 대상
     shaman: { hired: null, pool: [], unlocked: false },
     rumors: [],
     inbox: [], log: [],

@@ -21,6 +21,7 @@ function renderModal() {
     <div class="modal-body">
       ${cfg.body || ''}
       ${(cfg.choices || []).map((c, i) => `
+        ${c.head ? `<div class="meta" style="margin-top:9px;border-top:1px solid var(--paper-3);padding-top:7px">${c.head}</div>` : ''}
         <button class="choice" data-i="${i}" ${c.dis ? 'disabled style="opacity:.45;cursor:not-allowed"' : ''}>
           ${c.label}${c.sub ? `<small>${c.sub}</small>` : ''}
         </button>`).join('')}

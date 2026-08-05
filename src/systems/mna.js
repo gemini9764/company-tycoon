@@ -6,6 +6,7 @@ import { bumpPerks, divisionName, divisionsOf, SUB_TAGS, subPriceMul, tagsOf } f
 import { rand } from '../core/rng.js';
 import { $, clamp, pct, pick, rnd, won } from '../core/util.js';
 import { capCeiling, checkTier, loanRate, recalcCap, teamPower } from './company.js';
+import { clearStake, stakeBonus } from './stock.js';
 import { onAcquired } from './subs.js';
 import { openAcqLoan } from '../ui/bankPanel.js';
 import { openModal } from '../ui/modal.js';
@@ -25,15 +26,20 @@ function startNego(s, target) {
   if (r) prem -= r.val;
   // 알짜는 비싸고 부실은 싸다. 프리미엄이 아니라 배수라 여기서 따로 들고 간다
   const tagMul = subPriceMul(target);
+  /* 미리 사두기 — 밑작업이 협상 시작값에 얹힌다. 여기가 주식과 M&A 를 잇는 유일한
+     지점이다. 소문이 난 뒤(c.leak)에는 프리미엄이 도로 올라간다. */
+  const stake = stakeBonus(s, target);
+  prem += stake.prem;
 
   s.nego = {
     id: target.id, name: target.name, diff: target.diff,
-    progress: 0, success: 12 + sumStat(team, 'nego') * 0.08,
+    progress: 0, success: 12 + sumStat(team, 'nego') * 0.08 + stake.success,
     prem: Math.max(0.02, prem), tagMul, team: team.map(e => e.id),
     marks: [25, 50, 75], blessed: 0,
     acts: BAL.negoActs, done: [],   // 능동 개입 잔여 횟수와 이력
   };
   news(`${s.co.name} 협상단, ${target.name} 인수 협상 착수`);
+  if (stake.stars) toast(`사둔 지분 ${'★'.repeat(stake.stars)} — 성공도 +${stake.success}`, 'good');
   toast(`${target.name} 협상 시작 — 협상 중에도 경영은 계속됩니다`);
 }
 
@@ -247,6 +253,7 @@ function completeAcq(s, tgt, price) {
   onAcquired(s, sub, tgt);       // 우발채무 예약 · 자회사 편입 · 해외 변동 초기화
   if ((tgt.diff0 ?? tgt.diff) >= 2) s.co.hardAcq++;
   s.rumors = s.rumors.filter(r => r.target !== tgt.id);
+  clearStake(s, tgt.id);         // 사둔 지분은 인수에 흡수된다
   news(`${s.co.name}, ${tgt.name} 인수 완료 (${won(price)})`);
   toast(`${tgt.name} 인수 완료 — ${SECTORS[tgt.sector].name} 상품군 추가`, 'good');
   pushInbox(s, '인수 완료', `${tgt.name}을(를) ${won(price)}에 인수했습니다. 통합에 ${BAL.pmiDays}일이 걸리며, 그동안은 관리비만 나가고 수익은 서서히 올라옵니다.`, 'good');

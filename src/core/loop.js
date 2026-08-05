@@ -9,7 +9,7 @@ import { tickEvent } from '../systems/events.js';
 import { tickNego } from '../systems/mna.js';
 import { tickSubs } from '../systems/subs.js';
 import { tickRumor } from '../systems/rumor.js';
-import { tickStock } from '../systems/stock.js';
+import { tickStake, tickStock } from '../systems/stock.js';
 import { renderDock } from '../ui/dock.js';
 import { renderHud } from '../ui/hud.js';
 import { renderLeft } from '../ui/panelLeft.js';
@@ -28,6 +28,7 @@ function tickDay() {
   tickSubs(s);      // 재편 완료 · 우발채무 발동 (tickEconomy 보다 먼저)
   tickEconomy(s);
   tickStock(s);
+  tickStake(s);     // 미리 사두기 — 켜 둔 대상에 매일 소액이 나간다
   tickNego(s);
   tickRumor(s);
   tickEvent(s);

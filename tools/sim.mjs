@@ -34,6 +34,7 @@ const { win, doc } = await boot();
 startGame(doc, '시뮬');
 win.__desk = process.argv.includes('--desk');
 win.__acts = process.argv.includes('--acts');
+win.__stake = process.argv.includes('--stake');
 
 // ── 봇 본체는 페이지 안에서 정의한다 ─────────────────────────
 win.eval(`
@@ -78,7 +79,7 @@ window.runSim = function (strategy, maxDays, seed) {
      같은 회사를 잡았다 중단했다를 무한 반복한다 — 실제로 180건 중 142건이 그랬다. */
   const avoid = new Set();
   const ops = { inv: 0, res: 0, sell: 0, sellSum: 0 };
-  const acts = { fail: 0, buy: 0, use: {}, spend: 0 };
+  const acts = { fail: 0, buy: 0, use: {}, spend: 0, starSum: 0, starN: 0, tied: 0 };
   function activeOps(day) {
     const subs = S.co.subs;
     // 1) 투자 — 부실·노후는 수익을 반 토막 내므로 해소가 거의 항상 이득이다
@@ -118,7 +119,7 @@ window.runSim = function (strategy, maxDays, seed) {
   }
 
   const marks = {};
-  let prevNego = null;
+  let prevNego = null, nextId = null;
   /* 성공은 더 이상 엔딩이 아니다(무한 진행). 계측은 '시총 1위 도달'에서 끊는다. */
   const done = () => S.flags.ending || S.flags.ms.includes('rank1');
   for (let day = 1; day <= maxDays && !done(); day++) {
@@ -130,6 +131,38 @@ window.runSim = function (strategy, maxDays, seed) {
 
     // 인수 판단 — 전략별로 감당할 자금 배수가 다르다
     if (strategy === 'active') activeOps(day);
+
+    /* 미리 사두기 — 협상이 도는 동안 **다음 대상**에 밑밥을 깐다.
+       대상을 매일 새로 고르면 매집한 회사와 실제로 협상을 거는 회사가 어긋나
+       돈만 여기저기 묶인다(첫 정책이 그랬다 — 협상 시작 시 평균 ★0.7).
+       한 번 정한 대상을 붙들고, 그 대상에 협상을 건다.
+       소문 문턱 직전에서 멈춘다 — 넘기면 난이도가 올라 매집한 값어치를 반납한다. */
+    if (window.__stake) {
+      /* 지금 협상 중인 회사는 제외한다. 인수되면 지분이 흡수되므로 헛돈이다 */
+      const ok = x => x && !x.owned && x.listed && !avoid.has(x.id)
+        && x.id !== (S.nego && S.nego.id) && x.cap <= g.capCeiling(S);
+      let t = S.market.find(x => x.id === nextId);
+      if (!ok(t)) {
+        /* 다음 대상은 **지금 협상에 쓸 돈을 뺀 나머지**로 감당되는 것이어야 한다.
+           현재 현금 기준으로 고르면 인수 대금이 빠진 뒤 그 대상을 못 사고
+           매집한 돈이 통째로 버려진다.
+
+           **그래도 평균 ★는 1을 못 넘는다.** 상장 기준이 시총 1,000억(중견기업)
+           이상이라, 중소기업 구간에서 사는 2억~109억짜리 매물은 전부 비상장이다.
+           미리 사두기는 원리적으로 후반 콘텐츠다 — 낮은 ★는 봇 정책의 결함이
+           아니라 상장 기준과 매물 규모가 만든 구조다. */
+        const cur = S.nego ? (S.market.find(x => x.id === S.nego.id)?.cap || 0) * 1.4 : 0;
+        const left = Math.max(0, S.co.cash - cur);
+        t = S.market.filter(x => ok(x) && x.cap * 1.55 <= left * 0.62)
+          .sort((a, b) => b.cap - a.cap)[0];
+        nextId = t ? t.id : null;
+      }
+      for (const id of Object.keys(S.stock.stake || {})) {
+        const c = S.market.find(x => x.id === id);
+        if (!c || c.id !== nextId || g.stakeStars(S, c) >= g.BAL.stakeLeakAt - 1) g.toggleStake(S, c);
+      }
+      if (t && !S.stock.stake[t.id] && g.stakeStars(S, t) < g.BAL.stakeLeakAt - 1) g.toggleStake(S, t);
+    }
 
     /* 협상 중 능동 개입 — 기본 봇은 쓰지 않는다(기준선을 바꾸지 않으려고).
        --acts 로 켜면 '개입까지 챙기는 플레이'를 잰다. --desk 와 같은 관례다.
@@ -159,10 +192,14 @@ window.runSim = function (strategy, maxDays, seed) {
     if (!S.nego && !done()) {
       const mult = strategy === 'reckless' ? 3 : strategy === 'leveraged' ? 1.5 : 0.62;
       const budget = S.co.cash * mult;
-      const c = S.market
-        .filter(x => !x.owned && !sold.has(x.id) && !avoid.has(x.id) && x.cap <= g.capCeiling(S) && x.cap * 1.55 <= budget)
-        .sort((a, b) => b.cap - a.cap)[0];
-      if (c) g.startNego(S, c);
+      const pool = S.market
+        .filter(x => !x.owned && !sold.has(x.id) && !avoid.has(x.id) && x.cap <= g.capCeiling(S) && x.cap * 1.55 <= budget);
+      // 밑밥을 깐 대상이 아직 감당 가능하면 그쪽을 먼저 잡는다
+      const c = (window.__stake && pool.find(x => x.id === nextId)) || pool.sort((a, b) => b.cap - a.cap)[0];
+      if (c) {
+        if (window.__stake) { acts.starSum += g.stakeStars(S, c); acts.starN++; nextId = null; }
+        g.startNego(S, c);
+      }
     }
     // 협상단 3명 + 계열사 관리 인력을 채운다
     const want = 3 + g.managersNeeded(S);
@@ -217,6 +254,7 @@ window.runSim = function (strategy, maxDays, seed) {
     subs: S.co.subs.length, total: S.market.length, cap: g.won(S.co.cap), rank: S.co.rank,
     syn: S.co.synergy.toFixed(2), mistrust: Math.round(S.co.mistrust),
     probe: Math.round(S.co.probe), marks, ops, acts,
+    tied: Object.keys(S.stock.holds).reduce((a, id) => { const c = S.market.find(x => x.id === id); return a + (c ? S.stock.holds[id].qty * c.price : 0); }, 0),
   };
 };
 `);
@@ -259,7 +297,8 @@ for (const [s, sd] of plan) {
   const r = run(s, sd);
   if (r.ops && (r.ops.inv + r.ops.res + r.ops.sell)) console.log(`   \u2514 \uB2A5\uB3D9 \uC6B4\uC601: \uD22C\uC790 ${r.ops.inv} \u00B7 \uC7AC\uD3B8 ${r.ops.res} \u00B7 \uB9E4\uAC01 ${r.ops.sell} (${win.game.won(r.ops.sellSum)})`);
   console.log(`   \u2514 \uD611\uC0C1: \uC131\uC0AC ${r.acts.buy} \u00B7 \uACB0\uB82C/\uC911\uB2E8 ${r.acts.fail} (\uACB0\uB82C\uB960 ${Math.round(r.acts.fail / Math.max(1, r.acts.buy + r.acts.fail) * 100)}%)` +
-    (r.acts.spend ? ` \u00B7 \uAC1C\uC785 ${JSON.stringify(r.acts.use)} \uC9C0\uCD9C ${win.game.won(r.acts.spend)}` : ''));
+    (r.acts.spend ? ` \u00B7 \uAC1C\uC785 ${JSON.stringify(r.acts.use)} \uC9C0\uCD9C ${win.game.won(r.acts.spend)}` : '') +
+    (r.acts.starN ? ` \u00B7 \uD3C9\uADE0 \u2605${(r.acts.starSum / r.acts.starN).toFixed(1)} \u00B7 \uBB36\uC778 \uB3C8 ${win.game.won(r.tied)}` : ''));
   console.log(
     `${(s + '·' + sd).padEnd(11)} ${String(r.days).padStart(4)}  ${r.tier.padEnd(10)} ${r.ending.padEnd(9)}` +
     ` ${String(r.subs + '/' + r.total).padStart(6)}  ${r.cap.padStart(8)} ${String(r.rank).padStart(5)}` +

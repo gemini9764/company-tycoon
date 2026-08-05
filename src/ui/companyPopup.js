@@ -9,6 +9,8 @@ import { capCeiling, loanRate, teamPower } from '../systems/company.js';
 import { startNego } from '../systems/mna.js';
 import { useRumor } from '../systems/rumor.js';
 import { doGut, shamanFee } from '../systems/shaman.js';
+import { sellStock } from '../systems/stock.js';
+import { stakeStars, staking, toggleStake } from '../systems/stock.js';
 import { renderAll } from './index.js';
 import { openModal } from './modal.js';
 import { setTab, TAB } from './tabs.js';
@@ -22,6 +24,7 @@ function openCompany(c) {
   const est = Math.round(c.cap * (1 + Math.max(0.02, d.prem - sumStat(teamOf(s), 'intel') * 0.0016)));
   const short = Math.max(0, est - s.co.cash);
   const finLimit = loanLimit(s, 'acq', est);
+  const stars = stakeStars(s, c), held = s.stock.holds[c.id];
   openModal({
     title: `${c.name} — ${SECTORS[c.sector].name}`,
     body: `
@@ -39,19 +42,32 @@ function openCompany(c) {
               : '<p style="margin-top:8px;font-size:12px" class="c-jade">자기자금으로 지불할 수 있습니다.</p>'}` }
       ${c.owned ? '<p style="margin-top:10px" class="c-jade">이미 우리 그룹 계열사입니다.</p>' : ''}
       ${overCap ? `<p style="margin-top:10px" class="c-blood">현재 등급(${TIERS[s.co.tier].name})으로는 인수할 수 없는 규모입니다. 상한 ${won(capCeiling(s))}</p>` : ''}
+      ${stars ? `<div class="kv"><span>사둔 지분</span><b class="c-gold">${'★'.repeat(stars)}${'☆'.repeat(BAL.stakeStars - stars)}</b></div>` : ''}
+      ${c.leak ? '<p style="margin-top:10px" class="c-blood">지분을 사 모으는 것이 알려졌습니다 — 주가가 오르고 난이도가 한 단계 올라갔습니다.</p>' : ''}
       ${c.curse ? '<p style="margin-top:10px" class="c-mauve">살(煞)이 걸려 있습니다 — 협상 성공도 증가율 +45%</p>' : ''}
       ${rumor ? `<p style="margin-top:10px" class="c-sky">보유 찌라시 ${rumor.grade}급 — 사용 시 인수가 -${Math.round(rumor.val * 100)}%p</p>` : ''}`,
+    /* 선택지를 **밑작업 / 파견** 두 단으로 가른다. 셋이 평면으로 섞여 있으면
+       살굿만 쓰고 나머지를 잊는다 — "협상 전 준비"라는 층이 UI 만으로 생긴다. */
     choices: c.owned ? [] : [
-      { label: '협상단 파견', dis: !!s.nego || overCap || !teamOf(s).length,
+      ...(c.listed ? [{ head: '밑작업 — 협상 전에 깔아 두는 것',
+        label: `이 회사 주식 조금씩 사둔다  ${'★'.repeat(stars)}${'☆'.repeat(BAL.stakeStars - stars)}`,
+        sub: staking(s, c)
+             ? `사는 중 · 하루 ${won(c.cap * BAL.stakeStep)} · ★ 1칸당 성공도 +${BAL.stakeSuccess}, 인수가 -${Math.round(BAL.stakePrem * 100)}%p`
+             : `하루 ${won(c.cap * BAL.stakeStep)}씩 자동으로 나갑니다 · ★★★을 넘기면 소문이 납니다`,
+        run: () => { toggleStake(s, c); renderAll(); } }] : []),
+      ...(held ? [{ label: '사둔 주식을 되판다', sub: `${held.qty.toLocaleString()}주 · 지금 ${won(held.qty * c.price)}`,
+        run: () => { sellStock(s, c, held.qty); renderAll(); } }] : []),
+      ...(rumor ? [{ ...(c.listed ? {} : { head: '밑작업 — 협상 전에 깔아 두는 것' }),
+        label: `${rumor.grade}급 찌라시 사용`, sub: rumor.text, run: () => { useRumor(s, rumor); renderAll(); } }] : []),
+      ...(s.shaman.hired ? [{ label: '살굿 의뢰', sub: `${s.shaman.hired.name} · ${won(shamanFee(s, s.shaman.hired))} · 성공률 ${Math.round(s.shaman.hired.rate * 100)}% · 발각 ${Math.round(s.shaman.hired.expose * 100)}%`,
+        run: () => { doGut(s, 'sal', c.id); renderAll(); } }] : []),
+      ...(c.listed ? [{ label: '주식 관심 등록', sub: '주식 탭 즐겨찾기에 추가',
+        run: () => { if (!s.stock.watch.includes(c.id)) s.stock.watch.push(c.id); setTab('stock'); toast('관심 종목 등록', 'good'); } }] : []),
+      { head: '준비가 끝나면', label: '협상단 파견', dis: !!s.nego || overCap || !teamOf(s).length,
         sub: s.nego ? '이미 진행 중인 협상이 있습니다'
              : !teamOf(s).length ? '협상단에 배정된 직원이 없습니다'
              : `협상단 ${teamOf(s).length}명 · 협상력 ${Math.round(teamPower(s))} · 약 ${Math.ceil(100 / BAL.negoProgressPerDay)}일 소요${short ? ' · 성사 시 대출 필요' : ''}`,
         run: () => { startNego(s, c); renderAll(); } },
-      ...(rumor ? [{ label: `${rumor.grade}급 찌라시 사용`, sub: rumor.text, run: () => { useRumor(s, rumor); renderAll(); } }] : []),
-      ...(c.listed ? [{ label: '주식 관심 등록', sub: '주식 탭 즐겨찾기에 추가',
-        run: () => { if (!s.stock.watch.includes(c.id)) s.stock.watch.push(c.id); setTab('stock'); toast('관심 종목 등록', 'good'); } }] : []),
-      ...(s.shaman.hired ? [{ label: '살굿 의뢰', sub: `${s.shaman.hired.name} · ${won(shamanFee(s, s.shaman.hired))} · 성공률 ${Math.round(s.shaman.hired.rate * 100)}% · 발각 ${Math.round(s.shaman.hired.expose * 100)}%`,
-        run: () => { doGut(s, 'sal', c.id); renderAll(); } }] : []),
     ],
   });
 }

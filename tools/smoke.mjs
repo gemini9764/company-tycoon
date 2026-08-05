@@ -440,6 +440,61 @@ try {
   check('개입 버튼 → 판정 함수', game.S.nego.success > sBefore,
         `성공도 ${Math.round(sBefore)} → ${Math.round(game.S.nego.success)}`);
 
+  /* ── 미리 사두기 (단계 3) ────────────────────────────────
+     매집 → 별 → 협상 시작값 → 소문 → 인수 시 흡수까지 한 줄로 훑는다.
+     판정은 systems/stock.js 의 순수 함수이고 sim 봇도 같은 것을 부른다. */
+  const stakeOk = win.eval(`(() => {
+    const g = window.game, r = [], B = g.BAL;
+    const S = g.setS(g.newState('매집', 1001));
+    S.co.cash = 1e13; S.staff.forEach(e => e.onTeam = true);
+
+    const un = S.market.find(c => !c.listed);
+    g.toggleStake(S, un);
+    r.push(['비상장은 매집 불가', !S.stock.stake[un.id], '상장 기준 = 중견기업 이상']);
+
+    const c = S.market.filter(x => x.listed).sort((a, b) => a.cap - b.cap)[0];
+    g.toggleStake(S, c);
+    for (let i = 0; i < 3; i++) g.tickStake(S);
+    r.push(['★ 1칸 = 지분 ' + Math.round(B.stakePerStar * 100) + '%',
+            g.stakeStars(S, c) === 1, '3일 매집 · 지분 ' + (g.stakeRatio(S, c) * 100).toFixed(1) + '%']);
+
+    for (let i = 0; i < 5; i++) g.tickStake(S);
+    const st = g.stakeStars(S, c), bonus = g.stakeBonus(S, c);
+    r.push(['별이 협상 시작값에 얹힌다', bonus.success === st * B.stakeSuccess && bonus.prem < 0,
+            '★' + st + ' → 성공도 +' + bonus.success]);
+
+    const p0 = c.price, d0 = c.diff;
+    for (let i = 0; i < 6; i++) g.tickStake(S);
+    r.push(['★★★ 초과 시 소문', !!c.leak && c.price > p0 && c.diff >= d0, '주가 급등 · 난이도 상승']);
+    r.push(['소문 나면 프리미엄이 도로 오른다', g.stakeBonus(S, c).prem > -g.stakeStars(S, c) * B.stakePrem, '']);
+
+    // 협상 시작값에 실제로 반영되는가. 상장사는 시총 1,000억 이상이라 등급을 올려야 잡힌다
+    S.co.tier = 6;
+    const c2 = S.market.filter(x => x.listed && x.cap <= g.capCeiling(S) && x.id !== c.id)[0];
+    const base = 12 + g.sumStat(g.teamOf(S), 'nego') * 0.08;
+    r.push(['상장 매물 확보', !!c2, '']);
+    if (c2) {
+      g.toggleStake(S, c2);
+      for (let i = 0; i < 8; i++) g.tickStake(S);
+      const stars2 = g.stakeStars(S, c2);
+      g.startNego(S, c2);
+      r.push(['매집이 협상 성공도 시작값에 반영', S.nego.success > base + stars2 * B.stakeSuccess - 0.01,
+              '★' + stars2 + ' · 시작 성공도 ' + Math.round(S.nego.success)]);
+      g.completeAcq(S, c2, 1);
+      r.push(['인수 시 지분 흡수', !S.stock.holds[c2.id] && !(S.stock.stake || {})[c2.id], '']);
+    }
+
+    // 자금 부족이면 조용히 멈추지 않는다
+    const T = g.setS(g.newState('매집2', 1001));
+    const c3 = T.market.filter(x => x.listed)[0];
+    T.co.cash = 1e13; g.toggleStake(T, c3); g.tickStake(T);
+    T.co.cash = 1;    g.tickStake(T);
+    r.push(['자금 부족 시 자동 해제', !T.stock.stake[c3.id] && !!T.stock.holds[c3.id],
+            '사둔 지분은 남는다']);
+    return r;
+  })()`);
+  stakeOk.forEach(([n, ok, d]) => check(n, ok, d));
+
   check('출력 무결성', !/NaN|undefined|Infinity/.test(all),
         (all.match(/.{0,30}(NaN|undefined|Infinity)/) || [''])[0]);
 } catch (e) {
