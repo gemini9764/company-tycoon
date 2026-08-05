@@ -2,9 +2,11 @@ import { BAL } from '../core/balance.js';
 import { pause, resume } from '../core/clock.js';
 import { DIFFS, SECTORS } from '../core/data.js';
 import { sumStat, teamOf } from '../core/derive.js';
+import { bumpPerks, divisionName, divisionsOf, subPriceMul, tagsOf } from '../core/tags.js';
 import { rand } from '../core/rng.js';
 import { $, clamp, pct, pick, rnd, won } from '../core/util.js';
 import { capCeiling, checkTier, loanRate, recalcCap, teamPower } from './company.js';
+import { onAcquired } from './subs.js';
 import { openAcqLoan } from '../ui/bankPanel.js';
 import { openModal } from '../ui/modal.js';
 import { news, pushInbox, toast } from '../ui/toast.js';
@@ -21,11 +23,13 @@ function startNego(s, target) {
   prem -= team.filter(e => e.trait.id === 'cheap').length * 0.06;
   const r = s.rumors.find(x => x.target === target.id && x.used);
   if (r) prem -= r.val;
+  // 알짜는 비싸고 부실은 싸다. 프리미엄이 아니라 배수라 여기서 따로 들고 간다
+  const tagMul = subPriceMul(target);
 
   s.nego = {
     id: target.id, name: target.name, diff: target.diff,
     progress: 0, success: 12 + sumStat(team, 'nego') * 0.08,
-    prem: Math.max(0.02, prem), team: team.map(e => e.id),
+    prem: Math.max(0.02, prem), tagMul, team: team.map(e => e.id),
     marks: [25, 50, 75], blessed: 0,
   };
   news(`${s.co.name} 협상단, ${target.name} 인수 협상 착수`);
@@ -104,7 +108,7 @@ function finishNego(s) {
       actions: [{ label: '확인', run: resume }],
     });
   }
-  const price = Math.round(tgt.cap * (1 + n.prem));
+  const price = Math.round(tgt.cap * (1 + n.prem) * (n.tagMul ?? 1));
   const short = Math.max(0, price - s.co.cash);
   pause();
   openModal({
@@ -129,13 +133,43 @@ function finishNego(s) {
 
 function completeAcq(s, tgt, price) {
   tgt.owned = true;
-  s.co.subs.push({ id: tgt.id, name: tgt.name, sector: tgt.sector, cap: tgt.cap, diff: tgt.diff, day: s.day });
+  const sub = {
+    id: tgt.id, name: tgt.name, sector: tgt.sector, cap: tgt.cap, diff: tgt.diff, day: s.day,
+    tags: tagsOf(tgt).slice(),   // 특성은 그대로 따라온다
+    seen: (tgt.seen || []).slice(),
+    paid: price,                 // 매각 손익을 보여주려면 인수가를 기억해야 한다
+    restruct: null, debtDay: 0,
+  };
+  s.co.subs.push(sub);
+  onAcquired(s, sub, tgt);       // 우발채무 예약 · 자회사 편입 · 해외 변동 초기화
   if ((tgt.diff0 ?? tgt.diff) >= 2) s.co.hardAcq++;
   s.rumors = s.rumors.filter(r => r.target !== tgt.id);
   news(`${s.co.name}, ${tgt.name} 인수 완료 (${won(price)})`);
   toast(`${tgt.name} 인수 완료 — ${SECTORS[tgt.sector].name} 상품군 추가`, 'good');
   pushInbox(s, '인수 완료', `${tgt.name}을(를) ${won(price)}에 인수했습니다. 통합에 ${BAL.pmiDays}일이 걸리며, 그동안은 관리비만 나가고 수익은 서서히 올라옵니다.`, 'good');
+  bumpPerks();
+  checkDivisions(s);
   recalcCap(s); checkTier(s);
 }
 
-export { completeAcq, finishNego, negoEvent, startNego, tickNego };
+/* 사업부 결성/해체를 **상태 변화가 있을 때만** 알린다.
+   매일 돌리면 압류·매각으로 해체됐다 재결성될 때 연출이 반복된다. */
+function checkDivisions(s) {
+  const now = divisionsOf(s);
+  const was = s.co.divs || [];
+  const born = now.filter(k => !was.includes(k));
+  s.co.divs = now;
+  if (!born.length) return;
+
+  born.forEach(k => {
+    news(`${s.co.name}, ${divisionName(k)} 출범`);
+    pushInbox(s, '사업부 출범',
+      `같은 업종 계열사가 3개가 되어 <b>${divisionName(k)}</b>가 결성됐습니다. 해당 업종 효과가 <b>2배</b>가 됩니다.`, 'good');
+  });
+  if (now.length >= 5 && was.length < 5) {
+    news(`${s.co.name}, 지주회사 체제 전환`);
+    toast('지주회사 체제 — 관리 인력 요구 -25%', 'good');
+  }
+}
+
+export { checkDivisions, completeAcq, finishNego, negoEvent, startNego, tickNego };

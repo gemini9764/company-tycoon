@@ -1,10 +1,12 @@
 import { BAL } from '../core/balance.js';
 import { DIFFS, SECTORS, TIERS } from '../core/data.js';
 import { S } from '../core/state.js';
+import { divisionName, divisionsOf, isHolding, tagChips } from '../core/tags.js';
 import { $, esc, pct, won } from '../core/util.js';
 import { capCeiling } from '../systems/company.js';
 import { goalText } from '../systems/ending.js';
 import { managersHave, managersNeeded, pmi, synergyParts } from '../systems/economy.js';
+import { openSub } from './subPanel.js';
 import { TAB } from './tabs.js';
 
 /* ── 회사 현황 창 ────────────────────────────────────────── */
@@ -66,18 +68,39 @@ function renderLeft() {
         <i style="width:${(syn - BAL.synMin) / (BAL.synMax - BAL.synMin) * 100}%;background:${syn >= 1 ? 'var(--jade)' : 'var(--blood)'}"></i>
       </div>
       <div class="meta">계열사 수익 전체에 곱해집니다. 목표 ×${sp.target.toFixed(2)}로 서서히 수렴합니다.</div>
-      ${line('업종 집중', sp.focus)}${line('통합 진행 중', sp.integ)}${line('관리 인력 부족', sp.short)}${line('점검 효과', sp.audit)}
+      ${line('업종 집중', sp.focus)}${line('계열사 특성', sp.tag)}${line('통합 진행 중', sp.integ)}${line('관리 인력 부족', sp.short)}${line('점검 효과', sp.audit)}
       <div class="kv"><span>관리 인력</span><b class="${managersHave(s) < managersNeeded(s) ? 'c-blood' : ''}">${managersHave(s)} / ${managersNeeded(s)}명 필요</b></div>
       <div class="meta">사업부 점검은 <b>사옥 → 매장 → 운영</b> 에서 실행합니다.</div>
     </div>`;
+    const divs = divisionsOf(s);
+    if (divs.length) {
+      h += `<div class="row" style="border-color:var(--gold)">
+        <h4 class="c-gold">사업부 ${divs.length}${isHolding(s) ? ' <b class="c-gold">지주회사 체제</b>' : ''}</h4>
+        ${divs.map(k => `<div class="kv"><span>${divisionName(k)}</span><b class="c-jade">효과 2배</b></div>`).join('')}
+        <div class="meta">같은 업종 계열사 3개면 결성됩니다. 5개 사업부에서 지주회사 체제.</div>
+      </div>`;
+    }
     h += `<div class="row"><h4>계열사 ${s.co.subs.length}</h4>${
       s.co.subs.map(c => {
         const p = Math.round(pmi(s, c) * 100);
-        return `<div class="kv"><span>${esc(c.name)}</span><b class="c-dim">${SECTORS[c.sector].name} ${won(c.cap)}${p < 100 ? ` <span class="c-blood">통합 ${p}%</span>` : ''}</b></div>`;
-      }).join('')}</div>`;
+        const chips = tagChips(c);
+        return `<div class="kv sub-row" data-sub="${c.id}" style="cursor:pointer">
+          <span>${esc(c.name)}${chips ? ` <span style="font-size:10px">${chips}</span>` : ''}</span>
+          <b class="c-dim">${SECTORS[c.sector].name} ${won(c.cap)}${
+            c.restruct ? ' <span class="c-gold">재편 중</span>' : p < 100 ? ` <span class="c-blood">통합 ${p}%</span>` : ''}</b>
+        </div>`;
+      }).join('')}
+      <div class="meta">계열사를 누르면 투자 · 재편 · 매각을 할 수 있습니다.</div></div>`;
   }
 
   $('panel-body').innerHTML = h;
+
+  $('panel-body').querySelectorAll('[data-sub]').forEach(el => {
+    el.onclick = () => {
+      const c = S.co.subs.find(x => x.id === el.dataset.sub);
+      if (c) openSub(c);
+    };
+  });
 }
 
 

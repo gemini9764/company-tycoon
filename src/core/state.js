@@ -1,6 +1,7 @@
 import { BAL } from './balance.js';
 import { FIRST, GIVEN, LIST_TIER, NAME_A, SECTORS, SECTOR_KEYS, SHAMAN_TIERS, TRAITS, capTier } from './data.js';
 import { randomSeed, rngState, setSeed } from './rng.js';
+import { rollSubTags } from './tags.js';
 import { chance, clamp, pick, rint, rnd } from './util.js';
 import { recalcCap } from '../systems/company.js';
 
@@ -8,7 +9,7 @@ import { recalcCap } from '../systems/company.js';
 /* 세이브 포맷 버전. 상태 구조를 바꾸면 올린다 — 구버전 세이브는 폐기된다.
    newState 의 v 와 storage 의 검사값이 갈라지면 '이어하기'가 조용히 죽으므로
    두 곳이 이 상수 하나만 본다. */
-const SAVE_V = 11;
+const SAVE_V = 12;   // v12 — 계열사 특성 태그 · 업종 퍼크 · 사업부
 
 let S = null;
 
@@ -23,7 +24,7 @@ function newState(companyName, seed) {
   const sd = seed === undefined ? randomSeed() : (seed >>> 0) || 1;
   setSeed(sd);
   const s = {
-    v: SAVE_V,     // v11 — 맵 8×8(간격 4타일) + 시드 고정. 구버전 세이브는 폐기된다
+    v: SAVE_V,     // v12 — 맵 8×8(간격 4타일) + 시드 고정. 구버전 세이브는 폐기된다
     seed: sd,      // 이 판을 만든 시드. 재현하려면 game.newState(이름, seed)
     rng: sd,       // 난수열의 현재 위치. 저장 직전에 갱신한다
     day: 1, speed: 1, mode: 'city', view: 0,   // view = 카메라 방향 0~3 (90°씩)
@@ -39,6 +40,7 @@ function newState(companyName, seed) {
       mistrust: 0,         // 무속 신뢰도(미신지수)
       revToday: 0, costToday: 0, rev30: [], negMonths: 0,
       synergy: 1.0, auditBuff: 0,
+      divs: [],            // 결성된 사업부 업종 키. 결성/해체 연출을 diff 로만 내기 위해 들고 있는다
       /* 매장 운영 — 사옥 모드의 능동 요소 */
       inv: 100,            // 재고율 0~100. 팔릴수록 줄고, 바닥나면 매출이 invFloor 배
       autoOrder: false,    // 자동 발주 (단가 할증, 손 안 대도 유지)
@@ -91,9 +93,15 @@ function seedMarket(s) {
       cap, diff, diff0: diff, lot, listed,   // diff0 = 원래 난이도 (등급 조건 판정 기준)
       price: listed ? Math.max(500, Math.round(cap / rint(3000, 90000) / 10) * 10) : 0,
       hist: [], owned: false, curse: 0,
+      tags: [],              // 개별 특성 0~2개. 아래에서 별도 패스로 채운다
+      seen: [],              // 실사로 깐 hidden 태그 id
     };
   });
   s.market.forEach(c => { if (c.listed) c.hist = Array(24).fill(c.price); });
+  /* 태그는 매물 생성이 **전부 끝난 뒤** 별도 패스에서 뽑는다.
+     생성 루프 안에서 뽑으면 난수열이 밀려 같은 시드인데도 매물 배치·시총이
+     통째로 달라진다 — 기존 기준선과 비교가 불가능해진다. */
+  s.market.forEach(c => { c.tags = rollSubTags(); });
 }
 
 function makeStaff(grade) {

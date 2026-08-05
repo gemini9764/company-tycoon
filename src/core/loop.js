@@ -7,6 +7,7 @@ import { tickEconomy, tickMonth } from '../systems/economy.js';
 import { checkEnding } from '../systems/ending.js';
 import { tickEvent } from '../systems/events.js';
 import { tickNego } from '../systems/mna.js';
+import { tickSubs } from '../systems/subs.js';
 import { tickRumor } from '../systems/rumor.js';
 import { tickStock } from '../systems/stock.js';
 import { renderDock } from '../ui/dock.js';
@@ -24,6 +25,7 @@ function tickDay() {
   const s = S;
   if (s.flags.ending) return;
   s.day++;
+  tickSubs(s);      // 재편 완료 · 우발채무 발동 (tickEconomy 보다 먼저)
   tickEconomy(s);
   tickStock(s);
   tickNego(s);

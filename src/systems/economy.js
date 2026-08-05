@@ -1,8 +1,10 @@
 import { BAL } from '../core/balance.js';
 import { SECTORS } from '../core/data.js';
 import { sumStat } from '../core/derive.js';
+import { isHolding, perksOf, sectorBonusOf, subMgrLoad, subYieldMul, tagMarketing, tagSynergy } from '../core/tags.js';
 import { $, clamp, rnd, won } from '../core/util.js';
 import { checkBankrupt, seizeSub } from './bank.js';
+import { rollSubVol } from './subs.js';
 import { pushInbox } from '../ui/toast.js';
 
 /* ── 매장 시설 ────────────────────────────────────────────
@@ -20,7 +22,8 @@ const facLv = (s, k) => (s.co.facil && s.co.facil[k]) || 0;
 /** 다음 단계 비용. 회사 규모를 따라가므로 후반에도 의미가 남는다. */
 function facilCost(s, k) {
   const lv = facLv(s, k);
-  return Math.round(Math.max(2e7, retailPotential(s) * 9) * Math.pow(2.2, lv));
+  const cut = 1 + perksOf(s).facilCost;                     // tech 계열사가 깎는다
+  return Math.round(Math.max(2e7, retailPotential(s) * 9) * Math.pow(2.2, lv) * cut);
 }
 
 function facilLocked(s, k) { return s.co.tier < FACIL[k].tier; }
@@ -33,7 +36,9 @@ function retailPotential(s) {
                  + s.staff.filter(e => e.trait.id === 'star').length * 0.12;
   const variety = 1 + s.co.subs.length * 0.06;
   const fac = 1 + facLv(s, 'shelf') * 0.07 + facLv(s, 'counter') * 0.04;
-  return base * s.co.marketing * salesBuf * variety * fac;
+  const pk  = 1 + perksOf(s).retailMul;                     // daily 계열사
+  const brd = 1 + tagMarketing(s) * 0.1;                    // 브랜드 태그
+  return base * s.co.marketing * salesBuf * variety * fac * pk * brd;
 }
 
 /** 재고가 매출에 곱해지는 배수. 바닥나도 invFloor 까지만 떨어진다. */
@@ -45,11 +50,11 @@ function invFactor(s) {
 function dailyRetail(s) { return retailPotential(s) * invFactor(s); }
 
 /** 만재에서 바닥까지 걸리는 일수 */
-function invLife(s) { return BAL.invDays + facLv(s, 'cold') * 4; }
+function invLife(s) { return (BAL.invDays + facLv(s, 'cold') * 4) * (1 + perksOf(s).invLife); }
 
 /** 재고 pct 만큼 채우는 값. 절반 이상 한 번에 채우면 할인. */
 function invCost(s, pct) {
-  const raw = retailPotential(s) * BAL.invUnit * pct;
+  const raw = retailPotential(s) * BAL.invUnit * pct * (1 + perksOf(s).invCost);
   return Math.round(raw * (pct >= 50 ? 1 - BAL.invBulkOff : 1));
 }
 
@@ -84,15 +89,19 @@ function tickInv(s) {
 /* 통합 진척도 — 인수 직후엔 시너지가 안 나오고, pmiDays에 걸쳐 100%까지 올라온다.
    관리비는 첫날부터 전액 나가므로 차입 인수는 초반 몇 달간 현금이 마른다. */
 function pmi(s, c) {
-  return clamp((s.day - (c.day ?? 0)) / BAL.pmiDays, BAL.pmiFloor, 1);
+  const days = BAL.pmiDays * (1 - perksOf(s).pmiFast);      // IT 계열사가 단축
+  return clamp((s.day - (c.day ?? 0)) / Math.max(8, days), BAL.pmiFloor, 1);
 }
 
 /* 그룹 운영 효율 — 계열사 수익 전체에 곱해지는 배수.
    업종을 겹쳐 인수할수록 오르고, 관리 인력이 모자라거나 통합이 밀리면 떨어진다.
    후반부에도 경영 모드의 결정이 그룹 수익의 최대 변수로 남게 하는 장치. */
-function managersNeeded(s) { return Math.ceil(s.co.subs.length / BAL.subsPerManager); }
+function managersNeeded(s) {
+  const load = s.co.subs.reduce((a, c) => a + subMgrLoad(c), 0);   // 강성 노조는 2인분
+  return Math.ceil(load / BAL.subsPerManager * (isHolding(s) ? 0.75 : 1));   // 지주회사 체제 -25%
+}
 
-function managersHave(s)   { return s.staff.filter(e => !e.onTeam).length + facLv(s, 'office'); }
+function managersHave(s)   { return s.staff.filter(e => !e.onTeam).length + facLv(s, 'office') + perksOf(s).managers; }
 
 function synergyParts(s) {
   const bySec = {};
@@ -101,8 +110,9 @@ function synergyParts(s) {
   const short  = -Math.max(0, managersNeeded(s) - managersHave(s)) * 0.09;
   const integ  = -s.co.subs.filter(c => pmi(s, c) < 1).length * 0.05;
   const audit  = s.co.auditBuff || 0;
-  return { focus, short, integ, audit,
-           target: clamp(1 + focus + short + integ + audit, BAL.synMin, BAL.synMax) };
+  const tag    = tagSynergy(s);                              // 오너 일가 등
+  return { focus, short, integ, audit, tag,
+           target: clamp(1 + focus + short + integ + audit + tag, BAL.synMin, BAL.synMax) };
 }
 
 function tickSynergy(s) {
@@ -113,7 +123,13 @@ function tickSynergy(s) {
 
 function dailySubIncome(s) {
   const syn = s.co.synergy ?? 1;
-  return s.co.subs.reduce((a, c) => a + c.cap * BAL.subYield * (1 + SECTORS[c.sector].margin) * pmi(s, c), 0) * syn;
+  const sec = sectorBonusOf(s);                              // 특허 보유 → 같은 업종 전체 +10%
+  const pk  = 1 + perksOf(s).subIncome;                      // 제약 계열사
+  const sum = s.co.subs.reduce((a, c) => {
+    if (c.restruct) return a;                                // 재편 중에는 수익이 없다
+    return a + c.cap * BAL.subYield * (1 + SECTORS[c.sector].margin) * pmi(s, c) * subYieldMul(c, sec);
+  }, 0);
+  return sum * syn * pk;
 }
 
 function dailyUpkeep(s) {
@@ -128,7 +144,9 @@ function tickEconomy(s) {
   s.co.cash += rev - cost;
   s.co.rev30.push(rev - cost);
   if (s.co.rev30.length > 30) s.co.rev30.shift();
-  s.co.marketing = Math.max(1, s.co.marketing * BAL.marketingDecay);
+  const pk = perksOf(s);
+  const decay = 1 - (1 - BAL.marketingDecay) * (1 - Math.min(0.8, pk.mktKeep));   // 의류
+  s.co.marketing = Math.min(BAL.marketingCap, Math.max(1, s.co.marketing * decay + pk.mktGain)); // 미디어
   tickSynergy(s);
 }
 
@@ -163,6 +181,7 @@ function tickMonth(s) {
     s.co.cash -= fee; lines.push(`파산 보험료 -${won(fee)}`);
   }
   s.co.donate = Math.max(0, s.co.donate - 0.4); // 기부 효과는 서서히 희석
+  rollSubVol(s);   // 해외 법인 수익 변동 배수를 새로 뽑는다
 
   // 주가 실적 반영
   s.market.forEach(c => {

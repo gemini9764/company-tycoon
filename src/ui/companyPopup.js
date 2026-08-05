@@ -2,6 +2,7 @@ import { BAL } from '../core/balance.js';
 import { DIFFS, SECTORS, TIERS } from '../core/data.js';
 import { sumStat, teamOf } from '../core/derive.js';
 import { S } from '../core/state.js';
+import { hasHidden, tagChips } from '../core/tags.js';
 import { $, won } from '../core/util.js';
 import { loanLimit } from '../systems/bank.js';
 import { capCeiling, loanRate, teamPower } from '../systems/company.js';
@@ -28,6 +29,8 @@ function openCompany(c) {
       <div class="kv"><span>인수 난이도</span><b>${d.name}${(c.diff0 ?? c.diff) > c.diff ? ` <span class="c-jade">(원래 ${DIFFS[c.diff0].name})</span>` : ''}</b></div>
       <div class="kv"><span>예상 프리미엄</span><b>+${Math.round(d.prem * 100)}%</b></div>
       <div class="kv"><span>상장 여부</span><b>${c.listed ? '상장 · ' + c.price.toLocaleString() + '원' : '비상장'}</b></div>
+      ${tagChips(c) || hasHidden(c) ? `<div class="kv"><span>특성</span><b>${tagChips(c)}${
+        hasHidden(c) ? `${tagChips(c) ? ' · ' : ''}<span class="c-dim">???</span>` : ''}</b></div>` : ''}
       ${c.owned ? '' : `
       <div class="kv" style="border-top:2px solid var(--paper-3);margin-top:6px;padding-top:6px">
         <span>예상 인수가</span><b class="c-gold">${won(est)}</b></div>

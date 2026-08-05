@@ -338,6 +338,48 @@ try {
   })()`);
   check('세이브가 난수열을 잇는다', rngOk === true, rngOk === true ? 'rng 상태 복원 OK' : rngOk);
 
+  /* ── 계열사 특성 (단계 1) ────────────────────────────────
+     태그·업종 퍼크·사업부는 상태에서만 파생되므로 UI 를 거치지 않고
+     순수 함수를 직접 부른다. sim 봇도 같은 함수를 쓴다. */
+  const tagOk = win.eval(`(() => {
+    const g = window.game, r = [];
+    g.setS(g.newState('태그', 1001));
+    const S = g.S;
+    const rate = S.market.filter(c => c.tags.length).length / S.market.length;
+    r.push(['태그 부여율', rate >= 0.5 && rate <= 0.72, Math.round(rate * 100) + '%']);
+
+    g.setS(g.newState('태그', 1001));
+    const a = g.S.market.map(c => c.name + ':' + c.tags.join('|')).join();
+    g.setS(g.newState('태그', 1001));
+    const b = g.S.market.map(c => c.name + ':' + c.tags.join('|')).join();
+    r.push(['태그 결정론', a === b, '같은 시드 = 같은 태그']);
+
+    const T = g.S;
+    T.co.subs = Array.from({ length: 12 }, (_, i) => ({ id: 'x' + i, name: 't' + i, sector: 'daily', cap: 1e9, diff: 0, day: 1, tags: [] }));
+    g.bumpPerks();
+    r.push(['업종 퍼크 상한', Math.abs(g.perksOf(T).retailMul - 0.40) < 1e-9, 'retailMul ' + g.perksOf(T).retailMul.toFixed(2)]);
+    r.push(['사업부 결성', g.divisionsOf(T).includes('daily'), '같은 업종 3개']);
+    T.co.subs = T.co.subs.slice(0, 2); g.bumpPerks();
+    r.push(['사업부 해체', !g.divisionsOf(T).includes('daily'), '3개 미만']);
+
+    T.co.subs = [{ id: 'z', name: '담보사', sector: 'it', cap: 1e10, diff: 1, day: 1, tags: [] }];
+    T.bank.loans = [{ kind: 'acq', collateral: '담보사', left: 1e9, due: 1e8, months: 15, rate: 5 }];
+    r.push(['담보 계열사 매각 차단', g.canSellSub(T, T.co.subs[0]) !== null, '']);
+
+    T.bank.loans = [];
+    T.co.subs = [{ id: 'r', name: '부실사', sector: 'it', cap: 1e10, diff: 1, day: 1, tags: ['rot'] }];
+    T.co.cash = 1e12;
+    g.investSub(T, T.co.subs[0]);
+    r.push(['투자로 부실 해소', !T.co.subs[0].tags.includes('rot'), '시총 +12%']);
+
+    T.co.subs = [{ id: 'q', name: '재편사', sector: 'it', cap: 1e12, diff: 1, day: 1, tags: [], restruct: { to: 'fin', until: 9999 } }];
+    T.co.synergy = 1; g.bumpPerks();
+    r.push(['재편 중 수익 0', g.dailySubIncome(T) === 0, '']);
+
+    return r;
+  })()`);
+  tagOk.forEach(([n, ok, d]) => check(n, ok, d));
+
   check('출력 무결성', !/NaN|undefined|Infinity/.test(all),
         (all.match(/.{0,30}(NaN|undefined|Infinity)/) || [''])[0]);
 } catch (e) {
