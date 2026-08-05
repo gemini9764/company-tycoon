@@ -59,7 +59,8 @@ function renderLeft() {
     h += `<div class="row" style="border-color:var(--sky)">
       <h4 class="c-sky">진행 중 M&amp;A</h4>
       <div style="font-size:12px;margin:3px 0">${esc(n.name)}</div>
-      <div class="meta">난이도 ${DIFFS[n.diff].name} · 협상단 ${n.team.length}명 · 예상 프리미엄 +${Math.round(n.prem * 100)}%</div>
+      <div class="meta">난이도 ${DIFFS[n.diff].name} · 협상단 ${n.team.length}명 · 예상 프리미엄 +${Math.round(n.prem * 100)}%${n.direct ? ' · 직접 협상' : ' · 위임'}</div>
+      ${n.rivalDue ? `<div class="meta c-blood" style="font-size:11px">다른 그룹도 접근 중 — <b>${Math.max(0, n.rivalDue - s.day)}일</b> 안에 마쳐야 합니다</div>` : ''}
       <div style="margin-top:6px;font-size:10px;font-family:var(--f-sm)">진행도</div>
       <div class="gauge"><i style="width:${n.progress}%;background:var(--sky)"></i><span>${pct(n.progress)}</span></div>
       <div style="margin-top:5px;font-size:10px;font-family:var(--f-sm)">성공도</div>

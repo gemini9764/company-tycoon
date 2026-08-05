@@ -191,7 +191,12 @@ window.runSim = function (strategy, maxDays, seed) {
       /* 실사를 협상마다 쓰면 개입 3회 중 1회가 고정 소모된다 (기획서 §12-3의 우려).
          계측해 보니 습관적 실사는 진행도만 깎아 순손실이었다 — **큰 건에만** 쓴다. */
       const heavy = g.NEGO_ACTS.quit.cost(S, n) / g.BAL.negoQuitFee > S.co.cash * 0.35;
-      if (!did('audit') && heavy && n.progress >= 15 && n.progress < 45 && rich('audit')) use('audit');
+      /* 매물 경쟁 — 마감까지 남은 날로 끝낼 수 없으면 시한 제시가 최우선이다.
+         이게 '시한 제시'가 처음으로 쓸모를 갖는 지점이다. */
+      const due = n.rivalDue ? n.rivalDue - S.day : 99;
+      const need = (100 - n.progress) / g.BAL.negoProgressPerDay;
+      if (due < need + 1 && !did('push')) use('push');
+      else if (!did('audit') && heavy && n.progress >= 15 && n.progress < 45 && rich('audit')) use('audit');
       /* 손절 조건. 진행 50% 시점에 성공도로 판단하면 **너무 이르다** — 성공도는
          남은 날 동안 계속 오르므로 아직 진 판이 아니다(초기 정책이 이걸 놓쳐
          180건 중 155건을 중단했다). 중단의 값어치는 두 곳에만 있다:

@@ -563,6 +563,42 @@ try {
   resolveModals(doc, /자기자금|확인/);
   check('테이블 뒤 판정으로 넘어간다', !game.S.nego);
 
+  /* ── 매물 경쟁 (시한 압박) ───────────────────────────── */
+  const rivalOk = win.eval(`(() => {
+    const g = window.game, r = [], B = g.BAL;
+    const S = g.setS(g.newState('경쟁', 1001));
+    S.staff.forEach(e => e.onTeam = true);
+    const t = S.market.filter(c => !c.owned && c.cap <= g.capCeiling(S)).sort((a, b) => a.cap - b.cap)[0];
+    S.co.cash = t.cap * 4;
+    const cap0 = t.cap, diff0 = t.diff;
+
+    g.startNego(S, t);
+    S.nego.rivalDue = S.day + 2;                 // 마감을 강제로 당긴다
+    r.push(['마감이 협상에 걸린다', S.nego.rivalDue > S.day, '']);
+    S.day = S.nego.rivalDue;                     // 마감일 도달
+    g.tickNego(S);
+    r.push(['마감을 넘기면 매물을 잃는다', !S.nego, '협상 종료']);
+    r.push(['잃은 매물은 사라지지 않는다', !t.owned && !!t.rivalOwned, '다시 노릴 수 있다']);
+    r.push(['값이 오르고 난이도가 오른다',
+            t.cap > cap0 && t.diff === Math.min(3, diff0 + 1),
+            '+' + Math.round((t.cap / cap0 - 1) * 100) + '% · 난이도 ' + diff0 + '→' + t.diff]);
+
+    // 진행도 100% 면 마감이 지나도 뺏기지 않는다
+    const S2 = g.setS(g.newState('경쟁2', 1001));
+    S2.staff.forEach(e => e.onTeam = true);
+    const t2 = S2.market.filter(c => !c.owned && c.cap <= g.capCeiling(S2)).sort((a, b) => a.cap - b.cap)[0];
+    S2.co.cash = t2.cap * 4;
+    g.startNego(S2, t2);
+    S2.nego.rivalDue = S2.day; S2.nego.progress = 100; S2.nego.marks = [];
+    g.tickNego(S2);
+    r.push(['진행도 100% 면 마감을 넘겨도 안전', !t2.rivalOwned, '']);
+
+    r.push(['협상 1건 ≈ ' + Math.round(100 / B.negoProgressPerDay) + '일',
+            Math.round(100 / B.negoProgressPerDay) === 10, '15일 → 10일']);
+    return r;
+  })()`);
+  rivalOk.forEach(([n, ok, d]) => check(n, ok, d));
+
   check('출력 무결성', !/NaN|undefined|Infinity/.test(all),
         (all.match(/.{0,30}(NaN|undefined|Infinity)/) || [''])[0]);
 } catch (e) {

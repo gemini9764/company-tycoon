@@ -4,7 +4,7 @@ import { DIFFS, SECTORS } from '../core/data.js';
 import { sumStat, teamOf } from '../core/derive.js';
 import { bumpPerks, divisionName, divisionsOf, SUB_TAGS, subPriceMul, tagsOf } from '../core/tags.js';
 import { rand } from '../core/rng.js';
-import { $, clamp, pct, pick, rnd, won } from '../core/util.js';
+import { $, chance, clamp, pct, pick, rint, rnd, won } from '../core/util.js';
 import { capCeiling, checkTier, loanRate, recalcCap, teamPower } from './company.js';
 import { delegateTable, rollDemands } from './negoTable.js';
 import { clearStake, stakeBonus } from './stock.js';
@@ -41,6 +41,13 @@ function startNego(s, target, direct = false) {
     acts: BAL.negoActs, done: [],   // 능동 개입 잔여 횟수와 이력
     direct,                          // 클로징에서 테이블을 열지 (false = 협상단에 위임)
   };
+  /* 매물 경쟁 — 마감이 걸리면 진행 속도가 자원이 된다 */
+  if (chance(BAL.rivalChance)) {
+    s.nego.rivalDue = s.day + rint(BAL.rivalDaysMin, BAL.rivalDaysMax);
+    news(`${target.name}에 다른 그룹도 접근 중`);
+    pushInbox(s, '경쟁 인수자 등장',
+      `<b>${target.name}</b> 인수에 다른 그룹이 뛰어들었습니다. <b>${s.nego.rivalDue - s.day}일</b> 안에 협상을 마치지 못하면 넘어갑니다. 회사 창에서 <b>시한 제시</b>로 진행을 앞당길 수 있습니다.`, 'bad');
+  }
   news(`${s.co.name} 협상단, ${target.name} 인수 협상 착수`);
   if (stake.stars) toast(`사둔 지분 ${'★'.repeat(stake.stars)} — 성공도 +${stake.success}`, 'good');
   toast(`${target.name} 협상 시작 — 협상 중에도 경영은 계속됩니다`);
@@ -63,7 +70,27 @@ function tickNego(s) {
     n.marks.shift();
     negoEvent(s, n, team);
   }
+  // 마감을 넘기면 매물이 넘어간다. 진행도 판정보다 **먼저** 본다
+  if (n.rivalDue && s.day >= n.rivalDue && n.progress < 100) return loseToRival(s);
   if (n.progress >= 100) finishNego(s);
+}
+
+/**
+ * 경쟁에서 밀렸다. 매물을 시장에서 빼지 않는다 — 후반에 살 것이 마른다.
+ * 값이 오르고 난이도가 올라 '더 비싸게라도 다시 노릴지'가 선택으로 남는다.
+ */
+function loseToRival(s) {
+  const n = s.nego, tgt = s.market.find(c => c.id === n.id);
+  s.nego = null;
+  if (tgt) {
+    tgt.cap = Math.round(tgt.cap * (1 + BAL.rivalCapUp));
+    tgt.diff = Math.min(3, tgt.diff + 1);
+    tgt.rivalOwned = true;
+    news(`${tgt.name}, 다른 그룹에 넘어감`);
+    pushInbox(s, '인수 실패 — 경쟁에서 밀림',
+      `<b>${tgt.name}</b>이(가) 다른 그룹에 넘어갔습니다. 시가총액이 ${Math.round(BAL.rivalCapUp * 100)}% 오르고 인수 난이도가 한 단계 올라갔습니다. 다시 노릴 수는 있습니다.`, 'bad');
+    toast(`${tgt.name} — 경쟁에서 밀렸습니다`, 'bad');
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -314,5 +341,5 @@ function checkDivisions(s) {
   }
 }
 
-export { applyTable, checkDivisions, completeAcq, finishNego, judgeNego, negoEvent, startNego, tickNego };
+export { applyTable, checkDivisions, completeAcq, finishNego, judgeNego, loseToRival, negoEvent, startNego, tickNego };
 export { NEGO_ACTS, negoAct, negoLeft };
