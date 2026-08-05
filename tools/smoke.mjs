@@ -507,6 +507,62 @@ try {
   })()`);
   stakeOk.forEach(([n, ok, d]) => check(n, ok, d));
 
+  /* ── 협상 테이블 (단계 4) ────────────────────────────────
+     판정은 systems/negoTable.js 의 순수 함수. UI 는 라운드마다 모달을 다시
+     띄우는 껍데기이고 sim 봇도 같은 함수를 부른다. */
+  const tblPure = win.eval(`(() => {
+    const g = window.game, r = [], B = g.BAL;
+    const S = g.setS(g.newState('테이블', 1001));
+    S.staff.forEach(e => e.onTeam = true);
+    const team = g.teamOf(S);
+
+    r.push(['라운드 수 = 2 + 난이도',
+            [0,1,2,3].every(d => g.tableRounds(d) === 2 + d), '하 2 ~ 최상 5']);
+
+    const d0 = g.delegateTable();
+    r.push(['위임은 성공도·인수가에 무영향', d0.dS === 0 && d0.dP === 0, '기준선 보존']);
+
+    const e = team[0], ap = g.approachOf(e);
+    const hitDem = g.APPROACH[ap].beats[0];
+    const missDem = g.DEMAND_KEYS.find(k => !g.APPROACH[ap].beats.includes(k));
+    const hit = g.tableRound(e, hitDem), miss = g.tableRound(e, missDem);
+    r.push(['상성 적중 — 성공도↑ 인수가↓', hit.hit && hit.dS > 0 && hit.dP < 0,
+            '+' + hit.dS.toFixed(1) + ' / ' + (hit.dP*100).toFixed(1) + '%p']);
+    r.push(['빗나감 — 성공도↓ 인수가↑', !miss.hit && miss.dS < 0 && miss.dP > 0,
+            miss.dS.toFixed(1) + ' / +' + (miss.dP*100).toFixed(1) + '%p']);
+
+    const dem = g.rollDemands(2);
+    const best = g.resolveTable(team, dem, g.bestPicks(team, dem));
+    r.push(['최선 수는 위임보다 유리', best.dS > 0, '성공도 +' + best.dS.toFixed(1)]);
+    return r;
+  })()`);
+  tblPure.forEach(([n, ok, d]) => check(n, ok, d));
+
+  /* UI 경로 — 직접 협상을 걸고 클로징 테이블을 실제로 눌러 본다 */
+  win.eval(`
+    const S = game.setS(game.newState('테이블UI', 1001));
+    S.staff.forEach(e => e.onTeam = true);
+    const t = S.market.filter(c => !c.owned && c.cap <= game.capCeiling(S)).sort((a, b) => a.cap - b.cap)[0];
+    S.co.cash = t.cap * 4;
+    game.startNego(S, t, true);`);
+  check('직접 협상 파견', !!game.S.nego && game.S.nego.direct === true);
+  const wantRounds = game.tableRounds(game.S.nego.diff);
+  /* 협상 중 분기 이벤트 모달이 먼저 뜬다 — 그건 치워 가며 클로징까지 간다 */
+  for (let i = 0; i < 60 && !game.S.nego?.tableView; i++) {
+    if (doc.getElementById('modal-layer').classList.contains('on')) resolveModals(doc);
+    else win.eval('game.tickDay()');
+  }
+  check('클로징에서 테이블이 열린다',
+        /협상 테이블/.test(doc.getElementById('modal')?.textContent || ''), wantRounds + '라운드');
+  check('현재 라운드가 상태에 노출된다', !!game.S.nego?.tableView, game.S.nego?.tableView?.demand);
+  let rounds = 0;
+  while (game.S.nego?.tableView && rounds < 8) {
+    doc.querySelector('#modal .choice:not([disabled])').click(); rounds++;
+  }
+  check('라운드 수만큼 진행된다', rounds === wantRounds, rounds + '/' + wantRounds);
+  resolveModals(doc, /자기자금|확인/);
+  check('테이블 뒤 판정으로 넘어간다', !game.S.nego);
+
   check('출력 무결성', !/NaN|undefined|Infinity/.test(all),
         (all.match(/.{0,30}(NaN|undefined|Infinity)/) || [''])[0]);
 } catch (e) {

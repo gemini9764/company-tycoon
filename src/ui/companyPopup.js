@@ -7,6 +7,7 @@ import { $, won } from '../core/util.js';
 import { loanLimit } from '../systems/bank.js';
 import { capCeiling, loanRate, teamPower } from '../systems/company.js';
 import { startNego } from '../systems/mna.js';
+import { tableRounds } from '../systems/negoTable.js';
 import { useRumor } from '../systems/rumor.js';
 import { doGut, shamanFee } from '../systems/shaman.js';
 import { sellStock } from '../systems/stock.js';
@@ -66,7 +67,15 @@ function openCompany(c) {
         run: () => { doGut(s, 'sal', c.id); renderAll(); } }] : []),
       ...(c.listed ? [{ label: '주식 관심 등록', sub: '주식 탭 즐겨찾기에 추가',
         run: () => { if (!s.stock.watch.includes(c.id)) s.stock.watch.push(c.id); setTab('stock'); toast('관심 종목 등록', 'good'); } }] : []),
-      { head: '준비가 끝나면', label: '협상단 파견', dis: !!s.nego || overCap || !teamOf(s).length,
+      /* 파견을 두 갈래로 가른다. **위임에 페널티는 없다** — 있으면 '항상 직접'이
+         정답이 되어 선택이 사라진다. 트레이드오프는 시간 대 성과다. */
+      { head: '준비가 끝나면', label: '협상단 파견 — 직접 협상한다',
+        dis: !!s.nego || overCap || !teamOf(s).length,
+        sub: s.nego ? '이미 진행 중인 협상이 있습니다'
+             : !teamOf(s).length ? '협상단에 배정된 직원이 없습니다'
+             : `막판에 협상 테이블이 열립니다 · ${tableRounds(c.diff)}라운드 · 잘 두면 성공도와 인수가가 함께 좋아집니다`,
+        run: () => { startNego(s, c, true); renderAll(); } },
+      { label: '협상단 파견 — 맡긴다', dis: !!s.nego || overCap || !teamOf(s).length,
         sub: s.nego ? '이미 진행 중인 협상이 있습니다'
              : !teamOf(s).length ? '협상단에 배정된 직원이 없습니다'
              : `협상단 ${teamOf(s).length}명 · 협상력 ${Math.round(teamPower(s))} · 약 ${Math.ceil(100 / BAL.negoProgressPerDay)}일 소요${short ? ' · 성사 시 대출 필요' : ''}`,

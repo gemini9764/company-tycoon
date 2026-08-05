@@ -28,6 +28,7 @@ import * as economyMod from './systems/economy.js';
 import * as endingMod from './systems/ending.js';
 import * as eventsMod from './systems/events.js';
 import * as mnaMod from './systems/mna.js';
+import * as negoTableMod from './systems/negoTable.js';
 import * as rumorMod from './systems/rumor.js';
 import * as shamanMod from './systems/shaman.js';
 import * as stockMod from './systems/stock.js';
@@ -45,14 +46,15 @@ import * as uiMod from './ui/index.js';
 import * as modalMod from './ui/modal.js';
 import * as settingsMod from './ui/settings.js';
 import * as titleMod from './ui/title.js';
+import * as negoTableUiMod from './ui/negoTable.js';
 import * as subPanelMod from './ui/subPanel.js';
 import * as tabsMod from './ui/tabs.js';
 
 const api = {
   ...audioMod, ...balanceMod, ...rngMod, ...clockMod, ...dataMod, ...deriveMod, ...loopMod, ...stateMod, ...storageMod, ...utilMod,
-  ...tagsMod, ...subsMod, ...subPanelMod,
+  ...tagsMod, ...subsMod, ...subPanelMod, ...negoTableUiMod,
   ...canvasMod, ...cityMod, ...storeRenderMod, ...bankMod, ...companyMod, ...economyMod, ...endingMod, ...eventsMod, ...mnaMod,
-  ...rumorMod, ...shamanMod, ...stockMod,
+  ...negoTableMod, ...rumorMod, ...shamanMod, ...stockMod,
   ...bankPanelMod, ...companyPopupMod, ...dockMod, ...iconsMod, ...hudMod, ...panelLeftMod, ...shopPanelMod, ...deskMod, ...toastMod, ...uiMod, ...modalMod, ...settingsMod, ...tabsMod, ...titleMod,
 };
 

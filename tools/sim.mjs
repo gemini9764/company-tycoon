@@ -35,6 +35,7 @@ startGame(doc, '시뮬');
 win.__desk = process.argv.includes('--desk');
 win.__acts = process.argv.includes('--acts');
 win.__stake = process.argv.includes('--stake');
+win.__table = process.argv.includes('--table');
 
 // ── 봇 본체는 페이지 안에서 정의한다 ─────────────────────────
 win.eval(`
@@ -53,6 +54,19 @@ window.runSim = function (strategy, maxDays, seed) {
     while (d0.getElementById('modal-layer').classList.contains('on') && guard++ < 8) {
       const cs = [...d0.querySelectorAll('#modal .choice:not([disabled])')];
       let pick = cs[0];
+      /* 협상 테이블 — 선택지 라벨을 파싱하지 않고 상태(tableView)로 최선 수를 센다.
+         판정은 systems/negoTable.js 의 순수 함수이고 UI 와 같은 것을 부른다. */
+      const tv = S.nego && S.nego.tableView;
+      if (tv) {
+        const team = S.staff.filter(e => tv.team.includes(e.id));
+        let best = 0, bestV = -Infinity;
+        team.forEach((e, i) => {
+          const r = g.tableRound(e, tv.demand);
+          const v = r.dS - r.dP * 100;
+          if (v > bestV) { bestV = v; best = i; }
+        });
+        pick = cs[best] || cs[0];
+      }
       if (strategy === 'reckless') {
         pick = cs.find(c => /로비|무대응|대출/.test(c.textContent)) || cs[0];
       }
@@ -196,7 +210,7 @@ window.runSim = function (strategy, maxDays, seed) {
       const c = (window.__stake && pool.find(x => x.id === nextId)) || pool.sort((a, b) => b.cap - a.cap)[0];
       if (c) {
         if (window.__stake) { acts.starSum += g.stakeStars(S, c); acts.starN++; nextId = null; }
-        g.startNego(S, c);
+        g.startNego(S, c, !!window.__table);   // --table 이면 직접 협상(클로징 테이블)
       }
     }
     // 협상단 3명 + 계열사 관리 인력을 채운다

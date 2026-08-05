@@ -6,13 +6,15 @@ import { bumpPerks, divisionName, divisionsOf, SUB_TAGS, subPriceMul, tagsOf } f
 import { rand } from '../core/rng.js';
 import { $, clamp, pct, pick, rnd, won } from '../core/util.js';
 import { capCeiling, checkTier, loanRate, recalcCap, teamPower } from './company.js';
+import { delegateTable, rollDemands } from './negoTable.js';
 import { clearStake, stakeBonus } from './stock.js';
 import { onAcquired } from './subs.js';
 import { openAcqLoan } from '../ui/bankPanel.js';
 import { openModal } from '../ui/modal.js';
+import { openTable } from '../ui/negoTable.js';
 import { news, pushInbox, toast } from '../ui/toast.js';
 
-function startNego(s, target) {
+function startNego(s, target, direct = false) {
   const team = teamOf(s);
   if (!team.length) return toast('협상단에 배정된 직원이 없습니다', 'bad');
   if (s.nego) return toast('이미 진행 중인 협상이 있습니다', 'bad');
@@ -37,6 +39,7 @@ function startNego(s, target) {
     prem: Math.max(0.02, prem), tagMul, team: team.map(e => e.id),
     marks: [25, 50, 75], blessed: 0,
     acts: BAL.negoActs, done: [],   // 능동 개입 잔여 횟수와 이력
+    direct,                          // 클로징에서 테이블을 열지 (false = 협상단에 위임)
   };
   news(`${s.co.name} 협상단, ${target.name} 인수 협상 착수`);
   if (stake.stars) toast(`사둔 지분 ${'★'.repeat(stake.stars)} — 성공도 +${stake.success}`, 'good');
@@ -202,7 +205,36 @@ function negoEvent(s, n, team) {
   });
 }
 
+/**
+ * 클로징. 진행도 100% 에서 불린다.
+ *
+ * 테이블을 **먼저** 치르고 그 결과를 성공도·프리미엄에 얹은 뒤 판정한다.
+ * 위임이면 같은 판을 봇 정책으로 즉시 계산한다 — 직접 하는 쪽이 늘 유리해지지
+ * 않도록 위임도 최선 수를 둔다.
+ */
 function finishNego(s) {
+  const n = s.nego, tgt = s.market.find(c => c.id === n.id);
+  const team = s.staff.filter(e => n.team.includes(e.id));
+
+  if (n.direct && team.length) {
+    /* 요구 카드는 **직접 협상할 때만** 뽑는다. 위임 경로에서 뽑으면 난수열이
+       밀려 같은 시드가 다른 판이 된다 — 단계 1 의 태그 추첨과 같은 함정이다. */
+    pause();
+    return openTable(s, n, tgt, team, rollDemands(n.diff));
+  }
+  applyTable(n, delegateTable());
+  judgeNego(s);
+}
+
+/** 테이블 결과를 협상 상태에 얹는다. 판정 직전의 마지막 보정이다 */
+function applyTable(n, r) {
+  n.success = clamp(n.success + r.dS, 0, 100);
+  n.prem = Math.max(0.02, n.prem + r.dP);
+  n.tableLog = r.log;
+}
+
+/** 성공도로 성사/결렬을 판정하고 인수가 모달까지 띄운다 */
+function judgeNego(s) {
   const n = s.nego, tgt = s.market.find(c => c.id === n.id);
   s.nego = null;
   const roll = rand() * 100 < n.success;
@@ -282,5 +314,5 @@ function checkDivisions(s) {
   }
 }
 
-export { checkDivisions, completeAcq, finishNego, negoEvent, startNego, tickNego };
+export { applyTable, checkDivisions, completeAcq, finishNego, judgeNego, negoEvent, startNego, tickNego };
 export { NEGO_ACTS, negoAct, negoLeft };
