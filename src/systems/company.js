@@ -25,7 +25,7 @@ const creditIdx  = s => clamp(Math.floor(creditScore(s) / 10), 0, 9);
 const creditName = s => CREDITS[creditIdx(s)];
 
 function loanRate(s, kind) {
-  return BAL.baseRate + s.bank.rateDelta_ + (9 - creditIdx(s)) * 0.85 + (kind === 'acq' ? 3.2 : 0)
+  return BAL.baseRate + s.bank.rateDelta_ + (9 - creditIdx(s)) * 0.85 + (kind === 'acq' ? BAL.acqRatePremium : 0)
        - Math.min(1.4, sumStat(s.staff, 'fin') * 0.012);
 }
 

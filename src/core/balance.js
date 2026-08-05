@@ -116,6 +116,10 @@ const BAL = {
   loanTermMonths: 15,
   opLoanRatio: 0.14,         // 운영자금 한도 = 시총 × 이 값
   acqLoanRatio: 0.80,        // 인수금융 한도 = 인수가 × 이 값
+  /* 인수금융 가산금리(%p). loanRate 안에 3.2 로 박혀 있던 값을 꺼냈다.
+     레버리지가 무차입보다 얼마나 빠른지를 정하는 유일한 레버다 —
+     subYield 를 올리면 격차가 벌어지므로 둘을 같이 볼 것. */
+  acqRatePremium: 3.2,
   insuranceRate: 0.0022,     // 월 보험료 = 시총 × 이 값
 
   gutMistrust: 8,            // 굿 1회당 미신지수 상승

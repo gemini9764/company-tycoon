@@ -70,6 +70,13 @@ window.runSim = function (strategy, maxDays, seed) {
       if (strategy === 'reckless') {
         pick = cs.find(c => /로비|무대응|대출/.test(c.textContent)) || cs[0];
       }
+      /* 인수금융을 강제로 고르게 해 봤지만 소용없다 — 인수가 확정 모달에서
+         '인수금융 대출'은 `dis: short === 0` 이라 **자기자금이 충분하면 비활성**이다.
+         게임 규칙상 인수금융은 부족액을 메우는 용도이고, leveraged(예산 ×1.5)는
+         협상 10일 동안 현금이 쌓여 부족액이 거의 안 생긴다.
+         그래서 금리·한도·상환 기간을 조여도 결과가 한 자리도 안 변한다
+         (대출을 완전히 막은 대조군과 6시드 중 4개가 동일). 자세한 것은
+         MNA_HANDOFF.md §3-d. 대출 리스크를 재려면 reckless(예산 ×3)를 볼 것. */
       const act = [...d0.querySelectorAll('#modal [data-a]')]
         .find(b => !/새 게임/.test(b.textContent));   // 엔딩 모달의 재시작은 누르지 않는다
       const btn = pick || act;
