@@ -82,21 +82,24 @@ const SECTOR_KEYS = Object.keys(SECTORS);
    · 겉모습(바닥·벽·조명·장식·창·러그)은 **자동으로** 좋아진다. 여기까지 돈을
      받으면 등급이 오른 보람이 안 난다.
 
-   `depth` 는 남쪽으로 늘어나는 줄 수다. 9~13 줄 사이를 7등급이 계단으로 오른다 —
+   `depth` 는 남쪽으로 늘어나는 줄 수다. 9~17 줄 사이를 7등급이 계단으로 오른다 —
    구멍가게에서 스타트업으로 뛰었다고 갑자기 두 배가 되면 안 되므로 같은 깊이가
    두 등급씩 이어지는 구간을 뒀다.
-   **13 줄이 상한인 이유는 미관이 아니라 한계다** — 월드 높이가 캔버스 절반(432)을
-   넘는 순간 정수 배율이 2에서 1로 떨어져 화면이 통째로 반쪽이 된다 (428 이 마지막).
+   예전 상한 13 줄은 미관이 아니라 한계였다 — 월드 높이가 캔버스 절반을 넘으면
+   정수 배율이 2에서 1로 떨어져 화면이 반쪽이 됐다. 지금은 배율을 고정하고
+   카메라가 잡으므로(render/canvas.js applyCamera) 그 제약이 없다.
+   후반 등급에서 폭을 키운 이유는 **커진 티가 나야 하기 때문**이다 — 한 줄씩만
+   늘리면 대기업과 글로벌그룹이 눈으로 구분되지 않는다.
    ══════════════════════════════════════════════════════════════ */
 const STORE_GRADE = [
   //                깊이 진열대 계산대 냉장 조명 장식 창 러그 바닥 손님 벽
   { depth: 0, shelf: 1, counter: 0, cold: 1, light: 0, deco: 0, win: 0, rug: 0, floor: 0, crowd:  4 },  // 구멍가게
   { depth: 1, shelf: 2, counter: 1, cold: 2, light: 1, deco: 1, win: 0, rug: 0, floor: 0, crowd:  6 },  // 동네슈퍼
-  { depth: 1, shelf: 3, counter: 1, cold: 3, light: 1, deco: 1, win: 1, rug: 0, floor: 1, crowd:  9 },  // 스타트업
-  { depth: 2, shelf: 3, counter: 2, cold: 4, light: 2, deco: 2, win: 2, rug: 0, floor: 1, crowd: 12 },  // 중소기업
-  { depth: 2, shelf: 4, counter: 2, cold: 5, light: 2, deco: 2, win: 3, rug: 1, floor: 2, crowd: 15 },  // 중견기업
-  { depth: 3, shelf: 5, counter: 3, cold: 5, light: 3, deco: 3, win: 4, rug: 1, floor: 2, crowd: 18 },  // 대기업
-  { depth: 4, shelf: 5, counter: 3, cold: 5, light: 3, deco: 3, win: 4, rug: 1, floor: 3, crowd: 22 },  // 글로벌그룹
+  { depth: 3, shelf: 3, counter: 1, cold: 3, light: 1, deco: 1, win: 1, rug: 0, floor: 1, crowd:  9 },  // 스타트업
+  { depth: 3, shelf: 3, counter: 2, cold: 4, light: 2, deco: 2, win: 2, rug: 0, floor: 1, crowd: 12 },  // 중소기업
+  { depth: 4, shelf: 4, counter: 2, cold: 5, light: 2, deco: 2, win: 3, rug: 1, floor: 2, crowd: 15 },  // 중견기업
+  { depth: 6, shelf: 5, counter: 3, cold: 5, light: 3, deco: 3, win: 4, rug: 1, floor: 2, crowd: 18 },  // 대기업
+  { depth: 8, shelf: 5, counter: 3, cold: 5, light: 3, deco: 3, win: 4, rug: 1, floor: 3, crowd: 22 },  // 글로벌그룹
 ];
 
 const gradeOf = s => STORE_GRADE[Math.min(STORE_GRADE.length - 1, s.co.tier)];

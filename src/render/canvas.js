@@ -44,7 +44,7 @@ const CITY_O = { x: MAP_H * HW, y: CITY_HEAD };
 const CITY_PAD_X = 546, CITY_PAD_Y = 60;
 
 /* 사옥(경영) — 16×10 타일. gx 0..8 매장 / 9 칸막이 / 10..15 사무실 */
-const ROOM_W = 16, ROOM_H_MAX = 13;
+const ROOM_W = 16, ROOM_H_MAX = 17;
 
 /**
  * 지금 쓰는 방 깊이. **등급**마다 남쪽으로 늘어난다 (core/data.js STORE_GRADE).
@@ -62,10 +62,11 @@ const roomH = () => 9 + (S.co ? gradeOf(S).depth : 0);
    되돌렸다). 원점도 방 깊이를 따라가므로 세 값이 늘 한 몸이다. */
 const storeO = () => ({ x: roomH() * HW, y: 72 });
 const storeW = () => roomH() * HW + 384;
-/* 392 는 넉넉히 남긴 값이 아니라 **한계를 보고 정한 값**이다. 월드 높이가
-   캔버스 절반(432)을 넘는 순간 정수 배율이 2 에서 1 로 떨어져 화면이 통째로
-   반쪽이 된다. 3단계 확장(+36)까지 428 로 그 선 아래에 머문다.
-   방을 더 깊게 늘리려면 이 절벽부터 처리할 것. */
+/* 예전에는 이 값이 428 을 넘지 못했다 — 월드 높이가 캔버스 절반(432)을 넘는
+   순간 정수 배율이 2 에서 1 로 떨어져 화면이 통째로 반쪽이 됐기 때문이다.
+   그 절벽 때문에 매장이 13줄에 묶여 있었다.
+   이제 **배율을 2 아래로 내리지 않고 카메라가 잡는다**(applyCamera). 화면보다
+   커지면 도시처럼 끌어서 본다 — 크기는 더 이상 화면 높이에 묶이지 않는다. */
 const storeH = () => 392 + (roomH() - 10) * HH;
 const footY  = () => storeH() - 24;                // 하단 상태 스트립 상단
 
@@ -149,10 +150,19 @@ function fitCanvas() {
 function applyCamera() {
   const w = worldW(), h = worldH();
   fitPX = Math.max(1, Math.floor(Math.min(CV.width / w, CV.height / h)));
-  if (!S || S.mode !== 'city') {                  // 사옥 — 화면 맞춤 고정
-    PX = fitPX;
-    OX = Math.floor((CV.width - w * PX) / 2);
-    OY = Math.floor((CV.height - h * PX) * 0.34); // 살짝 위로 — 아래는 상호판이라 덜 비어 보인다
+  if (!S || S.mode !== 'city') {                  // 사옥
+    /* **배율을 2 아래로 내리지 않는다.** 화면에 통째로 맞추려고 fitPX 를 쓰면,
+       매장이 조금만 커져도 정수 배율이 2→1 로 떨어져 그림이 반쪽이 된다.
+       안 들어가면 줄이는 대신 **카메라가 잡는다** — 도시와 같은 방식이다. */
+    PX = Math.max(2, fitPX);
+    const vw = CV.width / PX, vh = CV.height / PX;
+    if (camFor !== S) { camFor = S; camX = w / 2; camY = h / 2; }
+    camX = vw >= w ? w / 2 : clamp(camX, vw / 2, w - vw / 2);
+    camY = vh >= h ? h / 2 : clamp(camY, vh / 2, h - vh / 2);
+    OX = Math.round(CV.width / 2 - camX * PX);
+    // 다 들어갈 때는 살짝 위로 — 아래는 상호판이라 덜 비어 보인다
+    if (vh >= h) OY = Math.floor((CV.height - h * PX) * 0.34);
+    else OY = Math.round(CV.height / 2 - camY * PX);
     return;
   }
   if (camFor !== S) { camFor = S; zoom = 1; camX = w / 2; camY = h / 2; }
@@ -199,7 +209,8 @@ function onWheel(ev) {
 /* 드래그와 클릭을 가른다. 4 CSS 픽셀을 넘게 움직이면 그 뒤의 click 이벤트는 버린다 —
    안 그러면 맵을 끌 때마다 회사 창이 열린다. */
 function onDragStart(ev) {
-  if (!S || S.mode !== 'city' || ev.button !== 0) return;
+  /* 사옥에서도 끌 수 있다 — 매장이 화면보다 커질 수 있게 되면서 필요해졌다 */
+  if (!S || ev.button !== 0) return;
   drag = { x: ev.clientX, y: ev.clientY, camX, camY, moved: false };
   dragged = false;
 }

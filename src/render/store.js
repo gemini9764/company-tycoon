@@ -662,8 +662,10 @@ function drawSignboard() {
 function drawWhiteboard() {
   const a = P(10, -1), b = P(11, -1);
   const x = (a.x + b.x) / 2, y = (a.y + b.y) / 2;
-  /* 간판과 같은 이유로 벽면 안쪽에 건다 — 예전엔 y-57 로 벽 위에 떠 있었다 */
-  const w = 93, h = 33, ty = Math.round(y - 46), L = Math.round(x - w / 2);
+  /* 벽면 안쪽에 걸되 **직원 머리 위로** 올린다. y-46 에 두었더니 앞줄에 앉은
+     사원의 얼굴을 가렸다 — 벽에 붙은 것과 사람을 가리는 것은 다른 문제다.
+     폭도 줄여 뒤쪽 책상까지 덮지 않게 했다. */
+  const w = 82, h = 29, ty = Math.round(y - 60), L = Math.round(x - w / 2);
   X.save(); X.globalAlpha = 0.24;
   X.fillStyle = '#000000'; X.fillRect(L + 3, ty + 3, w, h); X.restore();
   X.fillStyle = '#4A4436'; X.fillRect(L - 3, ty - 3, w + 6, h + 6);       // 알루미늄 틀
