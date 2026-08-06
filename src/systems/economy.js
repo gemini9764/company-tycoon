@@ -1,6 +1,6 @@
 import { BAL } from '../core/balance.js';
 import { SECTORS, SHOP_ZONES, gradeOf } from '../core/data.js';
-import { sumStat } from '../core/derive.js';
+import { mgrOf, shopOf, sumStat } from '../core/derive.js';
 import { isHolding, perksOf, sectorBonusOf, subMgrLoad, subYieldMul, tagMarketing, tagSynergy } from '../core/tags.js';
 import { $, clamp, rnd, won } from '../core/util.js';
 import { checkBankrupt, seizeSub } from './bank.js';
@@ -84,6 +84,11 @@ function retailPotential(s) {
   const base = BAL.retailBase * BAL.tierRetailMul[s.co.tier];
   const salesBuf = 1 + sumStat(s.staff, 'sales') * 0.004
                  + s.staff.filter(e => e.trait.id === 'star').length * 0.12;
+  /* 매장 근무. **아무도 없으면 정확히 1** 이라 예전 밸런스가 그대로 남고,
+     세우는 만큼만 위로 붙는다. 대가는 그 사람이 협상단에도 관리에도
+     못 들어간다는 것 — 시너지 부족 페널티가 그 값을 치른다. */
+  const shop = shopOf(s);
+  const shopBuf = 1 + shop.length * BAL.shopHead + sumStat(shop, 'sales') * BAL.shopSales;
   /* 상품군 — **몇 개를 샀느냐가 아니라 어떤 업종을 갖췄느냐**를 본다.
      예전에는 `subs.length * 0.06` 이라 같은 업종을 열 개 사도 매출이 똑같이
      늘었다. 인수 토스트는 "OO 상품군 추가" 라고 말하는데 실제로는 개수만
@@ -98,7 +103,7 @@ function retailPotential(s) {
   const fac = 1 + facLv(s, 'shelf') * 0.07 + facLv(s, 'counter') * 0.04;
   const pk  = 1 + perksOf(s).retailMul;                     // daily 계열사
   const brd = 1 + tagMarketing(s) * 0.1;                    // 브랜드 태그
-  return base * s.co.marketing * salesBuf * variety * zoneBonus(s) * fac * pk * brd;
+  return base * s.co.marketing * salesBuf * shopBuf * variety * zoneBonus(s) * fac * pk * brd;
 }
 
 /** 재고가 매출에 곱해지는 배수. 바닥나도 invFloor 까지만 떨어진다. */
@@ -161,7 +166,7 @@ function managersNeeded(s) {
   return Math.ceil(load / BAL.subsPerManager * (isHolding(s) ? 0.75 : 1));   // 지주회사 체제 -25%
 }
 
-function managersHave(s)   { return s.staff.filter(e => !e.onTeam).length + facLv(s, 'office') + perksOf(s).managers; }
+function managersHave(s)   { return mgrOf(s).length + facLv(s, 'office') + perksOf(s).managers; }
 
 function synergyParts(s) {
   const bySec = {};

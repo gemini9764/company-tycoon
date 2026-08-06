@@ -761,6 +761,37 @@ try {
   })()`);
   zoneOk.forEach(([n, ok, d]) => check(n, ok, d));
 
+  /* ── 직원 배치 3분할 ─────────────────────────────────────
+     협상단 / 매장 근무 / 계열사 관리. 한 사람은 한 곳에만 선다. */
+  const roleOk = win.eval(`(() => {
+    const g = window.game, r = [];
+    const S = g.setS(g.newState('배치', 1001));
+    S.co.subs.push({ id: 'r1', sector: 'daily', cap: 1e9, pmi: 99 });
+    S.staff.forEach(e => { e.onTeam = false; e.atShop = false; });
+
+    const mgr0 = g.managersHave(S), ret0 = g.retailPotential(S);
+    r.push(['기본값은 예전과 같다', Math.abs(g.retailPotential(S) / ret0 - 1) < 1e-9, '매장 0명 → 배수 1']);
+
+    S.staff[0].atShop = true;
+    r.push(['매장에 세우면 매출이 오른다', g.retailPotential(S) > ret0,
+            '+' + Math.round((g.retailPotential(S) / ret0 - 1) * 100) + '%']);
+    r.push(['그만큼 관리 인력이 준다', g.managersHave(S) === mgr0 - 1, '']);
+
+    // 협상단과 매장은 겸할 수 없다
+    S.staff[0].onTeam = true;
+    r.push(['협상단은 매장 인원에서 빠진다', g.shopOf(S).length === 0, '']);
+    r.push(['협상단도 관리 인력이 아니다', g.mgrOf(S).length === S.staff.length - 1, '']);
+
+    // 매장 근무도 경험치가 오른다
+    S.staff[0].onTeam = false;
+    const e1 = S.staff[0].exp || 0;
+    g.tickStaff(S);
+    r.push(['매장 근무도 경험치를 받는다', S.staff[0].exp - e1 === g.BAL.expManage,
+            '+' + (S.staff[0].exp - e1)]);
+    return r;
+  })()`);
+  roleOk.forEach(([n, ok, d]) => check(n, ok, d));
+
   check('출력 무결성', !/NaN|undefined|Infinity/.test(all),
         (all.match(/.{0,30}(NaN|undefined|Infinity)/) || [''])[0]);
 } catch (e) {

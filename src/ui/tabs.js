@@ -51,12 +51,13 @@ function tabStaff() {
 
   h += `<div class="row"><h4>사원 ${s.staff.length}명<span class="c-dim" style="font-size:10px;font-family:var(--f-sm)">월 급여 ${won(s.staff.reduce((a, e) => a + e.salary, 0))}</span></h4></div>`;
   h += s.staff.map(e => `<div class="row tight">
-      <h4>${esc(e.name)} <span style="font-size:10px;font-family:var(--f-sm)" class="${e.onTeam ? 'c-sky' : 'c-dim'}">${e.onTeam ? '협상단' : 'Lv.' + e.lv}</span></h4>
+      <h4>${esc(e.name)} <span style="font-size:10px;font-family:var(--f-sm)" class="${e.onTeam ? 'c-sky' : e.atShop ? 'c-jade' : 'c-dim'}">${e.onTeam ? '협상단' : e.atShop ? '매장' : 'Lv.' + e.lv}</span></h4>
       <div>${chip(e)}</div>
       <div class="meta">${e.trait.name} — ${e.trait.desc} · 월급 ${won(e.salary)}</div>
-      <div class="meta">${e.onTeam && s.nego ? '협상 중' : e.onTeam ? '대기' : s.co.subs.length ? '계열사 관리' : '대기'} · 숙련 ${e.lv >= BAL.expFreeCap ? '최고' : Math.round((e.exp || 0) / expNeed(e) * 100) + '%'}</div>
+      <div class="meta">${e.onTeam && s.nego ? '협상 중' : e.onTeam ? '협상 대기' : e.atShop ? '매장 근무' : s.co.subs.length ? '계열사 관리' : '대기'} · 숙련 ${e.lv >= BAL.expFreeCap ? '최고' : Math.round((e.exp || 0) / expNeed(e) * 100) + '%'}</div>
       <div class="btn-row">
-        <button class="btn ${e.onTeam ? '' : 'sky'}" data-team="${e.id}" ${!e.onTeam && team.length >= 3 ? 'disabled' : ''}>${e.onTeam ? '협상단 제외' : '협상단 편성'}</button>
+        <button class="btn ${e.onTeam ? '' : 'sky'}" data-team="${e.id}" ${!e.onTeam && team.length >= 3 ? 'disabled' : ''}>${e.onTeam ? '협상단 제외' : '협상단'}</button>
+        <button class="btn ${e.atShop ? '' : 'jade'}" data-shop="${e.id}" ${e.onTeam ? 'disabled' : ''}>${e.atShop ? '매장 제외' : '매장 근무'}</button>
         <button class="btn" data-train="${e.id}">교육 ${won(trainCost(e))}</button>
         <button class="btn blood" data-fire="${e.id}">해고</button>
       </div></div>`).join('');
@@ -74,10 +75,20 @@ function tabStaff() {
 
   $('panel-body').innerHTML = h;
   const R = $('panel-body');
+  R.querySelectorAll('[data-shop]').forEach(b => b.onclick = () => {
+    const e = s.staff.find(x => x.id === b.dataset.shop);
+    if (e.onTeam) return toast('협상단은 매장에 설 수 없습니다', 'bad');
+    e.atShop = !e.atShop;
+    toast(e.atShop ? `${e.name} 매장 근무` : `${e.name} 계열사 관리로 복귀`, 'good');
+    renderRight(); renderLeft(); renderHud();
+  });
+
   R.querySelectorAll('[data-team]').forEach(b => b.onclick = () => {
     const e = s.staff.find(x => x.id === b.dataset.team);
     if (s.nego && e.onTeam) return toast('협상 중에는 협상단을 뺄 수 없습니다', 'bad');
-    e.onTeam = !e.onTeam; renderRight(); renderLeft();
+    e.onTeam = !e.onTeam;
+    if (e.onTeam) e.atShop = false;      // 한 사람은 한 곳에만 선다
+    renderRight(); renderLeft();
   });
   R.querySelectorAll('[data-train]').forEach(b => b.onclick = () => {
     const e = s.staff.find(x => x.id === b.dataset.train), c = trainCost(e);

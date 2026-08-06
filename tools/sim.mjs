@@ -35,6 +35,7 @@ startGame(doc, '시뮬');
 win.__desk = process.argv.includes('--desk');
 win.__acts = process.argv.includes('--acts');
 win.__zones = process.argv.includes('--zones');
+win.__shop = process.argv.includes('--shop');
 win.__stake = process.argv.includes('--stake');
 win.__table = process.argv.includes('--table');
 
@@ -156,6 +157,14 @@ window.runSim = function (strategy, maxDays, seed) {
     if (prevNego && !S.nego) (S.co.subs.some(c => c.id === prevNego) ? acts.buy++ : acts.fail++);
 
     // 인수 판단 — 전략별로 감당할 자금 배수가 다르다
+    /* 매장 근무 — 협상단 3명을 뺀 나머지의 절반을 매장에 세운다. 나머지 절반은
+       관리로 남긴다. 전부 매장에 몰면 시너지가 무너지므로 반씩 나누는 게
+       실플레이어가 할 법한 기본형이다. --acts 처럼 스위치로 분리한다. */
+    if (window.__shop && day % 20 === 0) {
+      const rest = S.staff.filter(e => !e.onTeam);
+      rest.forEach((e, i) => { e.atShop = i < Math.floor(rest.length / 2); });
+    }
+
     /* 매대 배정 — 비용이 없으니 실플레이어라면 누구나 한다. 다만 기본 봇에
        넣으면 기존 기준선과 비교가 끊기므로 --acts 처럼 스위치로 분리한다.
        정책은 자명하다: 통행량 높은 순서로 마진 높은 상품군을 얹는다. */

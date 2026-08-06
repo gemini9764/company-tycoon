@@ -3,6 +3,7 @@ import { S } from '../core/state.js';
 import { viewRand } from '../core/rng.js';
 import { $, clamp, vpick, vrint, vrnd, won } from '../core/util.js';
 import { HH, HW, faces, isoRoof, isoWin, isoX, isoY, makeLayer, prism, rhomb, rhombEdge } from './iso.js';
+import { shopOf } from '../core/derive.js';
 import { footY, ROOM_W, roomH, SPLIT_GX, storeH, storeO, storeW, X, bubbleTurn, customers, drawBubble, drawPerson, drawPops, drawSitter, drawText, faceOf, frame, mix, newLook, pops, rrect, shade } from './canvas.js';
 import { dailyRetail, productLines, shopZones } from '../systems/economy.js';
 
@@ -474,6 +475,7 @@ function drawStore() {
   items.push({ y: P(COUNTER[1].gx, COUNTER[1].gy).y, f: drawCounter });
   addOffice(items);
   addWindows(items);
+  addShopStaff(items);
   addDeco(items);
   drawPartition(items);
   stepCustomers(items);
@@ -589,6 +591,22 @@ function addWindows(items) {
       X.fillRect(Math.round(m.x) + 4, Math.round(m.y) - 34, 14, 2);
     } });
   }
+}
+
+/**
+ * 매장 근무 직원. **배치하면 실제로 매장에 선다** — 숫자만 오르고 화면이
+ * 그대로면 어디에 세웠는지 확인할 길이 없다. 진열대 옆과 계산대 뒤에 붙는다.
+ */
+function addShopStaff(items) {
+  const spots = [{ gx: 4, gy: 3 }, { gx: 4, gy: 6 }, { gx: 6, gy: 4 },
+                 { gx: 0, gy: 4 }, { gx: 4, gy: 9 }, { gx: 0, gy: 1 }];
+  shopOf(S).slice(0, spots.length).forEach((e, i) => {
+    const o = spots[i];
+    if (o.gy >= roomH()) return;
+    const { x, y } = P(o.gx, o.gy);
+    if (!e.look) e.look = newLook(e.trait.id === 'star' ? '#F2B233' : null);
+    items.push({ y, f: () => drawPerson(x, y, e.look, i % 2 ? 'e' : 's', Math.floor(frame / 34 + i) % 2) });
+  });
 }
 
 /** 입구 러그와 화분. 사람이 오가는 자리를 피해 벽 쪽에만 둔다 */

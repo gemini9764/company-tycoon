@@ -116,7 +116,7 @@ function tickStaff(s) {
   const managing = s.co.subs.length > 0;
   for (const e of s.staff) {
     const amt = (e.onTeam && s.nego) ? BAL.expNego
-      : (!e.onTeam && managing) ? BAL.expManage
+      : (e.atShop || (!e.onTeam && managing)) ? BAL.expManage   // 매장 근무도 일이다
         : BAL.expIdle;
     if (gainExp(s, e, amt)) {
       toast(`${e.name} Lv.${e.lv} — 전 능력치 실효 +15%`, 'good');
