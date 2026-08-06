@@ -1,5 +1,5 @@
 import { BAL } from '../core/balance.js';
-import { DIFFS, SECTORS, TIERS } from '../core/data.js';
+import { DIFFS, SECTORS, TIERS, gradeOf } from '../core/data.js';
 import { sfx } from '../core/audio.js';
 import { S } from '../core/state.js';
 import { $, clamp, vpick, vrint, won } from '../core/util.js';
@@ -47,13 +47,13 @@ const CITY_PAD_X = 546, CITY_PAD_Y = 60;
 const ROOM_W = 16, ROOM_H_MAX = 13;
 
 /**
- * 지금 쓰는 방 깊이. '가게 확장' 단계마다 남쪽으로 한 줄씩 늘어난다.
+ * 지금 쓰는 방 깊이. **등급**마다 남쪽으로 늘어난다 (core/data.js STORE_GRADE).
  *
  * **월드 사각형과 좌표 원점은 최대치로 고정이다.** 방이 커질 때 원점까지
  * 움직이면 카메라·바닥 캐시·클릭 판정이 전부 따라 흔들린다. 자리를 미리
  * 잡아 두고 **그리고 걸을 수 있는 범위만** 넓히면 그 위험이 사라진다.
  */
-const roomH = () => 10 + ((S.co && S.co.facil && S.co.facil.space) || 0);
+const roomH = () => 9 + (S.co ? gradeOf(S).depth : 0);
 /* 사옥은 PX=2 로 돈다. 세로가 병목이라 여백을 깎아 404 로 맞췄다 —
    PX=2 에 필요한 캔버스 높이가 808px 이라 1080p(약 865px)에 여유가 남는다.
    여기를 40px 만 키워도 배율이 1로 떨어져 화면이 절반이 된다. */
@@ -496,7 +496,10 @@ function drawHead(x, b, skin, hair, dir, style = 0) {
   const eyes = dir === 's' ? [-6, 4] : dir === 'e' ? [4] : [-6];
   for (const ex of eyes) {
     X.fillStyle = '#332E3E'; X.fillRect(x + ex, t + 9, 3, 5);
-    X.fillStyle = 'rgba(255,255,255,.7)'; X.fillRect(x + ex, t + 9, 1, 2);
+    /* 반짝임은 **1×1** 이다. 예전엔 눈 왼쪽에 1×2 로 세워 넣었는데, 3px 짜리
+       눈에서 왼쪽 한 줄이 하얘지면 남는 어두운 부분이 오른쪽으로 몰려
+       **눈동자가 오른쪽을 보는 것처럼** 읽힌다. 좌우 대칭이어도 그렇다. */
+    X.fillStyle = 'rgba(255,255,255,.55)'; X.fillRect(x + ex, t + 9, 1, 1);
   }
   X.fillStyle = 'rgba(232,138,138,.30)';           // 볼
   if (dir !== 'w') X.fillRect(x + 5, t + 13, 4, 2);

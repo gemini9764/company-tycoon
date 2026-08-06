@@ -1,4 +1,4 @@
-import { SECTORS, SHOP_ZONES, TIERS } from '../core/data.js';
+import { SECTORS, SHOP_ZONES, TIERS, gradeOf } from '../core/data.js';
 import { S } from '../core/state.js';
 import { viewRand } from '../core/rng.js';
 import { $, clamp, vpick, vrint, vrnd, won } from '../core/util.js';
@@ -101,7 +101,7 @@ const FLOOR_BOSS = '#6E5A46';
 let floorLayer = null, floorFor = null, floorKey = '', clerk = null, clerk2 = null, boss = null;
 
 /** 바닥·마감이 시설 레벨을 따라가므로 캐시 키에 레벨을 넣는다 */
-function facilKey() { return ['shelf', 'counter', 'cold', 'office', 'space'].map(fl).join(''); }
+function facilKey() { return ['shelf', 'counter', 'cold', 'office'].map(fl).join('') + ':' + S.co.tier; }
 
 function P(gx, gy) { const O = storeO(); return { x: isoX(O, gx, gy), y: isoY(O, gx, gy) }; }
 
@@ -135,12 +135,15 @@ function storeFloor() {
 
 /* 시설을 올릴수록 바닥 마감이 좋아진다 — 나무 → 타일 → 대리석.
    숫자 말고 화면으로도 성장을 보여 주려는 것. */
-function shopFloorPal() {
-  const sum = fl('shelf') + fl('counter') + fl('cold') + fl('office');
-  if (sum >= 8) return ['#E4E0D4', '#D4CFC0'];        // 대리석
-  if (sum >= 4) return ['#D6CBAE', '#C6B996'];        // 타일
-  return [FLOOR_SHOP, FLOOR_SHOP2];                    // 나무
-}
+/* 바닥 마감은 **등급**을 따른다. 시설 합계로 정하면 돈만 부으면 대리석이 깔려
+   "회사가 커져서 좋아진 것" 으로 안 읽힌다. 나무 → 타일 → 석재 → 대리석. */
+const FLOOR_GRADE = [
+  [FLOOR_SHOP, FLOOR_SHOP2],
+  ['#D6CBAE', '#C6B996'],
+  ['#DCD6C6', '#CCC5B2'],
+  ['#E8E4DA', '#D8D3C6'],
+];
+function shopFloorPal() { return FLOOR_GRADE[gradeOf(S).floor]; }
 
 /* 사무실도 같이 좋아진다 */
 function offFloorPal() {
@@ -262,7 +265,11 @@ function sayShop(i) {
 }
 
 function stepCustomers(items) {
-  const want = clamp(4 + Math.round(S.co.marketing * 3) + S.co.subs.length, 4, 14);
+  /* 손님 수. 등급이 오르면 가게가 커지고 사람도 늘어야 한다 — 넓어진 매장에
+     같은 인원이 서 있으면 오히려 썰렁해 보인다. 상한도 같이 올린다. */
+  const g = gradeOf(S);
+  const want = clamp(3 + g.deco + Math.round(S.co.marketing * 3) + S.co.subs.length,
+                     3 + g.deco, 8 + g.deco * 2);
   while (customers.length < want) customers.push(newCustomer());
   while (customers.length > want) customers.pop();
 
@@ -443,6 +450,8 @@ function drawStore() {
   for (const o of SHOP_PROPS) items.push({ y: P(o.gx, o.gy).y, f: () => drawProp(o) });
   items.push({ y: P(COUNTER[1].gx, COUNTER[1].gy).y, f: drawCounter });
   addOffice(items);
+  addWindows(items);
+  addDeco(items);
   drawPartition(items);
   stepCustomers(items);
 
@@ -501,26 +510,125 @@ function drawWalls(items) {
 function drawWallFittings() {
   drawSignboard();
   drawWhiteboard();
+  drawLights();
+}
+
+/* ══════════════════════════════════════════════════════════════
+   등급 장식
+
+   기능(진열대 대수)은 플레이어가 사고, **겉모습은 등급이 자동으로** 올린다.
+   여기까지 돈을 받으면 등급이 오른 보람이 안 난다.
+   한 등급에 하나씩만 붙는다 — 두 계단을 한 번에 오르면 "차근차근" 이 깨진다.
+   ══════════════════════════════════════════════════════════════ */
+
+/** 천장 조명. 매대 위에 매달린 펜던트 — 위쪽이라 무엇도 가리지 않는다 */
+function drawLights() {
+  const n = gradeOf(S).light;
+  const spots = [{ gx: 2, gy: 4 }, { gx: 5, gy: 4 }, { gx: 2, gy: 7 }];
+  /* 바닥에 깔리는 광원. **이게 없으면 조명이 안 보인다** — 펜던트만 그렸을 때는
+     벽과 집기에 묻혀 켜졌는지도 알 수 없었다. 빛이 닿은 자리가 밝아져야
+     "조명이 늘었다" 가 읽힌다. */
+  for (const o of spots.slice(0, n)) {
+    const { x, y } = P(o.gx, o.gy);
+    X.save(); X.globalAlpha = 0.16; 
+    rhomb(X, x, y + 4, HW * 2.1, HH * 2.1, '#FFE9A8');
+    X.globalAlpha = 0.10; rhomb(X, x, y + 4, HW * 3.2, HH * 3.2, '#FFE9A8');
+    X.restore();
+  }
+  for (const o of spots.slice(0, n)) {
+    const { x, y } = P(o.gx, o.gy);
+    const cx = Math.round(x), top = Math.round(y) - 74;
+    X.fillStyle = '#3E3830'; X.fillRect(cx, top, 2, 14);              // 줄
+    X.fillStyle = '#2E2A24'; X.fillRect(cx - 11, top + 14, 23, 5);    // 갓
+    X.fillStyle = '#5C5346'; X.fillRect(cx - 11, top + 14, 23, 2);
+    X.fillStyle = '#FFF0C4'; X.fillRect(cx - 8, top + 19, 17, 3);     // 전구면
+    X.save(); X.globalAlpha = 0.13; X.fillStyle = '#FFE9A8';          // 빛 번짐
+    X.fillRect(cx - 15, top + 22, 31, 12);
+    X.globalAlpha = 0.07; X.fillRect(cx - 21, top + 22, 43, 26); X.restore();
+  }
+}
+
+/**
+ * 벽에 난 창. **거리 쪽 벽(gx = -1)에 낸다** — 북쪽 벽은 냉장고와 진열대가
+ * 붙어 있어 창을 내도 집기 뒤에 가린다(처음에 그렇게 만들었다가 되돌렸다).
+ * 거리 쪽이면 밖의 하늘과 지나가는 사람이 비쳐 실내가 답답해 보이지 않는다.
+ */
+function addWindows(items) {
+  const n = gradeOf(S).win;
+  const spots = [2, 4, 9, 10];
+  for (const gy of spots.slice(0, n)) {
+    if (gy >= roomH() || gy === DOOR.gy) continue;
+    const { x, y } = P(-1, gy);
+    items.push({ y: y + 0.4, f: () => {
+      glassPanel(x, y, HW, HH, 'r', 3, 24, 18, 18, '#B4D2E6');
+      X.fillStyle = '#6B5B47';                                  // 창틀 가로대
+      const m = P(-1, gy);
+      X.fillRect(Math.round(m.x) + 4, Math.round(m.y) - 34, 14, 2);
+    } });
+  }
+}
+
+/** 입구 러그와 화분. 사람이 오가는 자리를 피해 벽 쪽에만 둔다 */
+function addDeco(items) {
+  const g = gradeOf(S);
+  if (g.rug) {
+    const { x, y } = P(0, roomH() - 2);
+    items.push({ y: y - 0.5, f: () => {
+      rhomb(X, x, y, HW - 2, HH - 1, '#8C5A4A');
+      rhomb(X, x, y, HW - 7, HH - 4, '#A66E58');
+    } });
+  }
+  /* 통로 한가운데는 피한다 — 손님이 화분을 통과해 걸어가면 없느니만 못하다.
+     매대와 벽 사이 자투리에만 둔다. */
+  const spots = [{ gx: 4, gy: 2 }, { gx: 4, gy: 5 }, { gx: 4, gy: 8 }];
+  for (const o of spots.slice(0, g.deco)) {
+    if (o.gy >= roomH()) continue;
+    const { x, y } = P(o.gx, o.gy);
+    items.push({ y, f: () => drawProp({ gx: o.gx, gy: o.gy, k: 'plant' }) });
+  }
 }
 
 /** 매장 간판 — 북동쪽 벽 위에 얹는다 */
+/**
+ * 회사 명판. **벽에 걸린 것처럼** 보여야 한다.
+ *
+ * 예전에는 남색 상자가 벽 **위로 떠 있었다**(y-54, 벽 높이는 51). 벽과 색도 재질도
+ * 무관해서 화면에 붙인 딱지처럼 보였다. 세 가지를 바꿨다 —
+ * 벽면 안쪽(몰딩과 벽 윗단 사이)으로 내리고, 벽에 그림자를 지게 하고,
+ * 벽 색에서 뽑은 나무 테두리에 놋쇠 판을 끼웠다.
+ * 걸이 두 개가 벽 윗단에서 내려와 실제로 매달린 것처럼 만든다.
+ */
 function drawSignboard() {
   const a = P(1, -1), b = P(4, -1);
   const x = (a.x + b.x) / 2, y = (a.y + b.y) / 2;
-  const w = 69;
-  X.fillStyle = '#14182A'; X.fillRect(Math.round(x - w / 2), Math.round(y - 54), w, 23);
-  X.fillStyle = '#F2B233'; X.fillRect(Math.round(x - w / 2), Math.round(y - 54), w, 5);
-  drawText(x, y - 38, S.co.name, { size: 12, color: '#FFE9A8', shadow: false });
+  const w = 74, h = 22, L = Math.round(x - w / 2), T = Math.round(y - 44);
+
+  X.save(); X.globalAlpha = 0.26;                       // 벽에 지는 그림자
+  X.fillStyle = '#000000'; X.fillRect(L + 3, T + 3, w, h); X.restore();
+  X.fillStyle = '#4A3E2E'; X.fillRect(L - 2, T - 2, w + 4, h + 4);      // 나무 테
+  X.fillStyle = '#6B5B47'; X.fillRect(L - 2, T - 2, w + 4, 2);
+  X.fillStyle = '#2E2A24'; X.fillRect(L, T, w, h);                       // 판
+  X.fillStyle = '#C9A253'; X.fillRect(L, T, w, 3);                       // 놋쇠 윗단
+  X.fillStyle = 'rgba(255,255,255,.06)'; X.fillRect(L, T + 3, w, 1);
+  for (const bx of [L + 10, L + w - 12]) {                               // 걸이
+    X.fillStyle = '#8A7659'; X.fillRect(bx, T - 8, 2, 7);
+    X.fillStyle = '#C9A253'; X.fillRect(bx - 1, T - 9, 4, 2);
+  }
+  drawText(x, T + 15, S.co.name, { size: 12, color: '#F0DFAE', shadow: false });
 }
 
 /** 사무실 화이트보드 — 협상 중이면 진행도/성공도, 아니면 다음 등급 목표 */
 function drawWhiteboard() {
   const a = P(10, -1), b = P(11, -1);
   const x = (a.x + b.x) / 2, y = (a.y + b.y) / 2;
-  const w = 93, h = 33, ty = Math.round(y - 57);
-  X.fillStyle = '#20263A'; X.fillRect(Math.round(x - w / 2) - 2, ty - 2, w + 4, h + 4);
-  X.fillStyle = '#EDEAE0'; X.fillRect(Math.round(x - w / 2), ty, w, h);
-  X.fillStyle = '#C9C4B4'; X.fillRect(Math.round(x - w / 2), ty + h - 3, w, 3);
+  /* 간판과 같은 이유로 벽면 안쪽에 건다 — 예전엔 y-57 로 벽 위에 떠 있었다 */
+  const w = 93, h = 33, ty = Math.round(y - 46), L = Math.round(x - w / 2);
+  X.save(); X.globalAlpha = 0.24;
+  X.fillStyle = '#000000'; X.fillRect(L + 3, ty + 3, w, h); X.restore();
+  X.fillStyle = '#4A4436'; X.fillRect(L - 3, ty - 3, w + 6, h + 6);       // 알루미늄 틀
+  X.fillStyle = '#635944'; X.fillRect(L - 3, ty - 3, w + 6, 2);
+  X.fillStyle = '#EDEAE0'; X.fillRect(L, ty, w, h);
+  X.fillStyle = '#C9C4B4'; X.fillRect(L, ty + h - 3, w, 3);
   if (S.nego) {
     drawText(x, ty + 14, `협상 · ${S.nego.name}`, { size: 10, color: '#26304A', shadow: false });
     bar(x - w / 2 + 6, ty + 18, w - 12, 5, S.nego.progress / 100, '#4A86C7');

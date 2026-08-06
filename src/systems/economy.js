@@ -1,5 +1,5 @@
 import { BAL } from '../core/balance.js';
-import { SECTORS, SHOP_ZONES } from '../core/data.js';
+import { SECTORS, SHOP_ZONES, gradeOf } from '../core/data.js';
 import { sumStat } from '../core/derive.js';
 import { isHolding, perksOf, sectorBonusOf, subMgrLoad, subYieldMul, tagMarketing, tagSynergy } from '../core/tags.js';
 import { $, clamp, rnd, won } from '../core/util.js';
@@ -11,7 +11,6 @@ import { pushInbox } from '../ui/toast.js';
    레벨을 올리면 매출·손님·재고 유지 기간·관리 인력에 영구 보너스가 붙는다.
    타일 배치는 건드리지 않는다 — 손님 경로가 그 격자를 쓰기 때문. */
 const FACIL = {
-  space:   { n: '가게 확장',   max: 3, tier: 1, d: '매장 한 줄 확장 · 매출 +5% / 단계' },
   shelf:   { n: '진열대 증설', max: 5, tier: 0, d: '매출 +7% / 단계' },
   counter: { n: '계산대 확장', max: 3, tier: 1, d: '손님 +2명 · 매출 +4% / 단계' },
   cold:    { n: '냉장 설비',   max: 5, tier: 1, d: '재고 유지 +4일 / 단계' },
@@ -19,12 +18,16 @@ const FACIL = {
 };
 
 /**
- * 지금 살 수 있는 최대 단계. 진열대는 **놓을 자리가 있어야** 늘어난다 —
- * 가게를 넓히지 않으면 4단계부터는 깔 데가 없다. 단계 상한을 자리와 묶어 두면
- * "돈은 있는데 왜 안 눌리지" 대신 "넓혀야 놓지" 가 된다.
+ * 지금 살 수 있는 최대 단계. 진열대·계산대·냉장은 **놓을 자리가 있어야** 늘어나고,
+ * 그 자리는 등급이 연다 (core/data.js STORE_GRADE). 상한을 매장 크기와 묶어 두면
+ * "돈은 있는데 왜 안 눌리지" 대신 "회사를 키워야 놓지" 가 된다.
+ *
+ * 등급이 자동으로 대수까지 채워 주지는 않는다 — 그러면 시설 탭이 할 일이 없다.
+ * 등급은 자리와 상한만 열고, 사는 건 플레이어다.
  */
 function facilMax(s, k) {
-  return k === 'shelf' ? Math.min(FACIL.shelf.max, 3 + facLv(s, 'space')) : FACIL[k].max;
+  const g = gradeOf(s);
+  return g[k] === undefined ? FACIL[k].max : Math.min(FACIL[k].max, g[k]);
 }
 
 const facLv = (s, k) => (s.co.facil && s.co.facil[k]) || 0;
@@ -90,7 +93,9 @@ function retailPotential(s) {
      사업부와 시너지로 이미 보상을 받으므로, 여기서까지 이중으로 주면
      한 업종만 파고드는 것이 모든 면에서 정답이 된다. */
   const variety = 1 + productLines(s).length * 0.13 + s.co.subs.length * 0.015;
-  const fac = 1 + facLv(s, 'shelf') * 0.07 + facLv(s, 'counter') * 0.04 + facLv(s, 'space') * 0.05;
+  /* 매장 크기 보너스는 따로 두지 않는다 — 크기는 등급이 정하고 등급은 이미
+     tierRetailMul 로 매출에 들어와 있다. 여기서 또 주면 이중 계산이다. */
+  const fac = 1 + facLv(s, 'shelf') * 0.07 + facLv(s, 'counter') * 0.04;
   const pk  = 1 + perksOf(s).retailMul;                     // daily 계열사
   const brd = 1 + tagMarketing(s) * 0.1;                    // 브랜드 태그
   return base * s.co.marketing * salesBuf * variety * zoneBonus(s) * fac * pk * brd;

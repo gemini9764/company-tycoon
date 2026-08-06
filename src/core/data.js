@@ -69,6 +69,38 @@ const SECTOR_KEYS = Object.keys(SECTORS);
    상품군 하나는 한 구역에만 배정된다 — 그 제약이 이 시스템의 전부다.
    중복이 되면 마진 제일 높은 업종을 전 구역에 깔면 그만이라 선택이 사라진다.
    ══════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════
+   등급별 매장
+
+   가게 크기를 시설 업그레이드에 두면 "돈만 있으면 언제든 커지는 것"이 되어,
+   도시 탭에서 등급마다 건물이 바뀌는 것과 결이 어긋난다. 매장이 커지는 건
+   **회사가 커졌기 때문**이어야 한다.
+
+   변화는 두 갈래로 나눴다.
+   · 기능(진열대·계산대·냉장 대수)은 **자리와 상한만 열어 주고** 사는 건 플레이어다.
+     등급이 자동으로 다 채워 주면 시설 탭이 할 일이 없어진다.
+   · 겉모습(바닥·벽·조명·장식·창·러그)은 **자동으로** 좋아진다. 여기까지 돈을
+     받으면 등급이 오른 보람이 안 난다.
+
+   `depth` 는 남쪽으로 늘어나는 줄 수다. 9~13 줄 사이를 7등급이 계단으로 오른다 —
+   구멍가게에서 스타트업으로 뛰었다고 갑자기 두 배가 되면 안 되므로 같은 깊이가
+   두 등급씩 이어지는 구간을 뒀다.
+   **13 줄이 상한인 이유는 미관이 아니라 한계다** — 월드 높이가 캔버스 절반(432)을
+   넘는 순간 정수 배율이 2에서 1로 떨어져 화면이 통째로 반쪽이 된다 (428 이 마지막).
+   ══════════════════════════════════════════════════════════════ */
+const STORE_GRADE = [
+  //                깊이 진열대 계산대 냉장 조명 장식 창 러그 바닥 벽
+  { depth: 0, shelf: 1, counter: 0, cold: 1, light: 0, deco: 0, win: 0, rug: 0, floor: 0 },  // 구멍가게
+  { depth: 1, shelf: 2, counter: 1, cold: 2, light: 1, deco: 1, win: 0, rug: 0, floor: 0 },  // 동네슈퍼
+  { depth: 1, shelf: 3, counter: 1, cold: 3, light: 1, deco: 1, win: 1, rug: 0, floor: 1 },  // 스타트업
+  { depth: 2, shelf: 3, counter: 2, cold: 4, light: 2, deco: 2, win: 2, rug: 0, floor: 1 },  // 중소기업
+  { depth: 2, shelf: 4, counter: 2, cold: 5, light: 2, deco: 2, win: 3, rug: 1, floor: 2 },  // 중견기업
+  { depth: 3, shelf: 5, counter: 3, cold: 5, light: 3, deco: 3, win: 4, rug: 1, floor: 2 },  // 대기업
+  { depth: 4, shelf: 5, counter: 3, cold: 5, light: 3, deco: 3, win: 4, rug: 1, floor: 3 },  // 글로벌그룹
+];
+
+const gradeOf = s => STORE_GRADE[Math.min(STORE_GRADE.length - 1, s.co.tier)];
+
 const SHOP_ZONES = [
   { id: 'front', n: '입구 매대', traffic: 1.00, tiles: [[1, 6], [2, 6], [3, 6]] },
   { id: 'aisle', n: '중앙 통로', traffic: 0.82, tiles: [[5, 6], [6, 6]] },
@@ -117,4 +149,4 @@ const TRAITS = [
   { id:'none',   name:'평범',     desc:'특이사항 없음',           },
 ];
 
-export { LIST_TIER, TIER_CAP, capTier, CREDITS, DIFFS, FIRST, GIVEN, NAME_A, RUMOR_GRADES, SECTORS, SHOP_ZONES, SECTOR_KEYS, SHAMAN_TIERS, TIERS, TRAITS };
+export { LIST_TIER, TIER_CAP, capTier, CREDITS, DIFFS, FIRST, GIVEN, NAME_A, RUMOR_GRADES, SECTORS, STORE_GRADE, gradeOf, SHOP_ZONES, SECTOR_KEYS, SHAMAN_TIERS, TIERS, TRAITS };
