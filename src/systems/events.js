@@ -7,7 +7,7 @@ import { creditIdx } from './company.js';
 import { dailyRetail, retailPotential } from './economy.js';
 import { checkEnding } from './ending.js';
 import { openModal } from '../ui/modal.js';
-import { news, toast } from '../ui/toast.js';
+import { news, pushInbox, toast } from '../ui/toast.js';
 
 /* ── 이벤트 ──────────────────────────────────────────────── */
 /* 벌금·정치자금은 시총에 비례하되 보유 자금을 넘겨 즉사시키지 않도록 상한을 둔다.
@@ -36,7 +36,11 @@ function tickEvent(s) {
     title: built.title, body: built.body,
     choices: built.choices.map(c => ({ ...c, run: () => { c.run(); resume(); checkEnding(s); } })),
   });
-  news(built.news || built.title);
+  /* **매장 사건은 속보로 띄우지 않는다.** 속보 띠는 주가·정세처럼 회사 밖에서
+     벌어지는 일을 알리는 자리다. '매장에 진상이 나타났습니다' 가 전국 뉴스로
+     흐르면 속보라는 장치 자체가 가벼워진다. 매장 사건은 알림함에만 남긴다. */
+  if (EV_SHOP.includes(ev)) pushInbox(s, built.title, built.body, 'bad');
+  else news(built.news || built.title);
 }
 
 /* ── 매장 이벤트 ─────────────────────────────────────────────

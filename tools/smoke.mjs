@@ -98,11 +98,33 @@ try {
   doc.querySelector('[data-team]').click();
   check('협상단 편성', game.teamOf(game.S).length > 0);
 
-  win.eval('game.S.co.cash = 1e9;');
-  openTab(win, doc, 'staff');
+  /* 고용은 '직원' 이 아니라 '고용' 창으로 옮겼다. 모집 방법 → 지원자 → 고용
+     세 단계를 UI 경로로 그대로 밟는다 (ui/hirePanel.js). */
+  win.eval('game.S.co.cash = 1e12;');
+  openTab(win, doc, 'hire');
+  check('모집 방법이 뜬다', doc.querySelectorAll('[data-way]').length === game.HIRE_WAYS.length,
+        doc.querySelectorAll('[data-way]').length + '종');
+  doc.querySelector('[data-way]:not([disabled])').click();
+  const cands = doc.querySelectorAll('[data-hire]');
+  check('지원자가 나온다', cands.length > 0, cands.length + '명');
   const before = game.S.staff.length;
-  doc.querySelector('[data-hire]').click();
+  cands[0].click();
   check('직원 영입', game.S.staff.length === before + 1);
+
+  // 정원이 차면 해고 비교 화면으로 넘어간다
+  win.eval(`(() => { const g = window.game, S = g.S;
+    while (S.staff.length < g.staffCap(S)) S.staff.push(g.makeStaff(1));
+  })()`);
+  win.eval('game.renderAll()');
+  const more = doc.querySelector('[data-hire]');
+  if (more) more.click();
+  check('정원이 차면 내보낼 사람을 고르게 한다',
+        doc.querySelectorAll('[data-swap]').length === game.S.staff.length,
+        '비교 대상 ' + doc.querySelectorAll('[data-swap]').length + '명');
+  const cash0 = game.S.co.cash, head0 = game.S.staff.length;
+  const swap = doc.querySelector('[data-swap]:not([disabled])');
+  if (swap) swap.click();
+  check('교체해도 정원은 그대로', game.S.staff.length === head0 && game.S.co.cash < cash0, '');
 
   openTab(win, doc, 'bank');
   const loan = doc.querySelector('[data-loan]:not([disabled])');

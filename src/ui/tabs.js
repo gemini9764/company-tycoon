@@ -3,7 +3,8 @@ import { SECTORS, SHAMAN_TIERS } from '../core/data.js';
 import { sumStat, teamOf } from '../core/derive.js';
 import { S, makeStaff } from '../core/state.js';
 import { $, clamp, esc, won } from '../core/util.js';
-import { expNeed, gainExp, teamPower } from '../systems/company.js';
+import { expNeed, gainExp, staffCap, teamPower } from '../systems/company.js';
+import { renderHire, resetHire } from './hirePanel.js';
 import { managersHave, managersNeeded } from '../systems/economy.js';
 import { useRumor } from '../systems/rumor.js';
 import { doGut, shamanFee } from '../systems/shaman.js';
@@ -19,19 +20,20 @@ import { toast } from './toast.js';
    null 이면 닫힌 상태다. */
 let TAB = null;
 
-const TABS = ['staff', 'stock', 'bank', 'shaman', 'rumor', 'inbox'];
+const TABS = ['staff', 'hire', 'stock', 'bank', 'shaman', 'rumor', 'inbox'];
 
 let STOCK_VIEW = 'all';   // 주식 창 안의 서브탭: 시장 전체 / 관심
 
 /** 창을 열고 닫는 유일한 통로. 같은 버튼을 다시 누르면 닫힌다. */
 function setTab(id) {
   TAB = (TAB === id) ? null : id;
+  if (TAB === 'hire') resetHire();      // 탭을 열면 항상 모집 방법부터
   renderDock(); renderPanel();
 }
 
 function renderRight() {
   if (!TABS.includes(TAB)) return;          // 닫혀 있거나 회사 창이면 할 일 없음
-  ({ staff: tabStaff, stock: tabStock, bank: tabBank, shaman: tabShaman, rumor: tabRumor, inbox: tabInbox })[TAB]();
+  ({ staff: tabStaff, hire: renderHire, stock: tabStock, bank: tabBank, shaman: tabShaman, rumor: tabRumor, inbox: tabInbox })[TAB]();
 }
 
 /* 직원 */
@@ -62,16 +64,11 @@ function tabStaff() {
         <button class="btn blood" data-fire="${e.id}">해고</button>
       </div></div>`).join('');
 
-  h += `<div class="row" style="margin-top:10px"><h4>스카웃 시장</h4>
-    <div class="meta">능력치가 높을수록 연봉 요구치가 올라갑니다.</div></div>`;
-  h += s.recruits.map((e, i) => `<div class="row tight">
-      <h4>${esc(e.name)} <span class="c-dim" style="font-size:10px;font-family:var(--f-sm)">${e.grade}급</span></h4>
-      <div>${chip(e)}</div>
-      <div class="meta">${e.trait.name} — ${e.trait.desc}</div>
-      <div class="btn-row">
-        <button class="btn gold" data-hire="${i}" ${s.co.cash < e.salary * 3 ? 'disabled' : ''}>영입 (계약금 ${won(e.salary * 3)})</button>
-      </div></div>`).join('');
-  h += `<button class="btn wide" id="reroll" style="margin-top:4px">시장 새로고침 ${won(rerollCost(s))}</button>`;
+  /* 스카웃 시장은 **고용 탭으로 옮겼다.** 후보 셋이 항상 떠 있고 새로고침만
+     누르면 되는 구조라 돈을 쓰는 판단이 하나뿐이었다 (ui/hirePanel.js). */
+  h += `<div class="row" style="margin-top:10px">
+      <h4>사원 정원<b class="${s.staff.length >= staffCap(s) ? 'c-blood' : 'c-jade'}">${s.staff.length} / ${staffCap(s)}</b></h4>
+      <div class="meta">새로 뽑으려면 <b>고용</b> 창을 여세요.</div></div>`;
 
   $('panel-body').innerHTML = h;
   const R = $('panel-body');
@@ -104,19 +101,6 @@ function tabStaff() {
     if (s.nego && s.staff[i].onTeam) return toast('협상 중인 인원은 해고할 수 없습니다', 'bad');
     toast(`${s.staff[i].name} 퇴사`); s.staff.splice(i, 1); renderRight(); renderLeft();
   });
-  R.querySelectorAll('[data-hire]').forEach(b => b.onclick = () => {
-    const i = +b.dataset.hire, e = s.recruits[i], fee = e.salary * 3;
-    if (s.co.cash < fee) return toast('계약금이 부족합니다', 'bad');
-    s.co.cash -= fee; s.recruits.splice(i, 1); s.staff.push(e);
-    toast(`${e.name} 입사`, 'good'); renderRight(); renderHud();
-  });
-  $('reroll').onclick = () => {
-    const c = rerollCost(s); if (s.co.cash < c) return toast('자금이 부족합니다', 'bad');
-    s.co.cash -= c;
-    const g = clamp(1 + Math.floor(s.co.tier * 0.8), 1, 5);
-    s.recruits = [makeStaff(g), makeStaff(g), makeStaff(clamp(g + 1, 1, 5))];
-    renderRight(); renderHud();
-  };
 }
 
 const trainCost = e => Math.round(300000 * Math.pow(1.9, e.lv));

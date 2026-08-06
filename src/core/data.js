@@ -101,6 +101,25 @@ const STORE_GRADE = [
 
 const gradeOf = s => STORE_GRADE[Math.min(STORE_GRADE.length - 1, s.co.tier)];
 
+/* ══════════════════════════════════════════════════════════════
+   모집 방법
+
+   레퍼런스는 게임 개발 스토리의 '어떻게 찾으시겠습니까'다. **비쌀수록 좋은
+   사람이 온다**는 한 줄이 전부이고, 그래서 돈을 얼마나 쓸지가 판단이 된다.
+
+   `bump` 는 등급 가산, `pick` 은 보여 줄 후보 수다. 싼 쪽은 후보가 적어
+   운에 걸리고, 비싼 쪽은 많이 보여 주므로 **돈이 확률까지 산다.**
+   `cost` 는 자사 시총 비례라 후반에도 값이 남는다 (고정값이면 금세 공짜가 된다).
+   ══════════════════════════════════════════════════════════════ */
+const HIRE_WAYS = [
+  { id: 'intro',  n: '지인 소개',     bump: 0, pick: 2, cost: 0.0006, d: '아는 사람에게 물어본다' },
+  { id: 'flyer',  n: '전단지 모집',   bump: 0, pick: 3, cost: 0.0018, d: '동네에 붙인다. 사람은 많이 온다' },
+  { id: 'online', n: '구인 사이트',   bump: 1, pick: 3, cost: 0.0055, d: '경력직이 눈에 띈다' },
+  { id: 'school', n: '대학 채용설명회', bump: 1, pick: 4, cost: 0.014, d: '갓 졸업한 인재를 먼저 본다' },
+  { id: 'agency', n: '헤드헌터 의뢰', bump: 2, pick: 4, cost: 0.034, d: '업계에서 이름난 사람을 데려온다' },
+  { id: 'global', n: '해외 스카웃',   bump: 3, pick: 4, cost: 0.085, d: '돈으로 살 수 있는 최고를 부른다' },
+];
+
 const SHOP_ZONES = [
   { id: 'front', n: '입구 매대', traffic: 1.00, tiles: [[1, 6], [2, 6], [3, 6]] },
   { id: 'aisle', n: '중앙 통로', traffic: 0.82, tiles: [[5, 6], [6, 6]] },
@@ -149,4 +168,4 @@ const TRAITS = [
   { id:'none',   name:'평범',     desc:'특이사항 없음',           },
 ];
 
-export { LIST_TIER, TIER_CAP, capTier, CREDITS, DIFFS, FIRST, GIVEN, NAME_A, RUMOR_GRADES, SECTORS, STORE_GRADE, gradeOf, SHOP_ZONES, SECTOR_KEYS, SHAMAN_TIERS, TIERS, TRAITS };
+export { LIST_TIER, TIER_CAP, capTier, CREDITS, DIFFS, FIRST, GIVEN, NAME_A, RUMOR_GRADES, SECTORS, HIRE_WAYS, STORE_GRADE, gradeOf, SHOP_ZONES, SECTOR_KEYS, SHAMAN_TIERS, TIERS, TRAITS };

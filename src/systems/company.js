@@ -1,6 +1,8 @@
 import { BAL } from '../core/balance.js';
 import { CREDITS, TIERS } from '../core/data.js';
 import { debtTotal, sumStat, teamOf } from '../core/derive.js';
+import { makeStaff } from '../core/state.js';
+import { facLv } from './economy.js';
 import { $, clamp } from '../core/util.js';
 import { dailyRetail } from './economy.js';
 import { checkEnding } from './ending.js';
@@ -125,4 +127,26 @@ function tickStaff(s) {
   }
 }
 
-export { capCeiling, checkTier, creditIdx, creditName, creditScore, expNeed, gainExp, loanRate, recalcCap, teamPower, tickStaff };
+/* ══════════════════════════════════════════════════════════════
+   고용
+
+   정원을 둔 이유는 "돈이 남으면 계속 뽑는다" 를 막기 위해서다. 자리가 차면
+   **누구를 내보낼지** 고르게 되고, 그때 비로소 능력치 비교가 판단이 된다.
+   상한 13 은 사무실 책상 수다 — 앉을 자리보다 많이 뽑을 수는 없다.
+   ══════════════════════════════════════════════════════════════ */
+const staffCap = s => clamp(4 + s.co.tier + facLv(s, 'office') * 2, 4, 13);
+
+/** 모집 비용. 자사 시총 비례 — 고정값이면 후반에 금세 공짜가 된다 */
+const hireCost = (s, w) => Math.round(Math.max(3e5, s.co.cap * w.cost));
+
+/**
+ * 지원자를 뽑는다. 등급은 회사 규모 + 모집 방법의 가산이다.
+ * 비싼 방법일수록 후보 수도 많아 **돈이 확률까지 산다.**
+ */
+function applicants(s, w) {
+  const base = clamp(1 + Math.floor(s.co.tier * 0.8), 1, 5);
+  return Array.from({ length: w.pick },
+    () => makeStaff(clamp(base + w.bump + (Math.random() < 0.3 ? 1 : 0), 1, 5)));
+}
+
+export { applicants, hireCost, staffCap, capCeiling, checkTier, creditIdx, creditName, creditScore, expNeed, gainExp, loanRate, recalcCap, teamPower, tickStaff };

@@ -36,11 +36,12 @@ const MODE_BTNS = {
   store: [
     { id: 'shop',   n: '매장', icon: 'store' },
     { id: 'staff',  n: '직원', icon: 'staff' },
+    { id: 'hire',   n: '고용', icon: 'hire' },
     { id: 'shaman', n: '무당', icon: 'shaman', lock: s => !s.shaman.unlocked, why: '스타트업 등급에서 해금' },
   ],
 };
 
-const TITLES = { co: '회사 현황', shop: '매장 운영', staff: '직원 · 협상단', stock: '주식시장', bank: '은행', shaman: '무당', rumor: '찌라시 네트워크', inbox: '알림함' };
+const TITLES = { co: '회사 현황', shop: '매장 운영', staff: '직원 · 협상단', hire: '신규 고용', stock: '주식시장', bank: '은행', shaman: '무당', rumor: '찌라시 네트워크', inbox: '알림함' };
 
 const ALL = () => [...FIXED, ...MODE_BTNS.city, ...MODE_BTNS.store];
 
