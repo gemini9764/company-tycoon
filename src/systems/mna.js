@@ -4,6 +4,7 @@ import { DIFFS, SECTORS } from '../core/data.js';
 import { sumStat, teamOf } from '../core/derive.js';
 import { bumpPerks, divisionName, divisionsOf, subPriceMul, tagsOf } from '../core/tags.js';
 import { rand } from '../core/rng.js';
+import { rivalOf } from '../core/rivals.js';
 import { $, chance, clamp, pct, pick, rint, rnd, won } from '../core/util.js';
 import { capCeiling, checkTier, loanRate, recalcCap, teamPower } from './company.js';
 import { delegateTable, rollDemands } from './negoTable.js';
@@ -44,9 +45,10 @@ function startNego(s, target, direct = false) {
   /* 매물 경쟁 — 마감이 걸리면 진행 속도가 자원이 된다 */
   if (chance(BAL.rivalChance)) {
     s.nego.rivalDue = s.day + rint(BAL.rivalDaysMin, BAL.rivalDaysMax);
-    news(`${target.name}에 다른 그룹도 접근 중`);
+    const rv = rivalOf(target.id);
+    news(`${target.name}에 ${rv.n}도 접근 중`);
     pushInbox(s, '경쟁 인수자 등장',
-      `<b>${target.name}</b> 인수에 다른 그룹이 뛰어들었습니다. <b>${s.nego.rivalDue - s.day}일</b> 안에 협상을 마치지 못하면 넘어갑니다. 회사 창에서 <b>시한 제시</b>로 진행을 앞당길 수 있습니다.`, 'bad');
+      `<b>${target.name}</b> 인수에 <b>${rv.n}</b>이(가) 뛰어들었습니다 — ${rv.who}. <b>${s.nego.rivalDue - s.day}일</b> 안에 협상을 마치지 못하면 넘어갑니다. 회사 창에서 <b>시한 제시</b>로 진행을 앞당길 수 있습니다.`, 'bad');
   }
   news(`${s.co.name} 협상단, ${target.name} 인수 협상 착수`);
   if (stake.stars) toast(`사둔 지분 ${'★'.repeat(stake.stars)} — 성공도 +${stake.success}`, 'good');
@@ -86,10 +88,12 @@ function loseToRival(s) {
     tgt.cap = Math.round(tgt.cap * (1 + BAL.rivalCapUp));
     tgt.diff = Math.min(3, tgt.diff + 1);
     tgt.rivalOwned = true;
-    news(`${tgt.name}, 다른 그룹에 넘어감`);
-    pushInbox(s, '인수 실패 — 경쟁에서 밀림',
-      `<b>${tgt.name}</b>이(가) 다른 그룹에 넘어갔습니다. 시가총액이 ${Math.round(BAL.rivalCapUp * 100)}% 오르고 인수 난이도가 한 단계 올라갔습니다. 다시 노릴 수는 있습니다.`, 'bad');
-    toast(`${tgt.name} — 경쟁에서 밀렸습니다`, 'bad');
+    const rv = rivalOf(tgt.id);
+    tgt.rivalName = rv.n;          // 표시용. 없으면 rivalOf 로 다시 뽑으므로 구버전 세이브도 안전하다
+    news(`${tgt.name}, ${rv.n}에 넘어감`);
+    pushInbox(s, `인수 실패 — ${rv.n}에 밀림`,
+      `<b>${tgt.name}</b>이(가) <b>${rv.n}</b>에 넘어갔습니다.<br><span class="c-dim">${rv.jab}</span><br><br>시가총액이 ${Math.round(BAL.rivalCapUp * 100)}% 오르고 인수 난이도가 한 단계 올라갔습니다. 다시 노릴 수는 있습니다.`, 'bad');
+    toast(`${rv.n}에 밀렸습니다 — ${tgt.name}`, 'bad');
   }
 }
 
@@ -191,7 +195,7 @@ function negoEvent(s, n, team) {
     { t:'노조 반발', d:`${n.name} 노조가 고용 승계를 요구하며 반발합니다.`,
       c:[{ l:'고용 승계 약속', s:+11, m:+0.07, note:'인수가 +7%p, 성공도 +11' },
          { l:'구조조정 명시', s:-13, m:-0.10, note:'인수가 -10%p, 성공도 -13' }] },
-    { t:'경쟁 인수자 등장', d:'다른 그룹이 같은 매물에 관심을 보입니다.',
+    { t:`경쟁 인수자 등장`, d:`${rivalOf(n.id).n}이(가) 같은 매물에 관심을 보입니다.`,
       c:[{ l:'가격 인상 제시', s:+14, m:+0.14, note:'인수가 +14%p, 성공도 +14' },
          { l:'조건 유지', s:-9, m:0, note:'성공도 -9' }] },
     { t:'창업주 감정', d:'창업주가 회사 매각 자체를 망설이고 있습니다.',

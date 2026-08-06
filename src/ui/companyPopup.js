@@ -1,4 +1,5 @@
 import { BAL } from '../core/balance.js';
+import { rivalOf } from '../core/rivals.js';
 import { DIFFS, SECTORS, TIERS } from '../core/data.js';
 import { sumStat, teamOf } from '../core/derive.js';
 import { S } from '../core/state.js';
@@ -44,7 +45,7 @@ function openCompany(c) {
       ${overCap ? `<p style="margin-top:10px" class="c-blood">현재 등급(${TIERS[s.co.tier].name})으로는 인수할 수 없는 규모입니다. 상한 ${won(capCeiling(s))}</p>` : ''}
       ${stars || priv ? `<div class="kv"><span>사둔 지분</span><b class="c-gold">${'★'.repeat(stars)}${'☆'.repeat(BAL.stakeStars - stars)}${priv ? ` <span class="c-dim">장외 ${won(priv)}</span>` : ''}</b></div>` : ''}
       ${c.leak ? '<p style="margin-top:10px" class="c-blood">지분을 사 모으는 것이 알려졌습니다 — 주가가 오르고 난이도가 한 단계 올라갔습니다.</p>' : ''}
-      ${c.rivalOwned ? '<p style="margin-top:10px" class="c-blood">한 번 다른 그룹에 넘어간 회사입니다 — 값이 오르고 난이도가 한 단계 높습니다.</p>' : ''}
+      ${c.rivalOwned ? `<p style="margin-top:10px" class="c-blood">한 번 <b>${c.rivalName || rivalOf(c.id).n}</b>에 뺏긴 회사입니다 — 값이 오르고 난이도가 한 단계 높습니다.</p>` : ''}
       ${c.curse ? '<p style="margin-top:10px" class="c-mauve">살(煞)이 걸려 있습니다 — 협상 성공도 증가율 +45%</p>' : ''}
       ${rumor ? `<p style="margin-top:10px" class="c-sky">보유 찌라시 ${rumor.grade}급 — 사용 시 인수가 -${Math.round(rumor.val * 100)}%p</p>` : ''}`,
     /* 선택지를 **밑작업 / 파견** 두 단으로 가른다. 셋이 평면으로 섞여 있으면

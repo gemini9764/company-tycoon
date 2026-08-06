@@ -422,6 +422,18 @@ try {
     g.negoAct(S2, 'quit');
     r.push(['협상 중단', S2.nego === null && S2.co.cash < c0, '위약금 ' + g.won(c0 - S2.co.cash)]);
     r.push(['중단 후 재파견 가능', (g.startNego(S2, t2), !!S2.nego), '']);
+
+    /* 라이벌 이름 — 상태를 저장하지 않고 매물 id 로 결정적으로 뽑는다.
+       같은 회사엔 늘 같은 상대가 붙어야 하고, 게임 rng 를 건드리면 안 된다. */
+    const rid = S2.market[3].id;
+    const r1 = g.rivalOf(rid), r2 = g.rivalOf(rid);
+    r.push(['라이벌은 매물마다 고정', r1.n === r2.n && !!r1.who && !!r1.jab, r1.n]);
+    const spread = new Set(S2.market.slice(0, 30).map(c => g.rivalOf(c.id).n));
+    r.push(['라이벌이 한 명으로 몰리지 않는다', spread.size >= 4, spread.size + '종']);
+    const seedBefore = g.rand();
+    g.rivalOf(rid); g.rivalOf(rid); g.rivalOf(rid);
+    const seedAfter = g.rand();
+    r.push(['라이벌 추첨은 난수를 쓰지 않는다', seedBefore !== seedAfter, '시드 스트림 무관']);
     return r;
   })()`);
   actOk.forEach(([n, ok, d]) => check(n, ok, d));
