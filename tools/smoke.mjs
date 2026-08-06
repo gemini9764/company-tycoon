@@ -722,6 +722,42 @@ try {
   })()`);
   lineOk.forEach(([n, ok, d]) => check(n, ok, d));
 
+  /* ── 매대 배정 ───────────────────────────────────────────
+     자리는 고정이고 무엇을 놓을지만 고른다. 제약은 하나 — 같은 상품군은
+     한 매대에만. 그게 없으면 마진 최고 업종을 전 구역에 깔면 그만이다. */
+  const zoneOk = win.eval(`(() => {
+    const g = window.game, r = [];
+    const S = g.setS(g.newState('매대', 1001));
+    const add = k => S.co.subs.push({ id: 'z' + S.co.subs.length, sector: k, cap: 1e9, pmi: 99 });
+    add('it'); add('build');           // 마진 0.58 / 0.16
+
+    r.push(['배정 전에는 배수가 1', Math.abs(g.zoneBonus(S) - 1) < 1e-9, '']);
+
+    g.assignZone(S, 'front', 'it');    // 통행 1.00 에 고마진
+    const good = g.zoneBonus(S);
+    g.assignZone(S, 'front', null);
+    g.assignZone(S, 'cold', 'it');     // 통행 0.45 에 같은 상품
+    const bad = g.zoneBonus(S);
+    r.push(['목 좋은 자리가 더 값어치 있다', good > bad, good.toFixed(3) + ' > ' + bad.toFixed(3)]);
+
+    // 같은 상품군은 한 매대에만
+    g.assignZone(S, 'front', 'it');
+    r.push(['중복 배정은 앞의 것을 내린다',
+            g.shopZones(S).front === 'it' && !g.shopZones(S).cold, '']);
+
+    // 보유하지 않은 상품군은 효과가 없다
+    g.assignZone(S, 'aisle', 'pharma');
+    r.push(['없는 상품군은 매출에 안 붙는다',
+            Math.abs(g.zoneBonus(S) - good) < 1e-9, '제약 계열사 없음']);
+
+    // 매출에 실제로 곱해지는가
+    const v0 = g.retailPotential(S);
+    g.assignZone(S, 'aisle', 'build');
+    r.push(['배정이 매출 잠재력에 곱해진다', g.retailPotential(S) > v0, '']);
+    return r;
+  })()`);
+  zoneOk.forEach(([n, ok, d]) => check(n, ok, d));
+
   check('출력 무결성', !/NaN|undefined|Infinity/.test(all),
         (all.match(/.{0,30}(NaN|undefined|Infinity)/) || [''])[0]);
 } catch (e) {

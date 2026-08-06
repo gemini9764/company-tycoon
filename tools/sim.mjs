@@ -34,6 +34,7 @@ const { win, doc } = await boot();
 startGame(doc, '시뮬');
 win.__desk = process.argv.includes('--desk');
 win.__acts = process.argv.includes('--acts');
+win.__zones = process.argv.includes('--zones');
 win.__stake = process.argv.includes('--stake');
 win.__table = process.argv.includes('--table');
 
@@ -155,6 +156,14 @@ window.runSim = function (strategy, maxDays, seed) {
     if (prevNego && !S.nego) (S.co.subs.some(c => c.id === prevNego) ? acts.buy++ : acts.fail++);
 
     // 인수 판단 — 전략별로 감당할 자금 배수가 다르다
+    /* 매대 배정 — 비용이 없으니 실플레이어라면 누구나 한다. 다만 기본 봇에
+       넣으면 기존 기준선과 비교가 끊기므로 --acts 처럼 스위치로 분리한다.
+       정책은 자명하다: 통행량 높은 순서로 마진 높은 상품군을 얹는다. */
+    if (window.__zones && day % 30 === 0) {
+      const lines = [...g.productLines(S)].sort((a, b) => g.SECTORS[b].margin - g.SECTORS[a].margin);
+      g.SHOP_ZONES.forEach((z, i) => { if (lines[i]) g.assignZone(S, z.id, lines[i]); });
+    }
+
     if (strategy === 'active') activeOps(day);
 
     /* 미리 사두기 — 협상이 도는 동안 **다음 대상**에 밑밥을 깐다.

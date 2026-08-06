@@ -1,10 +1,10 @@
-import { SECTORS, TIERS } from '../core/data.js';
+import { SECTORS, SHOP_ZONES, TIERS } from '../core/data.js';
 import { S } from '../core/state.js';
 import { viewRand } from '../core/rng.js';
 import { $, clamp, vpick, vrint, vrnd, won } from '../core/util.js';
 import { HH, HW, faces, isoRoof, isoWin, isoX, isoY, makeLayer, prism, rhomb, rhombEdge } from './iso.js';
 import { FOOT_Y, ROOM_H, ROOM_W, SPLIT_GX, STORE_H, STORE_O, STORE_W, X, bubbleTurn, customers, drawBubble, drawPerson, drawPops, drawSitter, drawText, faceOf, frame, mix, newLook, pops, rrect, shade } from './canvas.js';
-import { dailyRetail, productLines } from '../systems/economy.js';
+import { dailyRetail, productLines, shopZones } from '../systems/economy.js';
 
 /* ══════════════════════════════════════════════════════════════
    사옥 (경영, 쿼터뷰) — 좌 매장 / 우 사무실 + 사장실
@@ -606,9 +606,23 @@ function drawFreezer(o) {
   X.fillRect(Math.round(x - 12), Math.round(y - 9), 8, 2); X.fillRect(Math.round(x + 5), Math.round(y - 6), 6, 2);
 }
 
+/** 이 타일이 속한 매대 구역에 배정된 상품군의 색. 없으면 null */
+function zoneColor(gx, gy) {
+  const z = shopZones(S), have = productLines(S);
+  for (const zone of SHOP_ZONES) {
+    if (!zone.tiles.some(t => t[0] === gx && t[1] === gy)) continue;
+    const k = z[zone.id];
+    return k && have.includes(k) ? SECTORS[k].color : null;
+  }
+  return null;
+}
+
 function drawShelf(o) {
   const { x, y } = P(o.gx, o.gy);
-  const pal = palette();
+  /* 배정한 매대는 **그 상품군 색으로 채운다.** 발주 탭에서 고른 것이 화면에
+     그대로 보여야 배정이 숫자놀음이 아니라 진열로 읽힌다. */
+  const zc = zoneColor(o.gx, o.gy);
+  const pal = zc ? [zc, shade(zc, 0.22), shade(zc, -0.18)] : palette();
   X.save(); X.globalAlpha = 0.18; rhomb(X, x + 3, y + 2, 22, 11, '#000000'); X.restore();
   prism(X, x, y, 22, 11, 26, '#9C7A56', '#6B5136', '#8A6A4A');
   faces(X, x, y, 22, 11, 0, 3, '#5C452D', '#79593B');             // 받침대

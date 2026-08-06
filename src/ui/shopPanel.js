@@ -1,11 +1,12 @@
 import { sfx } from '../core/audio.js';
 import { BAL } from '../core/balance.js';
-import { SECTORS } from '../core/data.js';
+import { SECTORS, SHOP_ZONES } from '../core/data.js';
 import { S } from '../core/state.js';
 import { $, clamp, won } from '../core/util.js';
-import { FACIL, facLv, facilCost, facilLocked, invCost, invLife, managersHave, productLines, managersNeeded, orderInv, retailPotential, synergyParts } from '../systems/economy.js';
+import { FACIL, assignZone, facLv, facilCost, facilLocked, invCost, invLife, managersHave, productLines, managersNeeded, orderInv, retailPotential, shopZones, synergyParts, zoneBonus } from '../systems/economy.js';
 import { renderHud } from './hud.js';
 import { TAB } from './tabs.js';
+import { openModal } from './modal.js';
 import { toast } from './toast.js';
 
 /* ══════════════════════════════════════════════════════════════
@@ -44,12 +45,23 @@ function viewOrder(s) {
   /* 상품군 — 인수가 매장에 무엇을 남겼는지 한 줄로 보여 준다. M&A 의 성과가
      경영 화면에서 확인되는 몇 안 되는 자리다. */
   const lines = productLines(s);
+  const z = shopZones(s);
   const lineRow = `<div class="row">
-      <h4>상품군<b class="${lines.length ? 'c-jade' : 'c-dim'}">${lines.length}종</b></h4>
+      <h4>상품군<b class="${lines.length ? 'c-jade' : 'c-dim'}">${lines.length}종</b>
+        <span class="c-dim" style="font-size:10px;font-family:var(--f-sm)">매출 ×${zoneBonus(s).toFixed(2)}</span></h4>
       <div class="meta">${lines.length
         ? lines.map(k => `<span style="color:${SECTORS[k].color}">${SECTORS[k].name}</span>`).join(' · ')
           + '<br>업종을 넓힐수록 매출 다양성이 오릅니다. 같은 업종을 더 사도 상품군은 늘지 않습니다.'
         : '계열사를 인수하면 그 업종 상품이 매대에 오릅니다.'}</div>
+      <div class="meta" style="margin-top:6px">목이 좋은 매대일수록 마진 높은 상품을 놓는 편이 낫습니다. 한 상품군은 <b>한 매대에만</b> 놓을 수 있습니다.</div>
+      ${SHOP_ZONES.map(zone => {
+        const k = z[zone.id], ok = k && lines.includes(k);
+        return `<div class="kv" style="margin-top:4px">
+          <span>${zone.n}<b class="c-dim" style="font-size:10px;font-family:var(--f-sm)"> 통행 ${Math.round(zone.traffic * 100)}</b></span>
+          <button class="btn ${ok ? 'sky' : ''}" data-zone="${zone.id}" ${lines.length ? '' : 'disabled'}
+            style="padding:2px 8px">${ok ? SECTORS[k].name + ` +${Math.round(SECTORS[k].margin * 50)}%` : '비어 있음'}</button>
+        </div>`;
+      }).join('')}
     </div>`;
   const col = st < BAL.invWarnAt ? 'var(--blood)' : st < 60 ? 'var(--gold)' : 'var(--jade)';
   const daysLeft = Math.floor(st / (100 / invLife(s)));
@@ -129,6 +141,26 @@ function viewOps(s) {
 function bind(s) {
   const R = $('panel-body');
   R.querySelectorAll('[data-sv]').forEach(b => b.onclick = () => { SHOP_VIEW = b.dataset.sv; renderShop(); });
+
+  R.querySelectorAll('[data-zone]').forEach(b => b.onclick = () => {
+    const id = b.dataset.zone, zone = SHOP_ZONES.find(x => x.id === id);
+    const lines = productLines(s), cur = shopZones(s)[id];
+    openModal({
+      title: `${zone.n} — 무엇을 놓을까`,
+      body: `<p>통행량 <b>${Math.round(zone.traffic * 100)}</b>. 목이 좋은 매대일수록 마진 높은 상품이 유리합니다.</p>
+             <div class="meta" style="margin-top:8px">이미 다른 매대에 놓인 상품군을 고르면 그쪽에서 내려옵니다.</div>`,
+      choices: [
+        ...lines.map(k => ({
+          label: `${SECTORS[k].name} — 매출 +${Math.round(SECTORS[k].margin * 50)}%`,
+          sub: Object.entries(shopZones(s)).find(([, v]) => v === k)
+            ? `지금 ${SHOP_ZONES.find(x => x.id === Object.entries(shopZones(s)).find(([, v]) => v === k)[0]).n}에 있습니다` : '',
+          dis: k === cur,
+          run: () => { assignZone(s, id, k); renderShop(); renderHud(); },
+        })),
+        ...(cur ? [{ label: '비운다', run: () => { assignZone(s, id, null); renderShop(); renderHud(); } }] : []),
+      ],
+    });
+  });
 
   R.querySelectorAll('[data-order]').forEach(b => b.onclick = () => {
     const got = orderInv(s, +b.dataset.order, false);

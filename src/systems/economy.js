@@ -1,5 +1,5 @@
 import { BAL } from '../core/balance.js';
-import { SECTORS } from '../core/data.js';
+import { SECTORS, SHOP_ZONES } from '../core/data.js';
 import { sumStat } from '../core/derive.js';
 import { isHolding, perksOf, sectorBonusOf, subMgrLoad, subYieldMul, tagMarketing, tagSynergy } from '../core/tags.js';
 import { $, clamp, rnd, won } from '../core/util.js';
@@ -29,6 +29,37 @@ function facilCost(s, k) {
 function facilLocked(s, k) { return s.co.tier < FACIL[k].tier; }
 
 /* ── 경영: 일 매출/비용 ──────────────────────────────────── */
+/**
+ * 매대 배정. 구버전 세이브에는 없으므로 읽는 쪽마다 여기를 거친다 (SAVE_V 무변경).
+ * 배정한 뒤 그 업종 계열사를 전부 팔면 배정이 남아 있어도 효과는 없다 —
+ * `productLines` 에 없는 키는 아래에서 걸러진다.
+ */
+const shopZones = s => (s.co.zones ||= {});
+
+/**
+ * 목 좋은 자리에 마진 높은 상품군을 놓았는가. 1.00 ~ 약 1.25.
+ * 통행량 가중 평균이라 **입구 매대 한 칸이 냉장 매대 두 칸보다 무겁다.**
+ * 비어 있는 구역은 1.0 으로 들어가므로 배정이 손해가 되는 일은 없다.
+ */
+function zoneBonus(s) {
+  const z = shopZones(s), have = productLines(s);
+  let sum = 0, total = 0;
+  for (const zone of SHOP_ZONES) {
+    const k = z[zone.id];
+    total += zone.traffic;
+    sum += zone.traffic * (k && have.includes(k) ? 1 + SECTORS[k].margin * 0.5 : 1);
+  }
+  return sum / total;
+}
+
+/** 매대 배정 — 같은 상품군은 한 구역에만 놓을 수 있다 */
+function assignZone(s, zoneId, sectorKey) {
+  const z = shopZones(s);
+  if (!sectorKey) { delete z[zoneId]; return; }
+  for (const k of Object.keys(z)) if (z[k] === sectorKey) delete z[k];   // 중복 해제
+  z[zoneId] = sectorKey;
+}
+
 /** 매장에 오른 상품군 = 계열사를 가진 업종. 인수 순서대로 */
 function productLines(s) {
   const out = [];
@@ -52,7 +83,7 @@ function retailPotential(s) {
   const fac = 1 + facLv(s, 'shelf') * 0.07 + facLv(s, 'counter') * 0.04;
   const pk  = 1 + perksOf(s).retailMul;                     // daily 계열사
   const brd = 1 + tagMarketing(s) * 0.1;                    // 브랜드 태그
-  return base * s.co.marketing * salesBuf * variety * fac * pk * brd;
+  return base * s.co.marketing * salesBuf * variety * zoneBonus(s) * fac * pk * brd;
 }
 
 /** 재고가 매출에 곱해지는 배수. 바닥나도 invFloor 까지만 떨어진다. */
@@ -210,4 +241,4 @@ function tickMonth(s) {
   checkBankrupt(s);
 }
 
-export { FACIL, facLv, facilCost, facilLocked, invCost, orderInv, retailPotential, invFactor, invLife, tickInv, productLines, dailyRetail, dailySubIncome, dailyUpkeep, managersHave, managersNeeded, pmi, synergyParts, tickEconomy, tickMonth, tickSynergy };
+export { FACIL, facLv, facilCost, facilLocked, invCost, orderInv, retailPotential, invFactor, invLife, tickInv, assignZone, shopZones, zoneBonus, productLines, dailyRetail, dailySubIncome, dailyUpkeep, managersHave, managersNeeded, pmi, synergyParts, tickEconomy, tickMonth, tickSynergy };

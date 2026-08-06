@@ -54,6 +54,28 @@ const SECTORS = {
 
 const SECTOR_KEYS = Object.keys(SECTORS);
 
+/* ══════════════════════════════════════════════════════════════
+   매대 구역
+
+   진열대 좌표는 전부 하드코딩 상수라 **자리는 플레이어가 못 옮긴다.**
+   그래서 자유 배치 대신 "자리는 고정, 무엇을 놓을지를 고른다" 로 갔다.
+   드래그 UI 도, 손님 경로가 막힐 위험도 없이 배치의 본질만 남는다.
+
+   `traffic` 은 문(gx 0, gy 7)과 계산대(gx 6, gy 3)를 잇는 주 동선에서 얼마나
+   가까운지다. 입구 매대가 가장 목이 좋고 냉장 매대가 가장 안쪽이다.
+   **좌표와 통행량이 한 표에 있어야** 화면(render/store.js)이 칠하는 자리와
+   계산(systems/economy.js)이 세는 자리가 어긋나지 않는다.
+
+   상품군 하나는 한 구역에만 배정된다 — 그 제약이 이 시스템의 전부다.
+   중복이 되면 마진 제일 높은 업종을 전 구역에 깔면 그만이라 선택이 사라진다.
+   ══════════════════════════════════════════════════════════════ */
+const SHOP_ZONES = [
+  { id: 'front', n: '입구 매대', traffic: 1.00, tiles: [[1, 6], [2, 6], [3, 6]] },
+  { id: 'aisle', n: '중앙 통로', traffic: 0.82, tiles: [[5, 6], [6, 6]] },
+  { id: 'back',  n: '안쪽 매대', traffic: 0.60, tiles: [[1, 3], [2, 3], [3, 3]] },
+  { id: 'cold',  n: '냉장 매대', traffic: 0.45, tiles: [[1, 1], [2, 1], [3, 1]] },
+];
+
 /* 인수 난이도 */
 const DIFFS = [
   { name:'하',   mul:2.0, prem:0.20 },
@@ -95,4 +117,4 @@ const TRAITS = [
   { id:'none',   name:'평범',     desc:'특이사항 없음',           },
 ];
 
-export { LIST_TIER, TIER_CAP, capTier, CREDITS, DIFFS, FIRST, GIVEN, NAME_A, RUMOR_GRADES, SECTORS, SECTOR_KEYS, SHAMAN_TIERS, TIERS, TRAITS };
+export { LIST_TIER, TIER_CAP, capTier, CREDITS, DIFFS, FIRST, GIVEN, NAME_A, RUMOR_GRADES, SECTORS, SHOP_ZONES, SECTOR_KEYS, SHAMAN_TIERS, TIERS, TRAITS };
