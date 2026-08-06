@@ -11,11 +11,21 @@ import { pushInbox } from '../ui/toast.js';
    레벨을 올리면 매출·손님·재고 유지 기간·관리 인력에 영구 보너스가 붙는다.
    타일 배치는 건드리지 않는다 — 손님 경로가 그 격자를 쓰기 때문. */
 const FACIL = {
-  shelf:   { n: '진열대 증설', max: 3, tier: 0, d: '매출 +7% / 단계' },
+  space:   { n: '가게 확장',   max: 3, tier: 1, d: '매장 한 줄 확장 · 매출 +5% / 단계' },
+  shelf:   { n: '진열대 증설', max: 5, tier: 0, d: '매출 +7% / 단계' },
   counter: { n: '계산대 확장', max: 3, tier: 1, d: '손님 +2명 · 매출 +4% / 단계' },
-  cold:    { n: '냉장 설비',   max: 3, tier: 1, d: '재고 유지 +4일 / 단계' },
+  cold:    { n: '냉장 설비',   max: 5, tier: 1, d: '재고 유지 +4일 / 단계' },
   office:  { n: '사무실 확장', max: 3, tier: 2, d: '관리 인력 +1명분 / 단계' },
 };
+
+/**
+ * 지금 살 수 있는 최대 단계. 진열대는 **놓을 자리가 있어야** 늘어난다 —
+ * 가게를 넓히지 않으면 4단계부터는 깔 데가 없다. 단계 상한을 자리와 묶어 두면
+ * "돈은 있는데 왜 안 눌리지" 대신 "넓혀야 놓지" 가 된다.
+ */
+function facilMax(s, k) {
+  return k === 'shelf' ? Math.min(FACIL.shelf.max, 3 + facLv(s, 'space')) : FACIL[k].max;
+}
 
 const facLv = (s, k) => (s.co.facil && s.co.facil[k]) || 0;
 
@@ -80,7 +90,7 @@ function retailPotential(s) {
      사업부와 시너지로 이미 보상을 받으므로, 여기서까지 이중으로 주면
      한 업종만 파고드는 것이 모든 면에서 정답이 된다. */
   const variety = 1 + productLines(s).length * 0.13 + s.co.subs.length * 0.015;
-  const fac = 1 + facLv(s, 'shelf') * 0.07 + facLv(s, 'counter') * 0.04;
+  const fac = 1 + facLv(s, 'shelf') * 0.07 + facLv(s, 'counter') * 0.04 + facLv(s, 'space') * 0.05;
   const pk  = 1 + perksOf(s).retailMul;                     // daily 계열사
   const brd = 1 + tagMarketing(s) * 0.1;                    // 브랜드 태그
   return base * s.co.marketing * salesBuf * variety * zoneBonus(s) * fac * pk * brd;
@@ -241,4 +251,4 @@ function tickMonth(s) {
   checkBankrupt(s);
 }
 
-export { FACIL, facLv, facilCost, facilLocked, invCost, orderInv, retailPotential, invFactor, invLife, tickInv, assignZone, shopZones, zoneBonus, productLines, dailyRetail, dailySubIncome, dailyUpkeep, managersHave, managersNeeded, pmi, synergyParts, tickEconomy, tickMonth, tickSynergy };
+export { FACIL, facLv, facilMax, facilCost, facilLocked, invCost, orderInv, retailPotential, invFactor, invLife, tickInv, assignZone, shopZones, zoneBonus, productLines, dailyRetail, dailySubIncome, dailyUpkeep, managersHave, managersNeeded, pmi, synergyParts, tickEconomy, tickMonth, tickSynergy };

@@ -3,7 +3,7 @@ import { BAL } from '../core/balance.js';
 import { SECTORS, SHOP_ZONES } from '../core/data.js';
 import { S } from '../core/state.js';
 import { $, clamp, won } from '../core/util.js';
-import { FACIL, assignZone, facLv, facilCost, facilLocked, invCost, invLife, managersHave, productLines, managersNeeded, orderInv, retailPotential, shopZones, synergyParts, zoneBonus } from '../systems/economy.js';
+import { FACIL, assignZone, facLv, facilCost, facilLocked, facilMax, invCost, invLife, managersHave, productLines, managersNeeded, orderInv, retailPotential, shopZones, synergyParts, zoneBonus } from '../systems/economy.js';
 import { renderHud } from './hud.js';
 import { TAB } from './tabs.js';
 import { openModal } from './modal.js';
@@ -92,15 +92,19 @@ function viewOrder(s) {
 /* ── 시설 ────────────────────────────────────────────────── */
 function viewFacil(s) {
   return Object.keys(FACIL).map(k => {
-    const f = FACIL[k], lv = facLv(s, k), max = lv >= f.max, lock = facilLocked(s, k);
+    const f = FACIL[k], lv = facLv(s, k), cap = facilMax(s, k);
+    /* 상한이 자리에 걸려 있으면(진열대) 그 이유를 버튼에 그대로 쓴다.
+       '최대' 라고만 쓰면 왜 더 못 늘리는지 알 수 없다. */
+    const room = lv >= cap, hard = lv >= f.max, lock = facilLocked(s, k);
     const cost = facilCost(s, k);
     return `<div class="row">
       <h4>${f.n}<b class="${lv ? 'c-gold' : 'c-dim'}">Lv.${lv} / ${f.max}</b></h4>
       <div class="gauge sm" style="margin-top:4px"><i style="width:${lv / f.max * 100}%;background:var(--gold)"></i></div>
       <div class="meta">${f.d}</div>
       <div class="btn-row">
-        <button class="btn gold" data-fac="${k}" ${max || lock || cost > s.co.cash ? 'disabled' : ''}>
-          ${max ? '최대' : lock ? `${['구멍가게', '동네슈퍼', '스타트업'][f.tier]} 등급부터` : `증설 ${won(cost)}`}</button>
+        <button class="btn gold" data-fac="${k}" ${room || lock || cost > s.co.cash ? 'disabled' : ''}>
+          ${hard ? '최대' : room ? '가게를 넓혀야 자리가 납니다'
+            : lock ? `${['구멍가게', '동네슈퍼', '스타트업'][f.tier]} 등급부터` : `증설 ${won(cost)}`}</button>
       </div>
     </div>`;
   }).join('');
@@ -178,10 +182,12 @@ function bind(s) {
 
   R.querySelectorAll('[data-fac]').forEach(b => b.onclick = () => {
     const k = b.dataset.fac, c = facilCost(s, k);
+    if (facLv(s, k) >= facilMax(s, k)) return toast('가게를 넓혀야 자리가 납니다', 'bad');
     if (s.co.cash < c) return toast('자금이 부족합니다', 'bad');
     s.co.cash -= c;
     s.co.facil[k] = facLv(s, k) + 1;
     sfx('coin'); toast(`${FACIL[k].n} Lv.${s.co.facil[k]}`, 'good');
+    if (k === 'space') toast('매장이 한 줄 넓어졌습니다', 'good');
     renderShop(); renderHud();
   });
 

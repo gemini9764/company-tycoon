@@ -151,8 +151,8 @@ console.log('views → shots/view0..3.png');
 }
 
 /* 시설 0단계 / 최대 단계를 나란히 — 증설이 그림에 반영되는지 눈으로 본다 */
-for (const [tag, lv] of [['facil0', 0], ['facil3', 3]]) {
-  win.eval(`game.S.co.inv = 100; game.S.co.facil = { shelf:${lv}, counter:${lv}, cold:${lv}, office:${lv} }; game.setMode('store')`);
+for (const [tag, lv] of [['facil0', 0], ['facil3', 5]]) {
+  win.eval(`game.S.co.inv = 100; game.S.co.facil = { space:Math.min(3,${lv}), shelf:${lv}, counter:Math.min(3,${lv}), cold:${lv}, office:Math.min(3,${lv}) }; game.setMode('store')`);
   for (let i = 0; i < 120; i++) win.eval('game.draw()');
   await writeFile(join(ROOT, `shots/${tag}.png`), surface.toBuffer('image/png'));
   console.log(`${tag} → shots/${tag}.png  (시설 Lv.${lv})`);

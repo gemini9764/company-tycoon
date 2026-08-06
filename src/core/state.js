@@ -44,7 +44,7 @@ function newState(companyName, seed) {
       /* 매장 운영 — 사옥 모드의 능동 요소 */
       inv: 100,            // 재고율 0~100. 팔릴수록 줄고, 바닥나면 매출이 invFloor 배
       autoOrder: false,    // 자동 발주 (단가 할증, 손 안 대도 유지)
-      facil: { shelf: 0, counter: 0, cold: 0, office: 0 },   // 시설 레벨
+      facil: { space: 0, shelf: 0, counter: 0, cold: 0, office: 0 },   // 시설 레벨
       deskDay: 0,          // 사장실 결재를 마지막으로 한 날 (하루 1회)
     },
     staff: [], recruits: [],

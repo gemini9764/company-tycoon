@@ -267,10 +267,13 @@ try {
   })()`);
   check('시설 최대에서도 손님 경로 유지', unreachable.length === 0,
         unreachable.length ? '막힘 ' + unreachable.join(' ') : `진열대 ${game.shelvesNow().length}개 전부 도달`);
+  /* 계산대는 단계마다 한 대씩 늘어난다 — 기본 2 + 증설 3. 예전에는 목록이
+     한 칸뿐이라 1단계든 3단계든 3대로 고정이었다. */
   check('시설 증설이 집기로 반영', game.shelvesNow().length === 11 && game.fridgesNow().length === 6
-        && game.countersNow().length === 3, `진열대 ${game.shelvesNow().length} · 냉장 ${game.fridgesNow().length} · 계산대 ${game.countersNow().length}`);
+        && game.countersNow().length === 5 && game.clerksNow().length === 3,
+        `진열대 ${game.shelvesNow().length} · 냉장 ${game.fridgesNow().length} · 계산대 ${game.countersNow().length} · 점원 ${game.clerksNow().length}`);
   check('시설이 바닥 마감을 바꾼다', game.shopFloorPal()[0] !== '#C9BC9B', game.shopFloorPal()[0]);
-  win.eval('game.S.co.facil = { shelf: 0, counter: 0, cold: 0, office: 0 }');
+  win.eval('game.S.co.facil = { space: 0, shelf: 0, counter: 0, cold: 0, office: 0 }');
 
   /* 사옥 캔버스 클릭 — 사장실 결재 */
   win.eval("game.setMode('store')");

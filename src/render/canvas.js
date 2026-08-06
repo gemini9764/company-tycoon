@@ -44,13 +44,32 @@ const CITY_O = { x: MAP_H * HW, y: CITY_HEAD };
 const CITY_PAD_X = 546, CITY_PAD_Y = 60;
 
 /* 사옥(경영) — 16×10 타일. gx 0..8 매장 / 9 칸막이 / 10..15 사무실 */
-const ROOM_W = 16, ROOM_H = 10;
+const ROOM_W = 16, ROOM_H_MAX = 13;
+
+/**
+ * 지금 쓰는 방 깊이. '가게 확장' 단계마다 남쪽으로 한 줄씩 늘어난다.
+ *
+ * **월드 사각형과 좌표 원점은 최대치로 고정이다.** 방이 커질 때 원점까지
+ * 움직이면 카메라·바닥 캐시·클릭 판정이 전부 따라 흔들린다. 자리를 미리
+ * 잡아 두고 **그리고 걸을 수 있는 범위만** 넓히면 그 위험이 사라진다.
+ */
+const roomH = () => 10 + ((S.co && S.co.facil && S.co.facil.space) || 0);
 /* 사옥은 PX=2 로 돈다. 세로가 병목이라 여백을 깎아 404 로 맞췄다 —
    PX=2 에 필요한 캔버스 높이가 808px 이라 1080p(약 865px)에 여유가 남는다.
    여기를 40px 만 키워도 배율이 1로 떨어져 화면이 절반이 된다. */
-const STORE_W = 624, STORE_H = 404;
-const STORE_O = { x: ROOM_H * HW, y: 72 };
-const FOOT_Y = STORE_H - 24;                       // 하단 상태 스트립 상단
+/* 월드 사각형은 **지금 방 크기에 딱 맞춘다.** 최대 확장에 맞춰 고정해 두면
+   확장하지 않은 초반부터 화면이 축소돼 보인다 (실제로 그렇게 만들었다가
+   되돌렸다). 원점도 방 깊이를 따라가므로 세 값이 늘 한 몸이다. */
+const storeO = () => ({ x: roomH() * HW, y: 72 });
+const storeW = () => roomH() * HW + 384;
+/* 392 는 넉넉히 남긴 값이 아니라 **한계를 보고 정한 값**이다. 월드 높이가
+   캔버스 절반(432)을 넘는 순간 정수 배율이 2 에서 1 로 떨어져 화면이 통째로
+   반쪽이 된다. 3단계 확장(+36)까지 428 로 그 선 아래에 머문다.
+   방을 더 깊게 늘리려면 이 절벽부터 처리할 것. */
+const storeH = () => 392 + (roomH() - 10) * HH;
+const footY  = () => storeH() - 24;                // 하단 상태 스트립 상단
+
+
 const SPLIT_GX = 9;                                // 매장과 사무실을 가르는 열
 
 /* Galmuri 는 비트맵 폰트라 설계 크기(9→10px, 11→12px, 14→15px)에서만 또렷하다.
@@ -107,9 +126,9 @@ function setMode(m) {
   renderTopBar();
 }
 
-function worldW() { return S && S.mode === 'store' ? STORE_W : CITY_W; }
+function worldW() { return S && S.mode === 'store' ? storeW() : CITY_W; }
 
-function worldH() { return S && S.mode === 'store' ? STORE_H : CITY_H; }
+function worldH() { return S && S.mode === 'store' ? storeH() : CITY_H; }
 
 /* 캔버스 백킹스토어를 래퍼 크기에 맞춘다. 월드는 그 안에서 정수 배율로 키운다.
 
@@ -570,4 +589,4 @@ function shade(hex, amt) {
   return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`;
 }
 
-export { drawHair, drawLegs, rrect, applyCamera, zoomBy, CITY_HEAD, CITY_H, CITY_O, CITY_PAD_X, CITY_PAD_Y, CITY_W, CV, DPR, FONT, FOOT_Y, HAIRS, MAP_H, MAP_W, OUT, OX, OY, PX, ROOM_H, ROOM_W, SHIRTS, SKINS, SPLIT_GX, STORE_H, STORE_O, STORE_W, X, customers, draw, drawHead, drawLabel, drawPed, drawPerson, drawBubble, bubbleTurn, drawPops, drawSitter, drawText, drawTorso, faceOf, fitCanvas, frame, hideTip, hitLot, hoverId, initCanvas, lotPos, mix, moveTip, newLook, onCanvasClick, onCanvasMove, pops, setMode, shade, showTip, textW, tipEl, toLogical, worldH, worldW, zoomInto, rotateCity };
+export { drawHair, drawLegs, rrect, applyCamera, zoomBy, CITY_HEAD, CITY_H, CITY_O, CITY_PAD_X, CITY_PAD_Y, CITY_W, CV, DPR, FONT, footY, HAIRS, MAP_H, MAP_W, OUT, OX, OY, PX, ROOM_H_MAX, ROOM_W, roomH, SHIRTS, SKINS, SPLIT_GX, storeH, storeO, storeW, X, customers, draw, drawHead, drawLabel, drawPed, drawPerson, drawBubble, bubbleTurn, drawPops, drawSitter, drawText, drawTorso, faceOf, fitCanvas, frame, hideTip, hitLot, hoverId, initCanvas, lotPos, mix, moveTip, newLook, onCanvasClick, onCanvasMove, pops, setMode, shade, showTip, textW, tipEl, toLogical, worldH, worldW, zoomInto, rotateCity };

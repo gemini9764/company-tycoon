@@ -3,7 +3,7 @@ import { S } from '../core/state.js';
 import { viewRand } from '../core/rng.js';
 import { $, clamp, vpick, vrint, vrnd, won } from '../core/util.js';
 import { HH, HW, faces, isoRoof, isoWin, isoX, isoY, makeLayer, prism, rhomb, rhombEdge } from './iso.js';
-import { FOOT_Y, ROOM_H, ROOM_W, SPLIT_GX, STORE_H, STORE_O, STORE_W, X, bubbleTurn, customers, drawBubble, drawPerson, drawPops, drawSitter, drawText, faceOf, frame, mix, newLook, pops, rrect, shade } from './canvas.js';
+import { footY, ROOM_W, roomH, SPLIT_GX, storeH, storeO, storeW, X, bubbleTurn, customers, drawBubble, drawPerson, drawPops, drawSitter, drawText, faceOf, frame, mix, newLook, pops, rrect, shade } from './canvas.js';
 import { dailyRetail, productLines, shopZones } from '../systems/economy.js';
 
 /* ══════════════════════════════════════════════════════════════
@@ -19,8 +19,8 @@ import { dailyRetail, productLines, shopZones } from '../systems/economy.js';
 const DOOR = { gx: 0, gy: 7 };          // 매장 서쪽 자동문
 const STREET_GX = -3;                   // 인도 (gx -3, -2 두 열)
 const STREET_MIN = -9;                  // 인도에서 오갈 수 있는 위쪽 끝
-/* 함수다 — canvas.js 와 서로 물려 있어 최상위에서 ROOM_H 를 읽으면 초기화 전이다 */
-const streetMax = () => ROOM_H + 8;     //                   아래쪽 끝
+/* 함수다 — canvas.js 와 서로 물려 있어 최상위에서 roomH() 를 읽으면 초기화 전이다 */
+const streetMax = () => roomH() + 8;     //                   아래쪽 끝
 
 /* 매장 집기 — 타일 한 칸을 차지하고 손님이 못 지나간다 */
 const FRIDGES = [{ gx: 1, gy: 0 }, { gx: 2, gy: 0 }, { gx: 3, gy: 0 }];
@@ -48,10 +48,18 @@ const SHOP_BLOCK = new Set(
    자리는 통로를 막지 않는 곳으로만 골랐다. gy=2·4·5·7·9 가로 통로와
    gx=0·4·6 세로 통로는 어느 레벨에서도 열려 있어야 한다.
    ─────────────────────────────────────────────────────────── */
-const EXTRA_SHELF   = [{ gx: 1, gy: 1 }, { gx: 2, gy: 1 }, { gx: 3, gy: 1 }];   // 냉장고 아래 한 줄
-const EXTRA_FRIDGE  = [{ gx: 7, gy: 0 }, { gx: 7, gy: 1 }, { gx: 4, gy: 1 }];   // 냉장 설비
-const EXTRA_COUNTER = [{ gx: 7, gy: 4 }];                                        // 계산대 2번대
-const CLERK2 = { gx: 8, gy: 4 };
+/* 4·5단계는 **넓힌 방에만** 자리가 있다 (gy 10, 11). 가게 확장 없이는 살 수 없다
+   — facilMax 가 막는다. '넓혔더니 놓을 데가 생겼다' 가 확장의 값어치다. */
+const EXTRA_SHELF   = [{ gx: 1, gy: 1 }, { gx: 2, gy: 1 }, { gx: 3, gy: 1 },
+                       { gx: 1, gy: 10 }, { gx: 3, gy: 10 }];
+const EXTRA_FRIDGE  = [{ gx: 7, gy: 0 }, { gx: 7, gy: 1 }, { gx: 4, gy: 1 },
+                       { gx: 5, gy: 1 }, { gx: 6, gy: 1 }];   // 냉장 설비
+/* 계산대 증설 — **단계마다 한 대씩** 늘어난다. 예전에는 목록이 한 칸뿐이라
+   1단계든 3단계든 화면이 똑같았다. 돈을 냈는데 아무것도 안 달라지면
+   증설한 걸 스스로 알 수 없다. 점원도 대수만큼 선다. */
+const EXTRA_COUNTER = [{ gx: 7, gy: 4 }, { gx: 7, gy: 6 }, { gx: 7, gy: 7 }];
+const EXTRA_CLERK   = [{ gx: 8, gy: 4 }, { gx: 8, gy: 6 }, { gx: 8, gy: 7 }];
+const CLERK2 = EXTRA_CLERK[0];
 
 const fl = k => (S.co.facil && S.co.facil[k]) || 0;
 
@@ -60,13 +68,16 @@ function shelvesNow() { return SHELVES.concat(EXTRA_SHELF.slice(0, fl('shelf')))
 
 function fridgesNow() { return FRIDGES.concat(EXTRA_FRIDGE.slice(0, fl('cold'))); }
 
-function countersNow() { return COUNTER.concat(fl('counter') ? EXTRA_COUNTER : []); }
+function countersNow() { return COUNTER.concat(EXTRA_COUNTER.slice(0, fl('counter'))); }
+
+/** 지금 서 있는 추가 점원 자리 */
+function clerksNow() { return EXTRA_CLERK.slice(0, fl('counter')); }
 
 /** 충돌 판정 — 기본 집기 + 증설분 */
 function blockedAt(gx, gy) {
   if (SHOP_BLOCK.has(`${gx},${gy}`)) return true;
   const ex = [...EXTRA_SHELF.slice(0, fl('shelf')), ...EXTRA_FRIDGE.slice(0, fl('cold'))];
-  if (fl('counter')) ex.push(...EXTRA_COUNTER, CLERK2);
+  ex.push(...EXTRA_COUNTER.slice(0, fl('counter')), ...clerksNow());
   return ex.some(o => o.gx === gx && o.gy === gy);
 }
 
@@ -90,9 +101,9 @@ const FLOOR_BOSS = '#6E5A46';
 let floorLayer = null, floorFor = null, floorKey = '', clerk = null, clerk2 = null, boss = null;
 
 /** 바닥·마감이 시설 레벨을 따라가므로 캐시 키에 레벨을 넣는다 */
-function facilKey() { return ['shelf', 'counter', 'cold', 'office'].map(fl).join(''); }
+function facilKey() { return ['shelf', 'counter', 'cold', 'office', 'space'].map(fl).join(''); }
 
-function P(gx, gy) { return { x: isoX(STORE_O, gx, gy), y: isoY(STORE_O, gx, gy) }; }
+function P(gx, gy) { const O = storeO(); return { x: isoX(O, gx, gy), y: isoY(O, gx, gy) }; }
 
 /* ── 바닥 캐시 ───────────────────────────────────────────── */
 function storeFloor() {
@@ -102,10 +113,10 @@ function storeFloor() {
   clerk = clerk || newLook('#F2B233');
   clerk2 = clerk2 || newLook('#E8E4D8');
   boss = boss || newLook('#8B5CB8');
-  const layer = makeLayer(STORE_W, STORE_H);
+  const layer = makeLayer(storeW(), storeH());
   const g = layer.ctx;
   if (g) {
-    for (let gy = 0; gy < ROOM_H; gy++) for (let gx = 0; gx < ROOM_W; gx++) {
+    for (let gy = 0; gy < roomH(); gy++) for (let gx = 0; gx < ROOM_W; gx++) {
       const { x, y } = P(gx, gy);
       if (gx === SPLIT_GX) { rhomb(g, x, y, HW, HH, '#4A4436'); continue; }
       const alt = (gx + gy) % 2 === 0;
@@ -185,7 +196,7 @@ function walkable(gx, gy) {
     if (gx === -1) return gy === DOOR.gy;                       // 자동문 한 칸
     return gx >= STREET_GX && gy >= STREET_MIN && gy <= streetMax();
   }
-  if (gx > SPLIT_GX - 1 || gy < 0 || gy > ROOM_H - 1) return false;
+  if (gx > SPLIT_GX - 1 || gy < 0 || gy > roomH() - 1) return false;
   return !blockedAt(gx, gy);
 }
 
@@ -214,14 +225,22 @@ function findPath(from, to) {
 
 /** 손님이 현재 서 있는 타일 */
 function tileOf(p) {
-  const dx = (p.x - STORE_O.x) / HW, dy = (p.y - STORE_O.y) / HH;
+  const O = storeO();
+  const dx = (p.x - O.x) / HW, dy = (p.y - O.y) / HH;
   return { gx: Math.round((dy + dx) / 2), gy: Math.round((dy - dx) / 2) };
 }
 
 function retarget(p) {
   const from = tileOf(p);
   let to;
-  if (p.phase === 'shelf') { const s = vpick(shelvesNow()); to = { gx: s.gx, gy: s.gy + 1 }; }
+  if (p.phase === 'shelf') {
+    /* 진열대 앞자리는 남쪽 한 칸으로 고정돼 있었다. 방 남쪽 끝에 진열대가
+       놓이면 그 자리가 방 밖이라 길찾기가 통째로 실패한다 — 통행 가능한
+       이웃 중 아무 데나로 바꾼다. */
+    const sh = vpick(shelvesNow());
+    to = [[0, 1], [0, -1], [1, 0], [-1, 0]].map(([dx, dy]) => ({ gx: sh.gx + dx, gy: sh.gy + dy }))
+      .find(t => walkable(t.gx, t.gy)) || { gx: 5, gy: 5 };
+  }
   else if (p.phase === 'counter') to = { gx: QUEUE.gx, gy: QUEUE.gy + (viewRand() < 0.5 ? 0 : 1) };
   else to = streetSpot();          // 나갈 때도 길을 따라 멀어진다
   if (!walkable(to.gx, to.gy)) to = { gx: 5, gy: 5 };
@@ -300,7 +319,7 @@ function advancePhase(p) {
    길이 솟아오른다. 배경과 거리가 같은 값을 봐야 어긋나지 않는다.
 
    상수가 아니라 함수다 — store.js 와 canvas.js 가 서로 물려 있어 모듈 최상위에서
-   STORE_H 를 읽으면 아직 초기화 전이라 터진다. */
+   storeH() 를 읽으면 아직 초기화 전이라 터진다. */
 /* 값이 방의 북쪽 꼭짓점(y=72)보다 조금 위다. 쿼터뷰에는 원래 지평선이 없지만,
    화면 위쪽에 남는 좁은 띠를 하늘로 쓰고 그 아래를 전부 땅으로 채우면
    "길 옆에 매장이 서 있다"로 읽힌다. 이 값을 내리면 문 밖 거리가 통째로
@@ -316,7 +335,7 @@ function drawBackdrop() {
      **길 건너 블록**이 있어야 할 자리다. 땅으로 전부 덮고 그 위에 아이소 건물을
      세우면 도로 끝은 건물이 알아서 가린다 — 자를 필요가 없어진다. */
   const M = 900;
-  X.fillStyle = '#9BA2B4'; X.fillRect(-M, -M, STORE_W + M * 2, STORE_H + M * 2);
+  X.fillStyle = '#9BA2B4'; X.fillRect(-M, -M, storeW() + M * 2, storeH() + M * 2);
 }
 
 /* 길 건너 블록. 평면 띠가 아니라 **같은 투영의 아이소 건물**이라야 배경이
@@ -349,10 +368,10 @@ function drawOutside() {
 
      차도 하나만 깔면 길이 아니라 회색 띠다. **건너편 인도까지** 놓아야
      "길 건너에서 이쪽으로 온다"로 읽힌다. */
-  for (let gy = -26; gy < ROOM_H + 28; gy++) {
+  for (let gy = -26; gy < roomH() + 28; gy++) {
     for (let gx = -30; gx < -1; gx++) {
       const { x, y } = P(gx, gy);
-      if (x < -240 || x > STORE_W + 240 || y < -60 || y > STORE_H + 60) continue;
+      if (x < -240 || x > storeW() + 240 || y < -60 || y > storeH() + 60) continue;
       if (gx >= -3) {                                    // 이쪽 인도
         rhomb(X, x, y, HW, HH, ((gx + gy) & 1) ? '#C6CBD8' : '#BEC3D0');
         rhombEdge(X, x, y, HW, HH, '#AFB6C6');
@@ -383,14 +402,14 @@ function drawOutside() {
     }
   }
   /* 연석 — 차도와 인도의 단차. 평면감을 줄이는 데 이게 제일 크다 */
-  for (let gy = -10; gy < ROOM_H + 12; gy++) {
+  for (let gy = -10; gy < roomH() + 12; gy++) {
     const { x, y } = P(-4, gy);
-    if (y < -40 || y > STORE_H + 20) continue;
+    if (y < -40 || y > storeH() + 20) continue;
     X.fillStyle = '#DDE1EA'; X.fillRect(Math.round(x - HW), Math.round(y - 3), HW * 2, 2);   // 연석 윗면
     X.fillStyle = '#8C93A6'; X.fillRect(Math.round(x - HW), Math.round(y - 1), HW * 2, 2);
   }
   /* 가로등 두 개 — 거리라는 신호 */
-  for (const gy of [-3, 3, ROOM_H, ROOM_H + 6]) {
+  for (const gy of [-3, 3, roomH(), roomH() + 6]) {
     const { x, y } = P(-3, gy);
     X.save(); X.globalAlpha = 0.18; rhomb(X, x + 1, y + 1, 5, 3, '#000000'); X.restore();
     X.fillStyle = '#78809A'; X.fillRect(Math.round(x) - 1, Math.round(y) - 26, 2, 26);
@@ -399,12 +418,12 @@ function drawOutside() {
 
   /* 길 건너 블록. 뒤(gx+gy 가 작은 쪽)부터 그려야 서로 안 겹친다. */
   const far = [];
-  for (let gy = -24; gy < ROOM_H + 24; gy += 3) far.push([-12, gy]);   // 길 건너 줄
+  for (let gy = -24; gy < roomH() + 24; gy += 3) far.push([-12, gy]);   // 길 건너 줄
   for (let gx = -33; gx <= -15; gx += 3) far.push([gx, -6]);           // 길 끝을 막는 줄
   far.sort((a, b) => (a[0] + a[1]) - (b[0] + b[1]));
   for (const [gx, gy] of far) {
     const c = P(gx + 1, gy + 1);
-    if (c.x < -300 || c.x > STORE_W + 300 || c.y < -220 || c.y > STORE_H + 120) continue;
+    if (c.x < -300 || c.x > storeW() + 300 || c.y < -220 || c.y > storeH() + 120) continue;
     drawFarBuilding(gx, gy, (((gx * 7 + gy * 13) % 5) + 5) % 5);
   }
 }
@@ -452,7 +471,7 @@ function drawWalls(items) {
       faces(X, x, y, HW, HH, 22, 24, shop ? '#6B5B47' : '#4A4436', shop ? '#8A7659' : '#635944');  // 허리 몰딩
     } });
   }
-  for (let gy = -1; gy < ROOM_H; gy++) {                // 북서쪽 벽 (gx = -1)
+  for (let gy = -1; gy < roomH(); gy++) {                // 북서쪽 벽 (gx = -1)
     if (gy === DOOR.gy) continue;                        // 자동문 자리
     const { x, y } = P(-1, gy);
     items.push({ y, f: () => {
@@ -524,7 +543,7 @@ function drawPartition(items) {
     const { x, y } = P(gx, gy);
     items.push({ y, f: () => prism(X, x, y, HW, HH, h, a, b, c) });
   };
-  for (let gy = 0; gy < ROOM_H; gy++) {
+  for (let gy = 0; gy < roomH(); gy++) {
     if (gy === 4) continue;                              // 통로
     put(SPLIT_GX, gy, 39, '#4A3E2A', '#2C2418', '#3A3020');
   }
@@ -678,10 +697,10 @@ function drawCounter() {
   }
   const c = P(CLERK.gx, CLERK.gy);
   drawPerson(c.x, c.y, clerk, 'w', 1);                                                     // 점원
-  if (fl('counter')) {                                          // 2번대 점원
-    const c2 = P(CLERK2.gx, CLERK2.gy);
-    drawPerson(c2.x, c2.y, clerk2, 'w', 1);
-  }
+  clerksNow().forEach((o, i) => {                               // 증설분 점원
+    const c2 = P(o.gx, o.gy);
+    drawPerson(c2.x, c2.y, clerk2, 'w', 1 - i % 2);
+  });
 }
 
 function drawProp(o) {
@@ -824,8 +843,8 @@ function drawOfficeProp(p, k) {
 
 /* ── 하단 상태 스트립 ────────────────────────────────────── */
 function drawFoot() {
-  X.fillStyle = '#14182A'; X.fillRect(0, FOOT_Y, STORE_W, STORE_H - FOOT_Y);
-  X.fillStyle = '#39415F'; X.fillRect(0, FOOT_Y, STORE_W, 2);
+  X.fillStyle = '#14182A'; X.fillRect(0, footY(), storeW(), storeH() - footY());
+  X.fillStyle = '#39415F'; X.fillRect(0, footY(), storeW(), 2);
   const net = S.co.revToday - S.co.costToday;
   const cells = [
     ['일매출', won(S.co.revToday), '#FFD57A'],
@@ -835,11 +854,11 @@ function drawFoot() {
     ['손님', customers.length + '명', '#E3D8BB'],
     ['직원', S.staff.length + '명', '#E3D8BB'],
   ];
-  const cw = STORE_W / cells.length;
+  const cw = storeW() / cells.length;
   cells.forEach(([k, v, c], i) => {
-    if (i) { X.fillStyle = '#2A3046'; X.fillRect(i * cw, FOOT_Y + 5, 2, 15); }
-    drawText(i * cw + cw / 2, FOOT_Y + 18, `${k} ${v}`, { size: 10, color: c, shadow: false });
+    if (i) { X.fillStyle = '#2A3046'; X.fillRect(i * cw, footY() + 5, 2, 15); }
+    drawText(i * cw + cw / 2, footY() + 18, `${k} ${v}`, { size: 10, color: c, shadow: false });
   });
 }
 
-export { drawBackdrop, drawOutside, glassPanel, BOSS, CLERK, CLERK2, COUNTER, DESKS, DOOR, EXTRA_COUNTER, EXTRA_FRIDGE, EXTRA_SHELF, FLATS, FREEZERS, FRIDGES, HOTSPOTS, P, QUEUE, SHELVES, SHOP_BLOCK, SHOP_PROPS, STREET_GX, STREET_MIN, addOffice, advancePhase, bar, blockedAt, countersNow, drawBossDesk, drawCounter, drawDesk, drawEmptyChair, drawFlat, drawFoot, drawFreezer, drawFridge, drawOfficeProp, drawPartition, drawProp, drawShelf, drawSignboard, drawStore, drawWallFittings, drawWalls, drawWhiteboard, facilKey, streetMax, streetSpot, findPath, fl, fridgesNow, inBossRoom, invRatio, newCustomer, offFloorPal, palette, retarget, shelvesNow, shopFloorPal, spawnCustomers, stepCustomers, stocked, storeFloor, storeHit, tileOf, walkable };
+export { drawBackdrop, drawOutside, glassPanel, BOSS, CLERK, CLERK2, COUNTER, DESKS, DOOR, EXTRA_CLERK, EXTRA_COUNTER, EXTRA_FRIDGE, EXTRA_SHELF, FLATS, FREEZERS, FRIDGES, HOTSPOTS, P, QUEUE, SHELVES, SHOP_BLOCK, SHOP_PROPS, STREET_GX, STREET_MIN, addOffice, advancePhase, bar, blockedAt, clerksNow, countersNow, drawBossDesk, drawCounter, drawDesk, drawEmptyChair, drawFlat, drawFoot, drawFreezer, drawFridge, drawOfficeProp, drawPartition, drawProp, drawShelf, drawSignboard, drawStore, drawWallFittings, drawWalls, drawWhiteboard, facilKey, streetMax, streetSpot, findPath, fl, fridgesNow, inBossRoom, invRatio, newCustomer, offFloorPal, palette, retarget, shelvesNow, shopFloorPal, spawnCustomers, stepCustomers, stocked, storeFloor, storeHit, tileOf, walkable };
