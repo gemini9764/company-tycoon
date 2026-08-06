@@ -25,17 +25,31 @@ function capTier(cap) {
 const LIST_TIER = 4;
 
 /* ── 업종 ────────────────────────────────────────────────── */
+/* `goods` 는 그 업종을 인수하면 매장 매대에 오르는 물건이다.
+   게임이 인수 때마다 "OO 상품군 추가" 라고 말해 놓고 실제로는 계열사 **개수**만
+   세고 있었다 — 제약을 사든 식품을 사든 결과가 같았다. 이 배열이 그 말을
+   지키게 하는 실체다. 손님 대사와 진열 색이 여기서 나온다. */
 const SECTORS = {
-  daily:  { name:'생필품', color:'#A8CE93', margin:0.26, suf:['상사','물산','유통'] },
-  food:   { name:'식품',   color:'#F0C48A', margin:0.30, suf:['식품','에프앤비','농산'] },
-  fashion:{ name:'의류',   color:'#E4A9C4', margin:0.44, suf:['패션','어패럴','섬유'] },
-  retail: { name:'유통',   color:'#9BC7E4', margin:0.18, suf:['유통','리테일','마트'] },
-  tech:   { name:'전자',   color:'#A3AEE4', margin:0.34, suf:['전자','정밀','텍'] },
-  it:     { name:'IT',     color:'#8FDCD4', margin:0.58, suf:['소프트','네트웍스','시스템즈'] },
-  pharma: { name:'제약',   color:'#C7ADE4', margin:0.52, suf:['제약','바이오','파마'] },
-  build:  { name:'건설',   color:'#CFB79A', margin:0.16, suf:['건설','중공업','산업'] },
-  fin:    { name:'금융',   color:'#E6D392', margin:0.40, suf:['캐피탈','금융','홀딩스'] },
-  media:  { name:'미디어', color:'#F0A894', margin:0.46, suf:['미디어','엔터','방송'] },
+  daily:  { name:'생필품', color:'#A8CE93', margin:0.26, suf:['상사','물산','유통'],
+            goods:['휴지','세제','칫솔'] },
+  food:   { name:'식품',   color:'#F0C48A', margin:0.30, suf:['식품','에프앤비','농산'],
+            goods:['라면','우유','과자'] },
+  fashion:{ name:'의류',   color:'#E4A9C4', margin:0.44, suf:['패션','어패럴','섬유'],
+            goods:['양말','티셔츠','장갑'] },
+  retail: { name:'유통',   color:'#9BC7E4', margin:0.18, suf:['유통','리테일','마트'],
+            goods:['생수','종이컵','봉투'] },
+  tech:   { name:'전자',   color:'#A3AEE4', margin:0.34, suf:['전자','정밀','텍'],
+            goods:['건전지','충전기','이어폰'] },
+  it:     { name:'IT',     color:'#8FDCD4', margin:0.58, suf:['소프트','네트웍스','시스템즈'],
+            goods:['기프트카드','공유기','USB'] },
+  pharma: { name:'제약',   color:'#C7ADE4', margin:0.52, suf:['제약','바이오','파마'],
+            goods:['비타민','밴드','마스크'] },
+  build:  { name:'건설',   color:'#CFB79A', margin:0.16, suf:['건설','중공업','산업'],
+            goods:['공구','테이프','목장갑'] },
+  fin:    { name:'금융',   color:'#E6D392', margin:0.40, suf:['캐피탈','금융','홀딩스'],
+            goods:['상품권','교통카드','복권'] },
+  media:  { name:'미디어', color:'#F0A894', margin:0.46, suf:['미디어','엔터','방송'],
+            goods:['잡지','굿즈','앨범'] },
 };
 
 const SECTOR_KEYS = Object.keys(SECTORS);

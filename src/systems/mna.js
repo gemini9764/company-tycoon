@@ -305,7 +305,10 @@ function completeAcq(s, tgt, price) {
   s.rumors = s.rumors.filter(r => r.target !== tgt.id);
   clearStake(s, tgt.id);         // 사둔 지분은 인수에 흡수된다
   news(`${s.co.name}, ${tgt.name} 인수 완료 (${won(price)})`);
-  toast(`${tgt.name} 인수 완료 — ${SECTORS[tgt.sector].name} 상품군 추가`, 'good');
+  /* 새 업종이면 매대가 하나 늘고, 이미 있던 업종이면 그 매대가 두꺼워진다.
+     예전에는 둘 다 "상품군 추가" 라고 말했는데 실제로 달라지는 게 없었다. */
+  const fresh = s.co.subs.filter(c => c.sector === tgt.sector).length === 1;
+  toast(`${tgt.name} 인수 완료 — ${SECTORS[tgt.sector].name} ${fresh ? '상품군이 매대에 올랐습니다' : '매대 확장'}`, 'good');
   pushInbox(s, '인수 완료', `${tgt.name}을(를) ${won(price)}에 인수했습니다. 통합에 ${BAL.pmiDays}일이 걸리며, 그동안은 관리비만 나가고 수익은 서서히 올라옵니다.`, 'good');
   bumpPerks();
   checkDivisions(s);

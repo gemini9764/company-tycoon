@@ -682,6 +682,46 @@ try {
   })()`);
   careOk.forEach(([n, ok, d]) => check(n, ok, d));
 
+  /* ── 상품 라인업 ─────────────────────────────────────────
+     인수 토스트가 "OO 상품군 추가" 라고 말해 놓고 실제로는 계열사 개수만
+     세고 있었다. 업종이 실제로 매출·진열·대사에 닿는지 확인한다. */
+  const lineOk = win.eval(`(() => {
+    const g = window.game, r = [];
+    const S = g.setS(g.newState('상품군', 1001));
+    const add = k => S.co.subs.push({ id: 'x' + S.co.subs.length, name: 'n', sector: k,
+                                      cap: 1e9, pmi: 99, tags: [], seen: [] });
+
+    add('food'); add('food'); add('food');
+    r.push(['같은 업종은 상품군을 늘리지 않는다', g.productLines(S).length === 1,
+            '식품 3개 → ' + g.productLines(S).length + '종']);
+    const v1 = g.retailPotential(S);
+    add('pharma');
+    r.push(['다른 업종은 상품군을 늘린다', g.productLines(S).length === 2, '']);
+    r.push(['상품군이 늘면 매출 잠재력이 오른다', g.retailPotential(S) > v1 * 1.02,
+            '+' + Math.round((g.retailPotential(S) / v1 - 1) * 100) + '%']);
+
+    // 같은 업종 하나 더 vs 새 업종 하나 — 새 업종이 더 커야 한다
+    const A = g.setS(g.newState('a', 1001)), keepA = [];
+    for (const k of ['food', 'food']) A.co.subs.push({ id: 'a' + A.co.subs.length, sector: k, cap: 1e9, pmi: 99 });
+    A.co.subs.push({ id: 'a9', sector: 'food', cap: 1e9, pmi: 99 });
+    const deep = g.retailPotential(A);
+    const B = g.setS(g.newState('b', 1001));
+    for (const k of ['food', 'food']) B.co.subs.push({ id: 'b' + B.co.subs.length, sector: k, cap: 1e9, pmi: 99 });
+    B.co.subs.push({ id: 'b9', sector: 'tech', cap: 1e9, pmi: 99 });
+    const wide = g.retailPotential(B);
+    r.push(['다각화가 몰빵보다 매출에 낫다', wide > deep,
+            '넓히기 ' + Math.round(wide / deep * 100) + '% 대비']);
+
+    // 진열 색과 손님 대사가 상품군을 탄다
+    g.setS(S); g.setMode('store');
+    const pal = g.palette();
+    r.push(['진열 색이 상품군에서 나온다',
+            pal.includes(g.SECTORS.pharma.color) && pal.filter(c => c === g.SECTORS.food.color).length === 1,
+            '식품 3개여도 색은 하나']);
+    return r;
+  })()`);
+  lineOk.forEach(([n, ok, d]) => check(n, ok, d));
+
   check('출력 무결성', !/NaN|undefined|Infinity/.test(all),
         (all.match(/.{0,30}(NaN|undefined|Infinity)/) || [''])[0]);
 } catch (e) {

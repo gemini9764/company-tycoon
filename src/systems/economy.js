@@ -29,12 +29,26 @@ function facilCost(s, k) {
 function facilLocked(s, k) { return s.co.tier < FACIL[k].tier; }
 
 /* ── 경영: 일 매출/비용 ──────────────────────────────────── */
+/** 매장에 오른 상품군 = 계열사를 가진 업종. 인수 순서대로 */
+function productLines(s) {
+  const out = [];
+  for (const c of s.co.subs) if (!out.includes(c.sector)) out.push(c.sector);
+  return out;
+}
 /** 재고를 무시한 매출 잠재력. 발주 단가의 기준이라 재고와 순환하지 않게 분리한다. */
 function retailPotential(s) {
   const base = BAL.retailBase * BAL.tierRetailMul[s.co.tier];
   const salesBuf = 1 + sumStat(s.staff, 'sales') * 0.004
                  + s.staff.filter(e => e.trait.id === 'star').length * 0.12;
-  const variety = 1 + s.co.subs.length * 0.06;
+  /* 상품군 — **몇 개를 샀느냐가 아니라 어떤 업종을 갖췄느냐**를 본다.
+     예전에는 `subs.length * 0.06` 이라 같은 업종을 열 개 사도 매출이 똑같이
+     늘었다. 인수 토스트는 "OO 상품군 추가" 라고 말하는데 실제로는 개수만
+     세고 있었던 것이다.
+
+     폭(업종 수)에 무게를 싣고 개수는 잔여 항으로 남긴다 — 같은 업종을 더 사도
+     사업부와 시너지로 이미 보상을 받으므로, 여기서까지 이중으로 주면
+     한 업종만 파고드는 것이 모든 면에서 정답이 된다. */
+  const variety = 1 + productLines(s).length * 0.13 + s.co.subs.length * 0.015;
   const fac = 1 + facLv(s, 'shelf') * 0.07 + facLv(s, 'counter') * 0.04;
   const pk  = 1 + perksOf(s).retailMul;                     // daily 계열사
   const brd = 1 + tagMarketing(s) * 0.1;                    // 브랜드 태그
@@ -196,4 +210,4 @@ function tickMonth(s) {
   checkBankrupt(s);
 }
 
-export { FACIL, facLv, facilCost, facilLocked, invCost, orderInv, retailPotential, invFactor, invLife, tickInv, dailyRetail, dailySubIncome, dailyUpkeep, managersHave, managersNeeded, pmi, synergyParts, tickEconomy, tickMonth, tickSynergy };
+export { FACIL, facLv, facilCost, facilLocked, invCost, orderInv, retailPotential, invFactor, invLife, tickInv, productLines, dailyRetail, dailySubIncome, dailyUpkeep, managersHave, managersNeeded, pmi, synergyParts, tickEconomy, tickMonth, tickSynergy };

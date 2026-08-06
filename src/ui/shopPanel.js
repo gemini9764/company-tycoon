@@ -1,8 +1,9 @@
 import { sfx } from '../core/audio.js';
 import { BAL } from '../core/balance.js';
+import { SECTORS } from '../core/data.js';
 import { S } from '../core/state.js';
 import { $, clamp, won } from '../core/util.js';
-import { FACIL, facLv, facilCost, facilLocked, invCost, invLife, managersHave, managersNeeded, orderInv, retailPotential, synergyParts } from '../systems/economy.js';
+import { FACIL, facLv, facilCost, facilLocked, invCost, invLife, managersHave, productLines, managersNeeded, orderInv, retailPotential, synergyParts } from '../systems/economy.js';
 import { renderHud } from './hud.js';
 import { TAB } from './tabs.js';
 import { toast } from './toast.js';
@@ -40,9 +41,19 @@ function renderShop() {
 /* ── 발주 ────────────────────────────────────────────────── */
 function viewOrder(s) {
   const st = Math.round(s.co.inv ?? 100);
+  /* 상품군 — 인수가 매장에 무엇을 남겼는지 한 줄로 보여 준다. M&A 의 성과가
+     경영 화면에서 확인되는 몇 안 되는 자리다. */
+  const lines = productLines(s);
+  const lineRow = `<div class="row">
+      <h4>상품군<b class="${lines.length ? 'c-jade' : 'c-dim'}">${lines.length}종</b></h4>
+      <div class="meta">${lines.length
+        ? lines.map(k => `<span style="color:${SECTORS[k].color}">${SECTORS[k].name}</span>`).join(' · ')
+          + '<br>업종을 넓힐수록 매출 다양성이 오릅니다. 같은 업종을 더 사도 상품군은 늘지 않습니다.'
+        : '계열사를 인수하면 그 업종 상품이 매대에 오릅니다.'}</div>
+    </div>`;
   const col = st < BAL.invWarnAt ? 'var(--blood)' : st < 60 ? 'var(--gold)' : 'var(--jade)';
   const daysLeft = Math.floor(st / (100 / invLife(s)));
-  return `<div class="row" style="border-color:${col}">
+  return lineRow + `<div class="row" style="border-color:${col}">
       <h4>재고<b style="color:${col}">${st}%</b></h4>
       <div class="gauge" style="margin-top:4px"><i style="width:${st}%;background:${col}"></i><span>${st} / 100</span></div>
       <div class="meta">재고가 바닥나면 매출이 최대 ${Math.round((1 - BAL.invFloor) * 100)}% 까지 빠집니다.

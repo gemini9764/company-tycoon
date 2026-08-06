@@ -4,7 +4,7 @@ import { viewRand } from '../core/rng.js';
 import { $, clamp, vpick, vrint, vrnd, won } from '../core/util.js';
 import { HH, HW, faces, isoRoof, isoWin, isoX, isoY, makeLayer, prism, rhomb, rhombEdge } from './iso.js';
 import { FOOT_Y, ROOM_H, ROOM_W, SPLIT_GX, STORE_H, STORE_O, STORE_W, X, bubbleTurn, customers, drawBubble, drawPerson, drawPops, drawSitter, drawText, faceOf, frame, mix, newLook, pops, rrect, shade } from './canvas.js';
-import { dailyRetail } from '../systems/economy.js';
+import { dailyRetail, productLines } from '../systems/economy.js';
 
 /* ══════════════════════════════════════════════════════════════
    사옥 (경영, 쿼터뷰) — 좌 매장 / 우 사무실 + 사장실
@@ -228,9 +228,19 @@ function retarget(p) {
   p.path = findPath(from, to);
 }
 
-/* 손님 대사. 상품군이 붙으면 여기서 실제 상품명을 부르게 하면 된다. */
-const SAY_SHOP = ['이거 맛있겠다', '이것도 담을까', '어느 게 낫지', '오늘 세일인가', '찾았다!'];
+/* 손님 대사. 진열대 앞에서는 **실제로 매장에 오른 상품**을 부른다 —
+   제약 계열사를 사면 손님이 비타민을 찾기 시작한다. 인수의 성과가 매장 화면에
+   드러나는 몇 안 되는 자리다. 상품군이 없으면(계열사 0) 일반 대사로 돌아간다. */
+const SAY_SHOP = ['이것도 담을까', '어느 게 낫지', '오늘 세일인가', '찾았다!'];
 const SAY_PAY = ['이거 주세요', '봉투 하나요', '카드로 할게요', '포인트 적립돼요?'];
+
+function sayShop(i) {
+  const lines = productLines(S);
+  if (!lines.length) return SAY_SHOP[i % SAY_SHOP.length];
+  const g = SECTORS[lines[i % lines.length]].goods;
+  const item = g[(i * 3) % g.length];
+  return [`${item} 어디 있죠?`, `${item} 하나 담자`, `${item} 좀 볼까`][i % 3];
+}
 
 function stepCustomers(items) {
   const want = clamp(4 + Math.round(S.co.marketing * 3) + S.co.subs.length, 4, 14);
@@ -257,8 +267,7 @@ function stepCustomers(items) {
       /* 멈춰 선 손님만 말한다 — 걸어가면서 띄우면 풍선이 화면을 가로지른다.
          진열대 앞과 계산대 앞의 대사가 달라야 "뭘 하는 중"인지가 읽힌다. */
       if (p.wait > 0 && bubbleTurn(i, 300, 150)) {
-        drawBubble(px, py - 34, ph2 === 'counter' ? SAY_PAY[i % SAY_PAY.length]
-                                                  : SAY_SHOP[i % SAY_SHOP.length]);
+        drawBubble(px, py - 34, ph2 === 'counter' ? SAY_PAY[i % SAY_PAY.length] : sayShop(i));
       }
     } });
   }
@@ -532,9 +541,13 @@ function invRatio() { return clamp((S.co.inv ?? 100) / 100, 0, 1); }
 /** n칸 중 재고만큼만 채운다 */
 function stocked(n) { return Math.max(0, Math.round(n * invRatio())); }
 
-/** 인수한 업종이 늘수록 진열 상품 색이 늘어난다 */
+/**
+ * 진열 상품 색. **상품군에서 뽑는다** — 예전에는 `subs.slice(0,6)` 이라
+ * 같은 업종을 여섯 개 사면 같은 색만 여섯 번 들어갔다. 매대가 다채로워지는 것이
+ * "여러 업종을 갖췄다" 의 신호여야 한다.
+ */
 function palette() {
-  return ['#7FB069', '#E0A24A', ...S.co.subs.slice(0, 6).map(s => SECTORS[s.sector].color)];
+  return ['#7FB069', '#E0A24A', ...productLines(S).slice(0, 6).map(k => SECTORS[k].color)];
 }
 
 /* ── 매장 집기 (재작화) ──────────────────────────────────────
