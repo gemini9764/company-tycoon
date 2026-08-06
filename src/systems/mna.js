@@ -2,7 +2,7 @@ import { BAL } from '../core/balance.js';
 import { pause, resume } from '../core/clock.js';
 import { DIFFS, SECTORS } from '../core/data.js';
 import { sumStat, teamOf } from '../core/derive.js';
-import { bumpPerks, divisionName, divisionsOf, SUB_TAGS, subPriceMul, tagsOf } from '../core/tags.js';
+import { bumpPerks, divisionName, divisionsOf, subPriceMul, tagsOf } from '../core/tags.js';
 import { rand } from '../core/rng.js';
 import { $, chance, clamp, pct, pick, rint, rnd, won } from '../core/util.js';
 import { capCeiling, checkTier, loanRate, recalcCap, teamPower } from './company.js';
@@ -146,24 +146,11 @@ const NEGO_ACTS = {
       toast(`협상을 앞당겼습니다 — 성공도 ${BAL.negoPushSuccess}`, 'bad');
     },
   },
-  audit: {
-    n: '실사 요청', d: '숨은 특성을 밝힌다 · 진행도 -10',
-    cost: s => negoBill(s, BAL.negoAuditCost),
-    /* 숨은 태그가 없을 때 버튼을 잠그면 **그 자체가 정보 누설**이다.
-       (누를 수 없다 = 문제가 없다) 항상 누를 수 있고, 없으면 없다고 말한다. */
-    can: (s) => s.co.cash < negoBill(s, BAL.negoAuditCost) ? '자금이 부족합니다' : null,
-    run: (s, n) => {
-      const t = s.market.find(c => c.id === n.id);
-      n.progress = Math.max(0, n.progress - BAL.negoAuditBack);
-      const found = tagsOf(t).filter(k => SUB_TAGS[k].hidden && !(t.seen || []).includes(k));
-      t.seen = [...(t.seen || []), ...found];
-      if (!found.length) return toast('실사 완료 — 특별한 문제는 없습니다');
-      const names = found.map(k => SUB_TAGS[k].n).join(' · ');
-      toast(`실사 — ${names} 발견`, 'bad');
-      pushInbox(s, '실사 결과', `${t.name}의 장부에서 <b>${names}</b>이(가) 확인됐습니다. 이대로 인수할지, 협상을 중단할지 결정해야 합니다.`, 'bad');
-    },
-  },
+  /* 실사(숨은 특성 공개)는 개입에서 뺐다. 협상 1건에 4종 × 3회는 카이로 문법에
+     비해 조작이 너무 잦고, 정보 공개는 **밑작업 ★★** 로 옮겼다 (stock.js:revealAt).
+     매집에 정보 가치가 붙어 그 기능이 두터워지고 조작은 하나도 늘지 않는다. */
   quit: {
+    free: true,        // 개입 횟수를 먹지 않는다. 손절은 개입이 아니라 탈출구다
     n: '협상 중단', d: '즉시 종료 · 위약금 = 예상 인수가의 3%',
     cost: (s, n) => Math.round(estPrice(s, n) * BAL.negoQuitFee),
     can: (s, n) => s.co.cash < Math.round(estPrice(s, n) * BAL.negoQuitFee) ? '위약금을 낼 자금이 없습니다' : null,
@@ -183,12 +170,12 @@ const NEGO_ACTS = {
 function negoAct(s, id) {
   const n = s.nego, act = NEGO_ACTS[id];
   if (!n || !act) return false;
-  if (negoLeft(n) <= 0) { toast('이번 협상에서 쓸 수 있는 개입을 모두 썼습니다', 'bad'); return false; }
+  if (!act.free && negoLeft(n) <= 0) { toast('이번 협상에서 쓸 수 있는 개입을 모두 썼습니다', 'bad'); return false; }
   const why = act.can(s, n);
   if (why) { toast(why, 'bad'); return false; }
 
   const cost = act.cost(s, n);
-  n.acts = negoLeft(n) - 1;
+  if (!act.free) n.acts = negoLeft(n) - 1;
   n.done = [...(n.done || []), id];
   s.co.cash -= cost;
   act.run(s, n);

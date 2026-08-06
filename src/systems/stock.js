@@ -1,4 +1,5 @@
 import { BAL } from '../core/balance.js';
+import { SUB_TAGS, tagsOf } from '../core/tags.js';
 import { $, rnd, won } from '../core/util.js';
 import { news, pushInbox, toast } from '../ui/toast.js';
 
@@ -110,8 +111,22 @@ function tickStake(s) {
       s.co.cash -= spend;
       privMap(s)[c.id] = (privMap(s)[c.id] || 0) + spend;
     }
+    if (stakeStars(s, c) >= BAL.stakeRevealAt) reveal(s, c);
     if (stakeStars(s, c) >= BAL.stakeLeakAt) leak(s, c);
   }
+}
+
+/* 숨은 특성 공개 — 개입 '실사'가 하던 일이 여기로 왔다.
+   ★★ 까지 사 모으면 장부가 보인다. 매집이 성공도·인수가에 더해 **정보**까지
+   주게 되어 밑작업 한 축으로 묶이고, 협상 중 조작은 하나도 늘지 않는다.
+   난수를 쓰지 않으므로 시드 스트림에 영향이 없다. */
+function reveal(s, c) {
+  const found = tagsOf(c).filter(k => SUB_TAGS[k].hidden && !(c.seen || []).includes(k));
+  if (!found.length) return;
+  c.seen = [...(c.seen || []), ...found];
+  const names = found.map(k => SUB_TAGS[k].n).join(' · ');
+  toast(`${c.name} — ${names} 확인`, 'bad');
+  pushInbox(s, '장부 확인', `${c.name} 지분을 사 모으는 과정에서 <b>${names}</b>이(가) 확인됐습니다. 이대로 인수할지 판단해야 합니다.`, 'bad');
 }
 
 /* 소문 — 원안의 '5% 공시 의무'가 놓인 자리. 뉴스 한 줄과 주가 급등으로만 낸다.

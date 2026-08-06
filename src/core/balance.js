@@ -78,8 +78,6 @@ const BAL = {
   negoWineProbe: 3,          // 수사 압박을 **일당이 아니라 행위당** 올리는 첫 축
   negoPushProgress: 30,      // 시한 제시 — 진행도 즉시 상승
   negoPushSuccess: -8,
-  negoAuditCost: 0.004,      // 실사
-  negoAuditBack: 10,         // 실사에 드는 진행도
   negoQuitFee: 0.03,         // 협상 중단 위약금 = 예상 인수가 × 이 값
 
   /* ── 미리 사두기 (밑작업) ─────────────────────────────────
@@ -91,6 +89,7 @@ const BAL = {
   stakeStars: 5,
   stakeSuccess: 6,           // ★ 1칸당 협상 성공도 시작값
   stakePrem: 0.03,           // ★ 1칸당 인수가 프리미엄 감소
+  stakeRevealAt: 2,          // ★★ 에서 숨은 특성이 드러난다 (개입 '실사'를 대체)
   stakeLeakAt: 4,            // 이 칸에 닿으면 소문이 난다
   stakeLeakPrice: 0.25,      // 소문 — 대상 주가 상승
   stakeLeakPrem: 0.08,       // 소문 — 인수가 프리미엄 상승

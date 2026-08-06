@@ -20,14 +20,18 @@ function negoActsHtml(s, n) {
   const pips = '◆'.repeat(left) + '◇'.repeat(Math.max(0, BAL.negoActs - left));
   const btn = ([id, a]) => {
     const cost = a.cost(s, n);
-    const off = left <= 0 || !!a.can(s, n);
-    return `<button class="btn ${id === 'quit' ? 'blood' : ''}" data-nact="${id}"
+    const off = (!a.free && left <= 0) || !!a.can(s, n);
+    return `<button class="btn ${a.free ? 'blood' : ''}" data-nact="${id}"
       ${off ? 'disabled' : ''} title="${a.d}${cost ? ` · 비용 ${won(cost)}` : ''}">
       ${a.n}${cost ? `<span class="c-dim" style="font-size:10px"> ${won(cost)}</span>` : ''}</button>`;
   };
+  const acts = Object.entries(NEGO_ACTS);
+  /* 손절(중단)은 개입이 아니라 탈출구다. 같은 줄에 두면 횟수를 먹는 것처럼 읽혀
+     쓰기를 망설이게 된다. 줄을 나누고 횟수 표시에서도 뺐다. */
   return `<div class="meta" style="margin-top:7px">개입 <b class="c-gold">${pips}</b>
       — 협상 1건에 ${BAL.negoActs}회. 남은 횟수는 다음 협상으로 넘어가지 않습니다.</div>
-    <div class="btn-row">${Object.entries(NEGO_ACTS).map(btn).join('')}</div>`;
+    <div class="btn-row">${acts.filter(([, a]) => !a.free).map(btn).join('')}</div>
+    <div class="btn-row">${acts.filter(([, a]) => a.free).map(btn).join('')}</div>`;
 }
 
 /* ── 회사 현황 창 ────────────────────────────────────────── */

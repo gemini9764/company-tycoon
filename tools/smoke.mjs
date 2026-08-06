@@ -388,7 +388,7 @@ try {
     const S = g.setS(g.newState('개입', 1001));
     S.staff.forEach(e => e.onTeam = true);
     S.co.cash = 1e13;
-    // 숨은 태그를 가진 매물을 만들어 실사 대상으로 쓴다
+    // 숨은 태그를 가진 매물을 만들어 밑작업 ★★ 공개의 대상으로 쓴다
     const t = S.market.find(c => c.cap <= g.capCeiling(S));
     t.tags = ['debt']; t.seen = [];
     g.startNego(S, t);
@@ -403,13 +403,15 @@ try {
     g.negoAct(S, 'push');
     r.push(['시한 제시 — 진행도↑ 성공도↓', S.nego.progress > pr0 && S.nego.success < sc0, '']);
 
-    g.negoAct(S, 'audit');
-    r.push(['실사가 숨은 특성을 깐다', t.seen.includes('debt') && !g.hasHidden(t), '우발채무 공개']);
+    g.negoAct(S, 'wine');
     r.push(['개입 3회 소진', g.negoLeft(S.nego) === 0, '']);
 
     const before = S.nego.success;
     g.negoAct(S, 'wine');
     r.push(['소진 후 개입 거부', S.nego.success === before, '4회차는 반영되지 않는다']);
+
+    // 중단은 개입 횟수를 먹지 않는다 — 소진 상태에서도 눌려야 한다
+    r.push(['소진 뒤에도 중단은 가능', (g.negoAct(S, 'quit'), S.nego === null), '탈출구는 개입이 아니다']);
 
     // 중단 — 위약금을 내고 협상단이 즉시 풀린다
     const S2 = g.setS(g.newState('중단', 2002));
@@ -434,7 +436,7 @@ try {
   win.eval('game.renderAll()');
   const nactBtns = [...doc.querySelectorAll('[data-nact]')];
   check('개입 버튼 렌더', nactBtns.length === Object.keys(game.NEGO_ACTS).length,
-        nactBtns.length + '종');
+        nactBtns.length + '종 (중단은 별도 줄)');
   const sBefore = game.S.nego.success;
   nactBtns.find(b => b.dataset.nact === 'wine').click();
   check('개입 버튼 → 판정 함수', game.S.nego.success > sBefore,
@@ -479,6 +481,18 @@ try {
     for (let i = 0; i < 6; i++) g.tickStake(S);
     r.push(['★★★ 초과 시 소문', !!c.leak && c.price > p0 && c.diff >= d0, '주가 급등 · 난이도 상승']);
     r.push(['소문 나면 프리미엄이 도로 오른다', g.stakeBonus(S, c).prem > -g.stakeStars(S, c) * B.stakePrem, '']);
+
+    // ★★ 공개 — 개입 '실사'가 하던 일이 밑작업으로 옮겨 왔다
+    const hid = S.market.filter(x => x.listed && !x.owned && x.id !== c.id)[0];
+    hid.tags = ['debt']; hid.seen = []; delete hid.leak;
+    r.push(['숨은 특성은 처음엔 안 보인다', g.hasHidden(hid), '???']);
+    g.toggleStake(S, hid);
+    for (let i = 0; i < 20 && g.stakeStars(S, hid) < B.stakeRevealAt; i++) g.tickStake(S);
+    r.push(['★★ 에서 숨은 특성이 드러난다',
+            g.stakeStars(S, hid) >= B.stakeRevealAt && hid.seen.includes('debt') && !g.hasHidden(hid),
+            '★' + g.stakeStars(S, hid) + ' → 숨은 빚 공개']);
+
+    g.toggleStake(S, hid);
 
     // 협상 시작값에 실제로 반영되는가. 상장사는 시총 1,000억 이상이라 등급을 올려야 잡힌다
     S.co.tier = 6;

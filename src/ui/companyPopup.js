@@ -54,7 +54,7 @@ function openCompany(c) {
       { head: '밑작업 — 협상 전에 깔아 두는 것',
         label: `이 회사 ${c.listed ? '주식' : '지분'} 조금씩 사둔다  ${'★'.repeat(stars)}${'☆'.repeat(BAL.stakeStars - stars)}`,
         sub: staking(s, c)
-             ? `사는 중 · 하루 ${won(c.cap * BAL.stakeStep)} · ★ 1칸당 성공도 +${BAL.stakeSuccess}, 인수가 -${Math.round(BAL.stakePrem * 100)}%p`
+             ? `사는 중 · 하루 ${won(c.cap * BAL.stakeStep)} · ★ 1칸당 성공도 +${BAL.stakeSuccess}, 인수가 -${Math.round(BAL.stakePrem * 100)}%p · ★★에서 장부가 보입니다`
              : `하루 ${won(c.cap * BAL.stakeStep)}씩 자동으로 나갑니다 · ★★★을 넘기면 소문이 납니다${c.listed ? '' : ' · 비상장이라 조금씩 사 모읍니다'}`,
         run: () => { toggleStake(s, c); renderAll(); } },
       ...(held ? [{ label: '사둔 주식을 되판다', sub: `${held.qty.toLocaleString()}주 · 지금 ${won(held.qty * c.price)}`,
