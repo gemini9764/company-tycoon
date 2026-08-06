@@ -1,4 +1,5 @@
 import { sfx } from '../core/audio.js';
+import { resume } from '../core/clock.js';
 import { $ } from '../core/util.js';
 
 /* ── 모달 ────────────────────────────────────────────────── */
@@ -11,6 +12,21 @@ function openModal(cfg) {
 }
 
 function closeModal() { modalStack.pop(); sfx('close'); renderModal(); }
+
+/**
+ * 선택지 핸들러는 대부분 `pause()` 로 멈춘 상태에서 불리고 마지막 줄에서
+ * `resume()` 한다. 중간에 예외가 나면 그 `resume()` 이 통째로 날아가
+ * **시계가 죽고**(speed 0 고정) `pausedSpeed` 도 복원되지 않아 그 뒤로는
+ * 모달이 떠도 게임이 안 멈춘다 — 예외 하나가 게임 전체를 못 쓰게 만든다.
+ *
+ * 실제로 `completeAcq` 안의 TypeError 가 이 경로로 새어 그 증상을 냈다.
+ * 원인은 고쳤지만, 같은 형태의 사고는 여기를 지나는 어떤 코드로도 재현된다.
+ * 그래서 단일 실패점인 이 지점에서 막는다.
+ */
+function safeRun(fn) {
+  if (!fn) return;
+  try { fn(); } catch (e) { console.error('모달 핸들러 예외 —', e); resume(); }
+}
 
 function renderModal() {
   const layer = $('modal-layer'), cfg = modalStack[modalStack.length - 1];
@@ -28,14 +44,14 @@ function renderModal() {
     </div>
     ${(cfg.actions || []).length ? `<div class="modal-foot">${cfg.actions.map((a, i) => `<button class="btn ${a.cls || ''}" data-a="${i}">${a.label}</button>`).join('')}</div>` : ''}`;
   $('modal').querySelectorAll('[data-i]').forEach(b => b.onclick = () => {
-    const c = cfg.choices[+b.dataset.i]; closeModal(); c.run && c.run();
+    const c = cfg.choices[+b.dataset.i]; closeModal(); safeRun(c.run);
   });
   $('modal').querySelectorAll('[data-a]').forEach(b => b.onclick = () => {
-    const a = cfg.actions[+b.dataset.a]; closeModal(); a.run && a.run();
+    const a = cfg.actions[+b.dataset.a]; closeModal(); safeRun(a.run);
   });
-  const x = $('mx'); if (x) x.onclick = () => { closeModal(); cfg.onClose && cfg.onClose(); };
+  const x = $('mx'); if (x) x.onclick = () => { closeModal(); safeRun(cfg.onClose); };
   // 모달 본문에 직접 손을 대야 하는 화면(설정의 슬라이더 등)이 쓰는 훅
-  cfg.onOpen && cfg.onOpen();
+  safeRun(cfg.onOpen);
 }
 
 export { closeModal, modalStack, openModal, renderModal };

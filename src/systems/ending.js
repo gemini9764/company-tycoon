@@ -26,7 +26,7 @@ function checkEnding(s) {
    시가총액 단계로 넘어가고, 그 단계는 무한히 이어진다. */
 const MILESTONES = [
   { id:'tier6',   ok:s=>s.co.tier === TIERS.length - 1, t:'글로벌그룹 등극',
-    d:'최고 등급에 올랐습니다. 이제 목표는 등급이 아니라 <b>시가총액 순위</b>입니다.' },
+    d:'최고 등급에 올랐습니다. 이제 목표는 등급이 아니라 <b>자산 순위</b>입니다.' },
   { id:'rank50',  ok:s=>s.co.rank <= 50,  t:'시총 50위 진입',  d:'상위권에 이름을 올렸습니다.' },
   { id:'rank10',  ok:s=>s.co.rank <= 10,  t:'시총 10위 진입',  d:'재계 서열이 뒤집히고 있습니다.' },
   { id:'rank3',   ok:s=>s.co.rank <= 3,   t:'시총 3위 진입',   d:'1위가 눈앞입니다.' },
@@ -42,9 +42,24 @@ function capGoal(n) {
     : CAP_STEPS[CAP_STEPS.length - 1] * Math.pow(3, n - CAP_STEPS.length + 1);
 }
 
-/** 화면에 보여 줄 다음 목표 한 줄. */
+/**
+ * 화면에 보여 줄 다음 목표 한 줄.
+ *
+ * **진행도를 같이 낸다.** 예전에는 "사업부 5개 결성"이라고만 적혀 있어서 지금
+ * 3개인지 4개인지 알 방법이 없었다 — 계열사를 팔다 사업부가 깨지고도 왜 승급이
+ * 안 되는지 모르는 상황이 실제로 나왔다(계측: active 봇이 매각 15회로 940일까지 정체).
+ */
 function goalText(s) {
-  if (s.co.tier < TIERS.length - 1) return TIERS[s.co.tier].goal;
+  if (s.co.tier < TIERS.length - 1) {
+    const t = TIERS[s.co.tier];
+    if (!t.at) return t.goal;
+    const p = t.at(s);
+    const fmt = (v, g, unit) => unit === 'won' ? `${won(Math.max(0, v))} / ${won(g)}`
+                : unit === 'n' ? `${v} / ${g}` : `${unit} ${v} / ${g}`;
+    const parts = [];
+    for (let i = 0; i < p.length; i += 3) parts.push(fmt(p[i], p[i + 1], p[i + 2]));
+    return `${t.goal} <span class="c-dim">(${parts.join(' · ')})</span>`;
+  }
   const m = MILESTONES.find(x => !s.flags.ms.includes(x.id));
   if (m) return m.t;
   return `시가총액 ${won(capGoal(s.flags.capGoal))} 돌파`;

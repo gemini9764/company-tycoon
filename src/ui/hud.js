@@ -1,6 +1,6 @@
 import { BAL } from '../core/balance.js';
 import { TIERS } from '../core/data.js';
-import { debtTotal } from '../core/derive.js';
+import { debtTotal, netWorth } from '../core/derive.js';
 import { S } from '../core/state.js';
 import { saveGame } from '../core/storage.js';
 import { $, esc, won } from '../core/util.js';
@@ -14,9 +14,9 @@ function renderHud() {
   const share = s.market.length ? Math.round(s.co.subs.length / (s.market.length + 1) * 100) : 0;
   $('hud').innerHTML = `
     <div class="hud-id"><b>${esc(s.co.name)}</b><span>${TIERS[s.co.tier].name} · ${s.co.subs.length}개 계열사</span></div>
-    <div class="hud-stat"><i>자금</i><b class="${s.co.cash < 0 ? 'c-blood' : 'c-gold'}">${won(s.co.cash)}</b></div>
-    <div class="hud-stat"><i>시가총액</i><b>${won(s.co.cap)}</b></div>
-    <div class="hud-stat"><i>시총 순위</i><b class="c-sky">${s.co.rank.toLocaleString()}위</b></div>
+    <div class="hud-stat"><i>보유 자금</i><b class="${s.co.cash < 0 ? 'c-blood' : 'c-gold'}">${won(s.co.cash)}</b></div>
+    <div class="hud-stat" title="보유 자금 + 계열사 가치 − 부채. 승급 목표와 순위가 이 값을 봅니다"><i>순자산</i><b>${won(netWorth(s))}</b></div>
+    <div class="hud-stat" title="시가총액 ${won(s.co.cap)} — 순자산에 본업 가치를 더한 값입니다"><i>자산 순위</i><b class="c-sky">${s.co.rank.toLocaleString()}위</b></div>
     <div class="hud-stat"><i>시장 지분율</i><b>${share}%</b></div>
     <div class="hud-stat"><i>신용 등급</i><b class="${creditIdx(s) >= 7 ? 'c-jade' : creditIdx(s) <= 3 ? 'c-blood' : ''}">${creditName(s)}</b></div>
     <div class="hud-stat"><i>부채</i><b class="${debt ? 'c-blood' : 'c-dim'}">${debt ? won(debt) : '없음'}</b></div>

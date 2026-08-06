@@ -9,7 +9,7 @@ import { recalcCap } from '../systems/company.js';
 /* 세이브 포맷 버전. 상태 구조를 바꾸면 올린다 — 구버전 세이브는 폐기된다.
    newState 의 v 와 storage 의 검사값이 갈라지면 '이어하기'가 조용히 죽으므로
    두 곳이 이 상수 하나만 본다. */
-const SAVE_V = 12;   // v12 — 계열사 특성 태그 · 업종 퍼크 · 사업부
+const SAVE_V = 13;   // v13 — 협상단 2팀 (s.nego → s.negos 배열 · staff.slot)
 
 let S = null;
 
@@ -33,6 +33,7 @@ function newState(companyName, seed) {
       tier: 0, cash: BAL.startCash,
       subs: [],            // 인수한 계열사 {id,name,sector,cap,diff}
       hardAcq: 0,          // 난이도 '상' 이상 인수 횟수
+      divs: 0,             // 사업부 수. TIERS 가 tags.js 를 import 할 수 없어 매일 여기에 적어 둔다
       marketing: 1.0,      // 인지도 배수
       cap: 0, rank: 5000,
       donate: 0,           // 기부 누적 보너스
@@ -40,7 +41,9 @@ function newState(companyName, seed) {
       mistrust: 0,         // 무속 신뢰도(미신지수)
       revToday: 0, costToday: 0, rev30: [], negMonths: 0,
       synergy: 1.0, auditBuff: 0,
-      divs: [],            // 결성된 사업부 업종 키. 결성/해체 연출을 diff 로만 내기 위해 들고 있는다
+      divKeys: [],         // 결성된 사업부 업종 키. 결성/해체 연출을 diff 로만 내기 위해 들고 있는다.
+                           //  **divs(숫자)와 이름을 겹치면 안 된다** — 주인이 둘(economy·mna)이 되어
+                           //  타입이 매일 뒤바뀐다. 실제로 그래서 인수 직후 게임이 멈췄다
       /* 매장 운영 — 사옥 모드의 능동 요소 */
       inv: 100,            // 재고율 0~100. 팔릴수록 줄고, 바닥나면 매출이 invFloor 배
       autoOrder: false,    // 자동 발주 (단가 할증, 손 안 대도 유지)
@@ -49,7 +52,8 @@ function newState(companyName, seed) {
     },
     staff: [], recruits: [],
     market: [],            // NPC 회사
-    nego: null,            // 진행 중 협상
+    negos: [],             // 진행 중 협상 (0~2건). 슬롯 수는 등급이 정한다 — mna.js:negoSlots
+    crisis: null,          // 경제 위기 — systems/crisis.js 가 처음 쓸 때 만든다
     bank: { rateDelta_: 0, loans: [], insured: false, overdue: 0 },
     stock: { holds: {}, watch: [], stake: {}, priv: {} },   // stake = 미리 사두기를 켠 대상 · priv = 비상장 지분 투입 누계
     shaman: { hired: null, pool: [], unlocked: false },
@@ -115,7 +119,7 @@ function makeStaff(grade) {
     name: pick(FIRST) + pick(GIVEN),
     ...st, trait: t, grade: g,
     salary: Math.round(sum * 15000 * Math.pow(1.28, g) / 10000) * 10000, // 월급
-    exp: 0, lv: 1, onTeam: false,
+    exp: 0, lv: 1, onTeam: false, slot: 0,
   };
 }
 

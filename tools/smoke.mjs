@@ -135,16 +135,16 @@ try {
   check('일시 상환', game.debtTotal(game.S) === 0);
 
   win.eval(`
-    game.S.staff.forEach(e => e.onTeam = true);
+    game.S.staff.forEach(e => { e.onTeam = true; e.slot = 0; });
     const t = game.S.market.filter(c => !c.owned && c.cap <= game.capCeiling(game.S))
                            .sort((a, b) => a.cap - b.cap)[0];
     game.S.co.cash = t.cap * 4;
     game.startNego(game.S, t);`);
-  check('협상 시작', !!game.S.nego, game.S.nego?.name);
+  check('협상 시작', !!game.negosOf(game.S)[0], game.negosOf(game.S)[0]?.name);
   const subsBefore = game.S.co.subs.length;
-  for (let i = 0; i < 60 && game.S.nego; i++) { win.eval('game.tickDay()'); resolveModals(doc); }
+  for (let i = 0; i < 60 && game.negosOf(game.S)[0]; i++) { win.eval('game.tickDay()'); resolveModals(doc); }
   resolveModals(doc, /자기자금/);
-  check('협상 사이클 완주', !game.S.nego);
+  check('협상 사이클 완주', !game.negosOf(game.S)[0]);
   check('인수 처리', game.S.co.subs.length >= subsBefore);
 
   win.eval('game.openCompany(game.S.market.find(c => !c.owned))');
@@ -417,26 +417,26 @@ try {
     const t = S.market.find(c => c.cap <= g.capCeiling(S));
     t.tags = ['debt']; t.seen = [];
     g.startNego(S, t);
-    r.push(['개입 초기 횟수', g.negoLeft(S.nego) === g.BAL.negoActs, g.negoLeft(S.nego) + '회']);
+    r.push(['개입 초기 횟수', g.negoLeft(g.negosOf(S)[0]) === g.BAL.negoActs, g.negoLeft(g.negosOf(S)[0]) + '회']);
 
-    const s0 = S.nego.success, p0 = S.co.probe, cash0 = S.co.cash;
+    const s0 = g.negosOf(S)[0].success, p0 = S.co.probe, cash0 = S.co.cash;
     g.negoAct(S, 'wine');
-    r.push(['접대비 — 성공도와 수사', S.nego.success > s0 && S.co.probe === p0 + g.BAL.negoWineProbe
+    r.push(['접대비 — 성공도와 수사', g.negosOf(S)[0].success > s0 && S.co.probe === p0 + g.BAL.negoWineProbe
             && S.co.cash < cash0, '수사 +' + (S.co.probe - p0)]);
 
-    const pr0 = S.nego.progress, sc0 = S.nego.success;
+    const pr0 = g.negosOf(S)[0].progress, sc0 = g.negosOf(S)[0].success;
     g.negoAct(S, 'push');
-    r.push(['시한 제시 — 진행도↑ 성공도↓', S.nego.progress > pr0 && S.nego.success < sc0, '']);
+    r.push(['시한 제시 — 진행도↑ 성공도↓', g.negosOf(S)[0].progress > pr0 && g.negosOf(S)[0].success < sc0, '']);
 
     g.negoAct(S, 'wine');
-    r.push(['개입 3회 소진', g.negoLeft(S.nego) === 0, '']);
+    r.push(['개입 3회 소진', g.negoLeft(g.negosOf(S)[0]) === 0, '']);
 
-    const before = S.nego.success;
+    const before = g.negosOf(S)[0].success;
     g.negoAct(S, 'wine');
-    r.push(['소진 후 개입 거부', S.nego.success === before, '4회차는 반영되지 않는다']);
+    r.push(['소진 후 개입 거부', g.negosOf(S)[0].success === before, '4회차는 반영되지 않는다']);
 
     // 중단은 개입 횟수를 먹지 않는다 — 소진 상태에서도 눌려야 한다
-    r.push(['소진 뒤에도 중단은 가능', (g.negoAct(S, 'quit'), S.nego === null), '탈출구는 개입이 아니다']);
+    r.push(['소진 뒤에도 중단은 가능', (g.negoAct(S, 'quit'), g.negosOf(S).length === 0), '탈출구는 개입이 아니다']);
 
     // 중단 — 위약금을 내고 협상단이 즉시 풀린다
     const S2 = g.setS(g.newState('중단', 2002));
@@ -445,8 +445,8 @@ try {
     g.startNego(S2, t2);
     const c0 = S2.co.cash;
     g.negoAct(S2, 'quit');
-    r.push(['협상 중단', S2.nego === null && S2.co.cash < c0, '위약금 ' + g.won(c0 - S2.co.cash)]);
-    r.push(['중단 후 재파견 가능', (g.startNego(S2, t2), !!S2.nego), '']);
+    r.push(['협상 중단', g.negosOf(S2).length === 0 && S2.co.cash < c0, '위약금 ' + g.won(c0 - S2.co.cash)]);
+    r.push(['중단 후 재파견 가능', (g.startNego(S2, t2), !!g.negosOf(S2)[0]), '']);
 
     /* 라이벌 이름 — 상태를 저장하지 않고 매물 id 로 결정적으로 뽑는다.
        같은 회사엔 늘 같은 상대가 붙어야 하고, 게임 rng 를 건드리면 안 된다. */
@@ -467,17 +467,17 @@ try {
   win.eval(`(() => {
     const g = window.game, S = g.S;
     S.staff.forEach(e => e.onTeam = true); S.co.cash = 1e13;
-    if (!S.nego) g.startNego(S, S.market.find(c => c.cap <= g.capCeiling(S)));
+    if (!g.negosOf(S).length) g.startNego(S, S.market.find(c => c.cap <= g.capCeiling(S)));
   })()`);
   openTab(win, doc, 'co');
   win.eval('game.renderAll()');
   const nactBtns = [...doc.querySelectorAll('[data-nact]')];
   check('개입 버튼 렌더', nactBtns.length === Object.keys(game.NEGO_ACTS).length,
         nactBtns.length + '종 (중단은 별도 줄)');
-  const sBefore = game.S.nego.success;
+  const sBefore = game.negosOf(game.S)[0].success;
   nactBtns.find(b => b.dataset.nact === 'wine').click();
-  check('개입 버튼 → 판정 함수', game.S.nego.success > sBefore,
-        `성공도 ${Math.round(sBefore)} → ${Math.round(game.S.nego.success)}`);
+  check('개입 버튼 → 판정 함수', game.negosOf(game.S)[0].success > sBefore,
+        `성공도 ${Math.round(sBefore)} → ${Math.round(game.negosOf(game.S)[0].success)}`);
 
   /* ── 미리 사두기 (단계 3) ────────────────────────────────
      매집 → 별 → 협상 시작값 → 소문 → 인수 시 흡수까지 한 줄로 훑는다.
@@ -541,8 +541,8 @@ try {
       for (let i = 0; i < 8; i++) g.tickStake(S);
       const stars2 = g.stakeStars(S, c2);
       g.startNego(S, c2);
-      r.push(['매집이 협상 성공도 시작값에 반영', S.nego.success > base + stars2 * B.stakeSuccess - 0.01,
-              '★' + stars2 + ' · 시작 성공도 ' + Math.round(S.nego.success)]);
+      r.push(['매집이 협상 성공도 시작값에 반영', g.negosOf(S)[0].success > base + stars2 * B.stakeSuccess - 0.01,
+              '★' + stars2 + ' · 시작 성공도 ' + Math.round(g.negosOf(S)[0].success)]);
       g.completeAcq(S, c2, 1);
       r.push(['인수 시 지분 흡수', !S.stock.holds[c2.id] && !(S.stock.stake || {})[c2.id], '']);
     }
@@ -596,23 +596,23 @@ try {
     const t = S.market.filter(c => !c.owned && c.cap <= game.capCeiling(S)).sort((a, b) => a.cap - b.cap)[0];
     S.co.cash = t.cap * 4;
     game.startNego(S, t, true);`);
-  check('직접 협상 파견', !!game.S.nego && game.S.nego.direct === true);
-  const wantRounds = game.tableRounds(game.S.nego.diff);
+  check('직접 협상 파견', !!game.negosOf(game.S)[0] && game.negosOf(game.S)[0].direct === true);
+  const wantRounds = game.tableRounds(game.negosOf(game.S)[0].diff);
   /* 협상 중 분기 이벤트 모달이 먼저 뜬다 — 그건 치워 가며 클로징까지 간다 */
-  for (let i = 0; i < 60 && !game.S.nego?.tableView; i++) {
+  for (let i = 0; i < 60 && !game.negosOf(game.S)[0]?.tableView; i++) {
     if (doc.getElementById('modal-layer').classList.contains('on')) resolveModals(doc);
     else win.eval('game.tickDay()');
   }
   check('클로징에서 테이블이 열린다',
         /협상 테이블/.test(doc.getElementById('modal')?.textContent || ''), wantRounds + '라운드');
-  check('현재 라운드가 상태에 노출된다', !!game.S.nego?.tableView, game.S.nego?.tableView?.demand);
+  check('현재 라운드가 상태에 노출된다', !!game.negosOf(game.S)[0]?.tableView, game.negosOf(game.S)[0]?.tableView?.demand);
   let rounds = 0;
-  while (game.S.nego?.tableView && rounds < 8) {
+  while (game.negosOf(game.S)[0]?.tableView && rounds < 8) {
     doc.querySelector('#modal .choice:not([disabled])').click(); rounds++;
   }
   check('라운드 수만큼 진행된다', rounds === wantRounds, rounds + '/' + wantRounds);
   resolveModals(doc, /자기자금|확인/);
-  check('테이블 뒤 판정으로 넘어간다', !game.S.nego);
+  check('테이블 뒤 판정으로 넘어간다', !game.negosOf(game.S)[0]);
 
   /* ── 매물 경쟁 (시한 압박) ───────────────────────────── */
   const rivalOk = win.eval(`(() => {
@@ -624,11 +624,11 @@ try {
     const cap0 = t.cap, diff0 = t.diff;
 
     g.startNego(S, t);
-    S.nego.rivalDue = S.day + 2;                 // 마감을 강제로 당긴다
-    r.push(['마감이 협상에 걸린다', S.nego.rivalDue > S.day, '']);
-    S.day = S.nego.rivalDue;                     // 마감일 도달
+    g.negosOf(S)[0].rivalDue = S.day + 2;                 // 마감을 강제로 당긴다
+    r.push(['마감이 협상에 걸린다', g.negosOf(S)[0].rivalDue > S.day, '']);
+    S.day = g.negosOf(S)[0].rivalDue;                     // 마감일 도달
     g.tickNego(S);
-    r.push(['마감을 넘기면 매물을 잃는다', !S.nego, '협상 종료']);
+    r.push(['마감을 넘기면 매물을 잃는다', !g.negosOf(S).length, '협상 종료']);
     r.push(['잃은 매물은 사라지지 않는다', !t.owned && !!t.rivalOwned, '다시 노릴 수 있다']);
     r.push(['값이 오르고 난이도가 오른다',
             t.cap > cap0 && t.diff === Math.min(3, diff0 + 1),
@@ -640,7 +640,7 @@ try {
     const t2 = S2.market.filter(c => !c.owned && c.cap <= g.capCeiling(S2)).sort((a, b) => a.cap - b.cap)[0];
     S2.co.cash = t2.cap * 4;
     g.startNego(S2, t2);
-    S2.nego.rivalDue = S2.day; S2.nego.progress = 100; S2.nego.marks = [];
+    g.negosOf(S2)[0].rivalDue = S2.day; g.negosOf(S2)[0].progress = 100; g.negosOf(S2)[0].marks = [];
     g.tickNego(S2);
     r.push(['진행도 100% 면 마감을 넘겨도 안전', !t2.rivalOwned, '']);
 
@@ -813,6 +813,182 @@ try {
     return r;
   })()`);
   roleOk.forEach(([n, ok, d]) => check(n, ok, d));
+
+  /* ── 경제 위기 ────────────────────────────────────────────
+     후반 전용. 반드시 예고가 먼저 가고, 매물이 싸지므로 기회이기도 하다. */
+  const crisisOk = win.eval(`(() => {
+    const g = window.game, r = [];
+    const S = g.setS(g.newState('위기', 5005));
+    S.co.cash = 1e9;
+    g.tickCrisis(S);
+    r.push(['자본이 작으면 위기가 안 걸린다', !g.crisisOf(S).due && !g.inCrisis(S), '']);
+
+    S.co.cash = g.BAL.crisisFrom * 2;
+    let guard = 0;
+    while (!g.crisisOf(S).due && guard++ < 3000) { S.day++; g.tickCrisis(S); }
+    const c = g.crisisOf(S);
+    r.push(['자격을 갖추면 예약된다', !!c.due && !!c.name, c.name + ' D-' + (c.due - S.day)]);
+    r.push(['예약만으로는 아직 효과가 없다', g.crisisMul(S, 'daily') === 1 && g.crisisPriceMul(S) === 1, '']);
+
+    // 대비 안내가 발동 전에 반드시 한 번 나간다
+    const inbox0 = S.inbox.length;
+    while (S.day < c.due - 1) { S.day++; g.tickCrisis(S); }
+    r.push(['발동 전에 경보가 먼저 온다', S.inbox.length > inbox0 && !!c.warned, '']);
+
+    // 발동 — 계열사 하나를 쥐여 주고 집중 업종이 잡히는지 본다
+    ['daily','daily','food'].forEach((k, i) =>
+      S.co.subs.push({ id:'z'+i, name:'즈'+i, sector:k, cap:1e10, tags:[], seen:[], day:0 }));
+    S.day = c.due; g.tickCrisis(S);
+    r.push(['발동하면 진행 중이 된다', g.inCrisis(S), c.name]);
+    r.push(['가장 많은 업종이 더 크게 맞는다',
+            g.crisisMul(S, 'daily') < g.crisisMul(S, 'food'),
+            'daily ' + g.crisisMul(S, 'daily') + ' vs food ' + g.crisisMul(S, 'food')]);
+    r.push(['위기 중에는 매물이 싸다', g.crisisPriceMul(S) < 1, '×' + g.crisisPriceMul(S)]);
+
+    /* 긴축 선택지. 예전에는 c.eased 를 세우기만 하고 **읽는 곳이 없어**
+       인지도만 깎이는 순손실 버튼이었다. 모달을 실제로 눌러 확인한다. */
+    const mul0 = g.crisisMul(S, 'daily'), mkt0 = S.co.marketing;
+    const opts = [...document.querySelectorAll('#modal .choice:not([disabled])')];
+    opts[1].click();
+    r.push(['긴축이 실제로 손실을 줄인다', g.crisisMul(S, 'daily') > mul0,
+            mul0.toFixed(2) + ' → ' + g.crisisMul(S, 'daily').toFixed(2)]);
+    r.push(['긴축은 인지도를 대가로 받는다', S.co.marketing < mkt0,
+            mkt0 + ' → ' + S.co.marketing]);
+
+    S.day = c.until; g.tickCrisis(S);
+    r.push(['기간이 지나면 회복한다', !g.inCrisis(S) && g.crisisMul(S, 'daily') === 1, '']);
+    r.push(['위기가 끝나면 긴축도 함께 지워진다', !c.eased, '']);
+    return r;
+  })()`);
+  crisisOk.forEach(([n, ok, d]) => check(n, ok, d));
+
+  /* ── 협상단 2팀 ───────────────────────────────────────────
+     중견기업(등급 4)부터 열린다. 초반에 열면 조작이 두 배가 되므로 후반 전용이다. */
+  const slotOk = win.eval(`(() => {
+    const g = window.game, r = [];
+    const S = g.setS(g.newState('2팀', 4004));
+    S.staff.forEach(e => { e.onTeam = true; e.slot = 0; });
+    S.co.cash = 1e13;
+    S.co.tier = 3;
+    r.push(['중견기업 전에는 1팀', g.negoSlots(S) === 1, g.negoSlots(S) + '팀']);
+    const picks = S.market.filter(c => !c.owned && c.cap <= g.capCeiling(S)).sort((a, b) => a.cap - b.cap);
+    g.startNego(S, picks[0]);
+    g.startNego(S, picks[1]);
+    r.push(['1팀일 때 두 번째 파견은 막힌다', g.negosOf(S).length === 1, g.negosOf(S).length + '건']);
+
+    S.co.tier = 4;
+    r.push(['중견기업부터 2팀', g.negoSlots(S) === 2, g.negoSlots(S) + '팀']);
+    // 2팀에 사람이 없으면 파견되지 않는다
+    g.startNego(S, picks[1]);
+    r.push(['빈 팀으로는 파견 불가', g.negosOf(S).length === 1, '']);
+
+    const spare = S.staff.find(e => !e.onTeam) || (S.staff.push(g.makeStaff(2)), S.staff[S.staff.length - 1]);
+    spare.onTeam = true; spare.slot = 1;
+    g.startNego(S, picks[1]);
+    r.push(['2팀이 동시에 협상한다', g.negosOf(S).length === 2,
+            g.negosOf(S).map(n => (n.slot + 1) + '팀').join(' · ')]);
+    r.push(['슬롯이 서로 다르다', g.negosOf(S)[0].slot !== g.negosOf(S)[1].slot, '']);
+    r.push(['같은 매물에 두 번 못 건다',
+            (g.startNego(S, picks[0]), g.negosOf(S).length === 2), '']);
+
+    // 한 건만 끝나도 다른 건은 남는다
+    const first = g.negosOf(S)[0];
+    g.negoAct(S, 'quit', first);
+    r.push(['한 건을 중단해도 나머지는 진행', g.negosOf(S).length === 1
+            && g.negosOf(S)[0].id !== first.id, '']);
+    r.push(['빈 슬롯이 다시 열린다', g.freeSlot(S) === first.slot, '슬롯 ' + g.freeSlot(S)]);
+    return r;
+  })()`);
+  slotOk.forEach(([n, ok, d]) => check(n, ok, d));
+
+  /* ── 순자산 · 순위 (구조 수정) ────────────────────────────
+     예전에는 netWorth = 현금 − 부채라 계열사를 아무리 사도 순자산이 늘지
+     않았다. 승급 조건 4개가 순자산을 보고 있었으므로 인수가 승급을 역행시켰다. */
+  const worthOk = win.eval(`(() => {
+    const g = window.game, r = [];
+    const S = g.setS(g.newState('순자산', 7007));
+    S.co.cash = 1e11;
+    const nw0 = g.netWorth(S), rank0 = (g.recalcCap(S), S.co.rank);
+    r.push(['계열사 없으면 순자산 = 보유 자금', nw0 === S.co.cash, g.won(nw0)]);
+
+    // 인수를 흉내낸다 — 현금이 나가고 같은 값의 계열사가 들어온다
+    const price = 3e10;
+    S.co.cash -= price;
+    S.co.subs.push({ id:'x1', name:'테스트', sector:'daily', cap: price, tags:[], seen:[], paid: price });
+    const nw1 = g.netWorth(S);
+    r.push(['인수해도 순자산이 줄지 않는다', Math.abs(nw1 - nw0) < 1,
+            g.won(nw0) + ' → ' + g.won(nw1)]);
+    r.push(['순자산 = 자금 + 계열사 − 부채',
+            nw1 === S.co.cash + g.subsValue(S) - g.debtTotal(S), '']);
+
+    // 계열사가 커지면 순위가 오른다 — 순위 입력이 순자산이다
+    S.co.subs[0].cap *= 40;
+    g.recalcCap(S);
+    r.push(['순위는 순자산을 본다', S.co.rank < rank0, rank0 + '위 → ' + S.co.rank + '위']);
+    r.push(['시가총액 ≥ 순자산 (본업이 얹힌다)', S.co.cap >= g.netWorth(S), '']);
+
+    // 승급 조건이 쓰는 사업부 캐시가 매일 갱신되는가
+    const S2 = g.setS(g.newState('사업부', 7008));
+    ['daily','daily','daily'].forEach((k, i) =>
+      S2.co.subs.push({ id:'d'+i, name:'디'+i, sector:k, cap:1e9, tags:[], seen:[], pmi:1 }));
+    g.tickEconomy(S2);
+    r.push(['사업부 수가 상태에 갱신된다', S2.co.divs === g.divisionsOf(S2).length,
+            S2.co.divs + '개']);
+    return r;
+  })()`);
+  worthOk.forEach(([n, ok, d]) => check(n, ok, d));
+
+  /* ── 사업부 캐시 · 인수 완료 경로 ─────────────────────────
+     `co.divs`(숫자, economy 소유)와 사업부 키 목록(배열, mna 소유)이 한 필드를
+     공유하던 시절, 사업부가 하나라도 있으면 **인수 완료가 예외로 죽고 시계가
+     멈춘 채 돌아오지 않았다.** 위 두 케이스는 각각 따로만 봐서 이 조합을
+     놓쳤다 — 여기서는 모달을 실제로 눌러 결제 경로 전체를 지난다. */
+  const divOk = win.eval(`(() => {
+    const g = window.game, r = [];
+    const S = g.setS(g.newState('사업부회귀', 9009));
+    S.co.cash = 1e12; S.speed = 2;
+    ['daily','daily','daily'].forEach((k, i) =>
+      S.co.subs.push({ id:'q'+i, name:'큐'+i, sector:k, cap:1e9, tags:[], seen:[], day:1 }));
+    g.tickEconomy(S);
+    r.push(['divs 는 숫자로만 쓰인다', typeof S.co.divs === 'number', String(S.co.divs)]);
+    r.push(['사업부 키는 별도 필드(divKeys)', Array.isArray(S.co.divKeys), '']);
+
+    const tgt = S.market.find(c => !c.owned && c.cap < 1e9);
+    g.negosOf(S).push({ slot:0, id:tgt.id, name:tgt.name, diff:0, progress:100,
+      success:100, prem:0.1, tagMul:1, team:[], marks:[], acts:3, done:[], direct:false });
+    g.judgeNego(S, g.negosOf(S)[0]);
+    const speedPaused = S.speed;
+    document.querySelector('#modal .choice:not([disabled])').click();
+    r.push(['사업부가 있어도 인수 완료가 안 터진다', S.co.subs.some(c => c.id === tgt.id), tgt.name]);
+    r.push(['인수 결제 뒤 배속이 복원된다', speedPaused === 0 && S.speed === 2, '0 → ' + S.speed]);
+
+    // 두 번째 사업부 출범 연출도 살아 있는가 (예전엔 여기서 죽었다)
+    ['food','food','food'].forEach((k, i) =>
+      S.co.subs.push({ id:'f'+i, name:'푸'+i, sector:k, cap:1e9, tags:[], seen:[], day:1 }));
+    g.tickEconomy(S);
+    const inbox0 = S.inbox.length;
+    g.checkDivisions(S);
+    r.push(['두 번째 사업부도 출범 알림이 나간다', S.inbox.length > inbox0,
+            g.divisionsOf(S).join(', ')]);
+    r.push(['같은 사업부를 두 번 출범시키지 않는다',
+            (() => { const n = S.inbox.length; g.checkDivisions(S); return S.inbox.length === n; })(), '']);
+    return r;
+  })()`);
+  divOk.forEach(([n, ok, d]) => check(n, ok, d));
+
+  /* 모달 핸들러가 던져도 시계는 살아 있어야 한다 — 단일 실패점 방어 */
+  const guardOk = win.eval(`(() => {
+    const g = window.game, r = [];
+    const S = g.S; S.speed = 2;
+    g.pause();
+    g.openModal({ title:'예외 테스트', actions:[{ label:'확인', run: () => { throw new Error('의도된 예외'); } }] });
+    document.querySelector('#modal [data-a]').click();
+    r.push(['핸들러가 던져도 배속이 복원된다', S.speed === 2, 'speed ' + S.speed]);
+    return r;
+  })()`);
+  guardOk.forEach(([n, ok, d]) => check(n, ok, d));
+  // 위 케이스가 던진 것은 의도된 예외다. '런타임 에러 없음' 집계에서 뺀다
+  for (let i = errors.length - 1; i >= 0; i--) if (errors[i].includes('의도된 예외')) errors.splice(i, 1);
 
   check('출력 무결성', !/NaN|undefined|Infinity/.test(all),
         (all.match(/.{0,30}(NaN|undefined|Infinity)/) || [''])[0]);

@@ -2,6 +2,7 @@ import { BAL } from '../core/balance.js';
 import { DIFFS } from '../core/data.js';
 import { $, chance, clamp } from '../core/util.js';
 import { checkEnding } from './ending.js';
+import { negoFor, negosOf } from './mna.js';
 import { news, pushInbox, toast } from '../ui/toast.js';
 
 /* ── 무당 ────────────────────────────────────────────────── */
@@ -24,21 +25,21 @@ function doGut(s, kind, targetId) {
       tgt.curse = 3;
       if (tgt.diff > 0) tgt.diff--;
       if (tgt.listed) tgt.price = Math.round(tgt.price * 0.80);
-      if (s.nego?.id === tgt.id) { s.nego.diff = tgt.diff; s.nego.prem = Math.max(0.02, s.nego.prem - 0.12); }
+      { const n = negoFor(s, tgt.id); if (n) { n.diff = tgt.diff; n.prem = Math.max(0.02, n.prem - 0.12); } }
       pushInbox(s, '살굿 적중', `${tgt.name}에 악재가 발생했습니다. 인수 난이도가 <b>${DIFFS[tgt.diff].name}</b>(으)로 내려가고 주가가 급락했습니다.`, 'good');
     } else {
       // 신벌 — 역풍 살
-      if (s.nego) s.nego.success = clamp(s.nego.success - 15, 0, 100);
+      negosOf(s).forEach(n => { n.success = clamp(n.success - 15, 0, 100); });
       if (chance(0.5)) s.co.cash -= fee * 2;
       pushInbox(s, '신벌 — 역풍 살', `굿이 실패해 살이 자사로 돌아왔습니다. 협상 성공도가 크게 하락했습니다.`, 'bad');
     }
   } else {
     if (ok) {
-      if (s.nego) { s.nego.success = clamp(s.nego.success + 14 * sh.power, 0, 100); s.nego.blessed++; }
+      negosOf(s).forEach(n => { n.success = clamp(n.success + 14 * sh.power, 0, 100); n.blessed++; });
       s.co.marketing = Math.min(BAL.marketingCap, s.co.marketing + 0.15);
       pushInbox(s, '축원굿 성공', '자사에 축복이 내렸습니다. 협상 성공도와 회사 이미지가 올랐습니다.', 'good');
     } else {
-      if (s.nego) s.nego.success = clamp(s.nego.success - 5, 0, 100);
+      negosOf(s).forEach(n => { n.success = clamp(n.success - 5, 0, 100); });
       if (chance(0.35)) s.co.cash -= fee;
       pushInbox(s, '축원굿 실패', '굿 효과가 나타나지 않았습니다.', 'bad');
     }

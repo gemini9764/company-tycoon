@@ -5,6 +5,7 @@ import { sumStat, teamOf } from '../core/derive.js';
 import { bumpPerks, divisionName, divisionsOf, subPriceMul, tagsOf } from '../core/tags.js';
 import { rand } from '../core/rng.js';
 import { rivalOf } from '../core/rivals.js';
+import { crisisPriceMul } from './crisis.js';
 import { $, chance, clamp, pct, pick, rint, rnd, won } from '../core/util.js';
 import { capCeiling, checkTier, loanRate, recalcCap, teamPower } from './company.js';
 import { delegateTable, rollDemands } from './negoTable.js';
@@ -15,10 +16,41 @@ import { openModal } from '../ui/modal.js';
 import { openTable } from '../ui/negoTable.js';
 import { news, pushInbox, toast } from '../ui/toast.js';
 
+/* ── 협상 슬롯 ──────────────────────────────────────────────
+   2팀은 **중견기업(등급 4)부터** 열린다. 처음부터 열면 협상 2건을 동시에
+   관리하게 되어 조작이 두 배가 된다 — 감축 패스(§10)와 정면으로 부딪친다.
+   후반에만 열면 초반 조작은 그대로이고, 통합 중 계열사가 겹치면서
+   "무리하게 연달아 사면 현금이 마른다"는 위험이 비로소 발동한다.
+   ────────────────────────────────────────────────────────── */
+const SLOT2_TIER = 4;
+
+const negoSlots = s => (s.co.tier >= SLOT2_TIER ? 2 : 1);
+
+/** 구버전 세이브 방어 겸 단축. 항상 배열을 돌려준다 */
+const negosOf = s => (s.negos ||= []);
+
+/** 비어 있는 슬롯 번호. 없으면 -1 */
+function freeSlot(s) {
+  const used = new Set(negosOf(s).map(n => n.slot));
+  for (let i = 0; i < negoSlots(s); i++) if (!used.has(i)) return i;
+  return -1;
+}
+
+/** 이 매물을 지금 협상 중인가 */
+const negoFor = (s, id) => negosOf(s).find(n => n.id === id) || null;
+
+/** 협상을 목록에서 뺀다. 예전 `s.nego = null` 자리에 들어간다 */
+function dropNego(s, n) {
+  const i = negosOf(s).indexOf(n);
+  if (i >= 0) s.negos.splice(i, 1);
+}
+
 function startNego(s, target, direct = false) {
-  const team = teamOf(s);
-  if (!team.length) return toast('협상단에 배정된 직원이 없습니다', 'bad');
-  if (s.nego) return toast('이미 진행 중인 협상이 있습니다', 'bad');
+  const slot = freeSlot(s);
+  if (slot < 0) return toast(negoSlots(s) > 1 ? '두 협상단이 모두 나가 있습니다' : '이미 진행 중인 협상이 있습니다', 'bad');
+  const team = teamOf(s, slot);
+  if (!team.length) return toast(`${slot + 1}팀에 배정된 직원이 없습니다`, 'bad');
+  if (negoFor(s, target.id)) return toast('이미 협상 중인 매물입니다', 'bad');
   if (target.cap > capCeiling(s)) return toast('회사 등급이 낮아 이 규모는 인수할 수 없습니다', 'bad');
 
   const d = DIFFS[target.diff];
@@ -34,7 +66,8 @@ function startNego(s, target, direct = false) {
   const stake = stakeBonus(s, target);
   prem += stake.prem;
 
-  s.nego = {
+  const n = {
+    slot,
     id: target.id, name: target.name, diff: target.diff,
     progress: 0, success: 12 + sumStat(team, 'nego') * 0.08 + stake.success,
     prem: Math.max(0.02, prem), tagMul, team: team.map(e => e.id),
@@ -42,13 +75,14 @@ function startNego(s, target, direct = false) {
     acts: BAL.negoActs, done: [],   // 능동 개입 잔여 횟수와 이력
     direct,                          // 클로징에서 테이블을 열지 (false = 협상단에 위임)
   };
+  negosOf(s).push(n);
   /* 매물 경쟁 — 마감이 걸리면 진행 속도가 자원이 된다 */
   if (chance(BAL.rivalChance)) {
-    s.nego.rivalDue = s.day + rint(BAL.rivalDaysMin, BAL.rivalDaysMax);
+    n.rivalDue = s.day + rint(BAL.rivalDaysMin, BAL.rivalDaysMax);
     const rv = rivalOf(target.id);
     news(`${target.name}에 ${rv.n}도 접근 중`);
     pushInbox(s, '경쟁 인수자 등장',
-      `<b>${target.name}</b> 인수에 <b>${rv.n}</b>이(가) 뛰어들었습니다 — ${rv.who}. <b>${s.nego.rivalDue - s.day}일</b> 안에 협상을 마치지 못하면 넘어갑니다. 회사 창에서 <b>시한 제시</b>로 진행을 앞당길 수 있습니다.`, 'bad');
+      `<b>${target.name}</b> 인수에 <b>${rv.n}</b>이(가) 뛰어들었습니다 — ${rv.who}. <b>${n.rivalDue - s.day}일</b> 안에 협상을 마치지 못하면 넘어갑니다. 회사 창에서 <b>시한 제시</b>로 진행을 앞당길 수 있습니다.`, 'bad');
   }
   news(`${s.co.name} 협상단, ${target.name} 인수 협상 착수`);
   if (stake.stars) toast(`사둔 지분 ${'★'.repeat(stake.stars)} — 성공도 +${stake.success}`, 'good');
@@ -56,13 +90,17 @@ function startNego(s, target, direct = false) {
 }
 
 function tickNego(s) {
-  const n = s.nego; if (!n) return;
+  // 진행 중 협상을 복사해 돌린다 — 판정 중에 목록에서 빠질 수 있다
+  for (const n of negosOf(s).slice()) tickOne(s, n);
+}
+
+function tickOne(s, n) {
   const tgt = s.market.find(c => c.id === n.id);
   const team = s.staff.filter(e => n.team.includes(e.id));
 
   n.progress = Math.min(100, n.progress + BAL.negoProgressPerDay * rnd(0.9, 1.1));
 
-  let gain = BAL.negoSuccessBase * DIFFS[n.diff].mul * (0.35 + teamPower(s) * 0.012);
+  let gain = BAL.negoSuccessBase * DIFFS[n.diff].mul * (0.35 + teamPower(s, n.slot) * 0.012);
   if (tgt?.curse > 0) gain *= 1.45;                                  // 살굿 적중
   if (s.co.mistrust > BAL.mistrustPenaltyAt) gain *= 0.78;           // 미신지수 페널티
   n.success = clamp(n.success + gain, 0, 100);
@@ -73,17 +111,18 @@ function tickNego(s) {
     negoEvent(s, n, team);
   }
   // 마감을 넘기면 매물이 넘어간다. 진행도 판정보다 **먼저** 본다
-  if (n.rivalDue && s.day >= n.rivalDue && n.progress < 100) return loseToRival(s);
-  if (n.progress >= 100) finishNego(s);
+  if (n.rivalDue && s.day >= n.rivalDue && n.progress < 100) return loseToRival(s, n);
+  if (n.progress >= 100) finishNego(s, n);
 }
 
 /**
  * 경쟁에서 밀렸다. 매물을 시장에서 빼지 않는다 — 후반에 살 것이 마른다.
  * 값이 오르고 난이도가 올라 '더 비싸게라도 다시 노릴지'가 선택으로 남는다.
  */
-function loseToRival(s) {
-  const n = s.nego, tgt = s.market.find(c => c.id === n.id);
-  s.nego = null;
+function loseToRival(s, n = negosOf(s)[0]) {
+  if (!n) return;
+  const tgt = s.market.find(c => c.id === n.id);
+  dropNego(s, n);
   if (tgt) {
     tgt.cap = Math.round(tgt.cap * (1 + BAL.rivalCapUp));
     tgt.diff = Math.min(3, tgt.diff + 1);
@@ -123,7 +162,7 @@ const negoBill = (s, r) => Math.round(Math.min(s.co.cap * r, Math.max(1e6, s.co.
 /** 지금 조건으로 계산한 예상 인수가 */
 function estPrice(s, n) {
   const t = s.market.find(c => c.id === n.id);
-  return t ? Math.round(t.cap * (1 + n.prem) * (n.tagMul ?? 1)) : 0;
+  return t ? Math.round(t.cap * (1 + n.prem) * (n.tagMul ?? 1) * crisisPriceMul(s)) : 0;
 }
 
 /** 남은 개입 횟수. 구버전 세이브의 진행 중 협상에는 acts 가 없다 */
@@ -161,18 +200,20 @@ const NEGO_ACTS = {
     run: (s, n) => {
       news(`${n.name} 인수 협상 중단`);
       toast(`${n.name} 협상 중단 — 협상단이 복귀했습니다`);
-      s.nego = null;
+      dropNego(s, n);
     },
   },
 };
 
 /**
  * 개입 1회를 실행한다. 성공하면 true.
- * 횟수 차감 → 비용 지불 → 효과 순서다. 효과 안에서 s.nego 를 지우는 것(quit)이
- * 있으므로 차감과 이력은 반드시 먼저 해 둔다.
+ * 횟수 차감 → 비용 지불 → 효과 순서다. 효과 안에서 협상을 목록에서 빼는 것
+ * (quit)이 있으므로 차감과 이력은 반드시 먼저 해 둔다.
+ *
+ * 협상이 둘일 수 있으므로 대상을 명시로 받는다. 안 주면 1팀 것을 쓴다.
  */
-function negoAct(s, id) {
-  const n = s.nego, act = NEGO_ACTS[id];
+function negoAct(s, id, n = negosOf(s)[0]) {
+  const act = NEGO_ACTS[id];
   if (!n || !act) return false;
   if (!act.free && negoLeft(n) <= 0) { toast('이번 협상에서 쓸 수 있는 개입을 모두 썼습니다', 'bad'); return false; }
   const why = act.can(s, n);
@@ -230,8 +271,8 @@ function negoEvent(s, n, team) {
  * 위임이면 같은 판을 봇 정책으로 즉시 계산한다 — 직접 하는 쪽이 늘 유리해지지
  * 않도록 위임도 최선 수를 둔다.
  */
-function finishNego(s) {
-  const n = s.nego, tgt = s.market.find(c => c.id === n.id);
+function finishNego(s, n = negosOf(s)[0]) {
+  const tgt = s.market.find(c => c.id === n.id);
   const team = s.staff.filter(e => n.team.includes(e.id));
 
   if (n.direct && team.length) {
@@ -241,7 +282,7 @@ function finishNego(s) {
     return openTable(s, n, tgt, team, rollDemands(n.diff));
   }
   applyTable(n, delegateTable());
-  judgeNego(s);
+  judgeNego(s, n);
 }
 
 /** 테이블 결과를 협상 상태에 얹는다. 판정 직전의 마지막 보정이다 */
@@ -252,9 +293,9 @@ function applyTable(n, r) {
 }
 
 /** 성공도로 성사/결렬을 판정하고 인수가 모달까지 띄운다 */
-function judgeNego(s) {
-  const n = s.nego, tgt = s.market.find(c => c.id === n.id);
-  s.nego = null;
+function judgeNego(s, n = negosOf(s)[0]) {
+  const tgt = s.market.find(c => c.id === n.id);
+  dropNego(s, n);
   const roll = rand() * 100 < n.success;
   if (!roll) {
     news(`${tgt.name} 인수 협상 결렬`);
@@ -267,7 +308,8 @@ function judgeNego(s) {
       actions: [{ label: '확인', run: resume }],
     });
   }
-  const price = Math.round(tgt.cap * (1 + n.prem) * (n.tagMul ?? 1));
+  // 위기 중에는 매물이 싸다 — 현금을 쥐고 있던 쪽이 여기서 판을 뒤집는다
+  const price = Math.round(tgt.cap * (1 + n.prem) * (n.tagMul ?? 1) * crisisPriceMul(s));
   const short = Math.max(0, price - s.co.cash);
   pause();
   openModal({
@@ -319,9 +361,11 @@ function completeAcq(s, tgt, price) {
    매일 돌리면 압류·매각으로 해체됐다 재결성될 때 연출이 반복된다. */
 function checkDivisions(s) {
   const now = divisionsOf(s);
-  const was = s.co.divs || [];
+  /* 구버전 세이브에는 divKeys 가 없다. 그때는 현재 상태를 기준선으로 삼아
+     이미 있는 사업부를 다시 출범시키지 않는다. */
+  const was = Array.isArray(s.co.divKeys) ? s.co.divKeys : now;
   const born = now.filter(k => !was.includes(k));
-  s.co.divs = now;
+  s.co.divKeys = now;
   if (!born.length) return;
 
   born.forEach(k => {
@@ -335,5 +379,5 @@ function checkDivisions(s) {
   }
 }
 
-export { applyTable, checkDivisions, completeAcq, finishNego, judgeNego, loseToRival, negoEvent, startNego, tickNego };
+export { applyTable, checkDivisions, completeAcq, dropNego, finishNego, freeSlot, judgeNego, loseToRival, negoEvent, negoFor, negoSlots, negosOf, startNego, tickNego };
 export { NEGO_ACTS, negoAct, negoLeft };

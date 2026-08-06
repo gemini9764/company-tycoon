@@ -25,6 +25,7 @@ import * as cityMod from './render/city.js';
 import * as storeRenderMod from './render/store.js';
 import * as bankMod from './systems/bank.js';
 import * as companyMod from './systems/company.js';
+import * as crisisMod from './systems/crisis.js';
 import * as economyMod from './systems/economy.js';
 import * as endingMod from './systems/ending.js';
 import * as eventsMod from './systems/events.js';
@@ -54,7 +55,7 @@ import * as tabsMod from './ui/tabs.js';
 const api = {
   ...audioMod, ...balanceMod, ...rngMod, ...clockMod, ...dataMod, ...deriveMod, ...loopMod, ...stateMod, ...storageMod, ...utilMod,
   ...tagsMod, ...rivalsMod, ...subsMod, ...subPanelMod, ...negoTableUiMod,
-  ...canvasMod, ...cityMod, ...storeRenderMod, ...bankMod, ...companyMod, ...economyMod, ...endingMod, ...eventsMod, ...mnaMod,
+  ...canvasMod, ...cityMod, ...storeRenderMod, ...bankMod, ...companyMod, ...crisisMod, ...economyMod, ...endingMod, ...eventsMod, ...mnaMod,
   ...negoTableMod, ...rumorMod, ...shamanMod, ...stockMod,
   ...bankPanelMod, ...companyPopupMod, ...dockMod, ...iconsMod, ...hudMod, ...panelLeftMod, ...shopPanelMod, ...deskMod, ...toastMod, ...uiMod, ...modalMod, ...settingsMod, ...tabsMod, ...titleMod,
 };

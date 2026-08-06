@@ -6,6 +6,7 @@ import { $, clamp, esc, won } from '../core/util.js';
 import { expNeed, gainExp, staffCap, teamPower } from '../systems/company.js';
 import { renderHire, resetHire } from './hirePanel.js';
 import { managersHave, managersNeeded } from '../systems/economy.js';
+import { negoSlots, negosOf } from '../systems/mna.js';
 import { useRumor } from '../systems/rumor.js';
 import { doGut, shamanFee } from '../systems/shaman.js';
 import { buyStock, sellStock } from '../systems/stock.js';
@@ -40,13 +41,21 @@ function renderRight() {
 function tabStaff() {
   const s = S, team = teamOf(s);
   const chip = e => `<span class="stat-chip">협상 ${e.nego}</span><span class="stat-chip">정보 ${e.intel}</span><span class="stat-chip">영업 ${e.sales}</span><span class="stat-chip">재무 ${e.fin}</span>`;
-  let h = `<div class="row" style="border-color:var(--sky)">
-    <h4 class="c-sky">협상단 ${team.length}/3</h4>
-    <div class="kv"><span>협상력 합계</span><b>${Math.round(teamPower(s))}</b></div>
-    <div class="kv"><span>정보력 합계</span><b>${Math.round(sumStat(team, 'intel'))}</b></div>
-    <div class="meta">협상력은 성공도 상승 속도를, 정보력은 인수가 웃돈과 찌라시 획득률을 좌우합니다.</div>
-  </div>
-  <div class="row" style="border-color:${managersHave(s) < managersNeeded(s) ? 'var(--blood)' : 'var(--jade)'}">
+  const slots = negoSlots(s);
+  /* 팀이 하나면 예전과 똑같이 한 덩어리로 보여 준다 — 2팀이 열리기 전에는
+     '1팀'이라는 말조차 나오지 않아야 초반 인지 부담이 안 는다. */
+  const teamBox = slot => {
+    const tm = teamOf(s, slot);
+    return `<div class="row" style="border-color:var(--sky)">
+      <h4 class="c-sky">${slots > 1 ? `${slot + 1}팀 ` : '협상단 '}${tm.length}/3</h4>
+      <div class="kv"><span>협상력 합계</span><b>${Math.round(teamPower(s, slot))}</b></div>
+      <div class="kv"><span>정보력 합계</span><b>${Math.round(sumStat(tm, 'intel'))}</b></div>
+      ${slot === 0 ? '<div class="meta">협상력은 성공도 상승 속도를, 정보력은 인수가 웃돈과 찌라시 획득률을 좌우합니다.</div>' : ''}
+    </div>`;
+  };
+  let h = Array.from({ length: slots }, (_, i) => teamBox(i)).join('')
+    + (slots > 1 ? '' : `<div class="row tight"><div class="meta c-dim">중견기업이 되면 협상단이 <b>2팀</b>으로 늘어 동시에 두 건을 협상할 수 있습니다. 대신 통합 중인 계열사가 겹쳐 자금이 빠르게 마릅니다.</div></div>`)
+  + `<div class="row" style="border-color:${managersHave(s) < managersNeeded(s) ? 'var(--blood)' : 'var(--jade)'}">
     <h4>관리 인력 ${managersHave(s)} / ${managersNeeded(s)}</h4>
     <div class="meta">협상단에 넣지 않은 직원이 계열사를 관리합니다. 계열사 ${BAL.subsPerManager}개당 1명이 필요하고, 모자라면 그룹 운영 효율이 계열사 수익 전체에서 깎입니다. 협상단에 몰아넣을수록 인수는 빨라지지만 그룹은 새어나갑니다.</div>
   </div>`;
@@ -58,8 +67,11 @@ function tabStaff() {
       <div class="meta">${e.trait.name} — ${e.trait.desc} · 월급 ${won(e.salary)}</div>
       <div class="meta">${e.onTeam && s.nego ? '협상 중' : e.onTeam ? '협상 대기' : e.atShop ? '매장 근무' : s.co.subs.length ? '계열사 관리' : '대기'} · 숙련 ${e.lv >= BAL.expFreeCap ? '최고' : Math.round((e.exp || 0) / expNeed(e) * 100) + '%'}</div>
       <div class="btn-row">
-        <button class="btn ${e.onTeam ? '' : 'sky'}" data-team="${e.id}" ${!e.onTeam && team.length >= 3 ? 'disabled' : ''}>${e.onTeam ? '협상단 제외' : '협상단'}</button>
-        <button class="btn ${e.atShop ? '' : 'jade'}" data-shop="${e.id}" ${e.onTeam ? 'disabled' : ''}>${e.atShop ? '매장 제외' : '매장 근무'}</button>
+        ${e.onTeam
+          ? `<button class="btn" data-team="${e.id}">${slots > 1 ? `${(e.slot || 0) + 1}팀 제외` : '협상단 제외'}</button>`
+          : Array.from({ length: slots }, (_, i) =>
+              `<button class="btn sky" data-team="${e.id}" data-slot="${i}" ${teamOf(s, i).length >= 3 ? 'disabled' : ''}>${slots > 1 ? `${i + 1}팀 편성` : '협상단'}</button>
+        <button class="btn ${e.atShop ? '' : 'jade'}" data-shop="${e.id}" ${e.onTeam ? 'disabled' : ''}>${e.atShop ? '매장 제외' : '매장 근무'}</button>`).join('')}
         <button class="btn" data-train="${e.id}">교육 ${won(trainCost(e))}</button>
         <button class="btn blood" data-fire="${e.id}">해고</button>
       </div></div>`).join('');
@@ -82,8 +94,13 @@ function tabStaff() {
 
   R.querySelectorAll('[data-team]').forEach(b => b.onclick = () => {
     const e = s.staff.find(x => x.id === b.dataset.team);
-    if (s.nego && e.onTeam) return toast('협상 중에는 협상단을 뺄 수 없습니다', 'bad');
-    e.onTeam = !e.onTeam;
+    /* 나가 있는 팀만 잠근다. 2팀이 협상 중이어도 1팀은 편성할 수 있어야
+       "한 팀이 나간 사이 다음 팀을 꾸린다"가 성립한다. */
+    const out = new Set(negosOf(s).map(n => n.slot || 0));
+    if (e.onTeam && out.has(e.slot || 0)) return toast('협상 중에는 협상단을 뺄 수 없습니다', 'bad');
+    if (e.onTeam) { e.onTeam = false; }
+    else { e.onTeam = true; e.slot = Number(b.dataset.slot || 0); }
+   
     if (e.onTeam) e.atShop = false;      // 한 사람은 한 곳에만 선다
     renderRight(); renderLeft();
   });
@@ -98,7 +115,7 @@ function tabStaff() {
   });
   R.querySelectorAll('[data-fire]').forEach(b => b.onclick = () => {
     const i = s.staff.findIndex(x => x.id === b.dataset.fire);
-    if (s.nego && s.staff[i].onTeam) return toast('협상 중인 인원은 해고할 수 없습니다', 'bad');
+    if (negosOf(s).length && s.staff[i].onTeam) return toast('협상 중인 인원은 해고할 수 없습니다', 'bad');
     toast(`${s.staff[i].name} 퇴사`); s.staff.splice(i, 1); renderRight(); renderLeft();
   });
 }
@@ -184,10 +201,10 @@ function tabShaman() {
       <div class="kv"><span>발각 확률</span><b class="c-blood">${Math.round(hired.expose * 100)}%</b></div>
       <div class="kv"><span>1회 비용</span><b>${won(fee)}</b></div>
       <div class="btn-row">
-        <button class="btn mauve" id="bless" ${!s.nego || s.co.cash < fee ? 'disabled' : ''}>축원굿 — 자사 축복</button>
+        <button class="btn mauve" id="bless" ${!negosOf(s).length || s.co.cash < fee ? 'disabled' : ''}>축원굿 — 자사 축복</button>
         <button class="btn" id="drop">계약 해지</button>
       </div>
-      <div class="meta">살굿은 맵에서 대상 회사를 클릭해 의뢰합니다. ${!s.nego ? '축원굿은 협상 진행 중에만 의미가 있습니다.' : ''}</div>
+      <div class="meta">살굿은 맵에서 대상 회사를 클릭해 의뢰합니다. ${!negosOf(s).length ? '축원굿은 협상 진행 중에만 의미가 있습니다.' : ''}</div>
     </div>`;
   }
 

@@ -7,7 +7,8 @@ import { hasHidden, tagChips } from '../core/tags.js';
 import { $, won } from '../core/util.js';
 import { loanLimit } from '../systems/bank.js';
 import { capCeiling, loanRate, teamPower } from '../systems/company.js';
-import { startNego } from '../systems/mna.js';
+import { crisisPriceMul } from '../systems/crisis.js';
+import { freeSlot, negoFor, negoSlots, startNego } from '../systems/mna.js';
 import { useRumor } from '../systems/rumor.js';
 import { doGut, shamanFee } from '../systems/shaman.js';
 import { sellStock } from '../systems/stock.js';
@@ -22,10 +23,18 @@ function openCompany(c) {
   const s = S, d = DIFFS[c.diff], overCap = c.cap > capCeiling(s);
   const rumor = s.rumors.find(r => r.target === c.id && !r.used);
   // 협상 시작 전에 자금 그림을 보여줘야 '빚을 내서라도 인수할지'가 선택지로 보인다
-  const est = Math.round(c.cap * (1 + Math.max(0.02, d.prem - sumStat(teamOf(s), 'intel') * 0.0016)));
+  const est = Math.round(c.cap * (1 + Math.max(0.02, d.prem - sumStat(teamOf(s), 'intel') * 0.0016)) * crisisPriceMul(s));
   const short = Math.max(0, est - s.co.cash);
   const finLimit = loanLimit(s, 'acq', est);
   const stars = stakeStars(s, c), held = s.stock.holds[c.id], priv = privAmt(s, c);
+  /* 파견 가능 여부를 한 곳에서 판정한다 — 두 선택지가 같은 이유를 두 번 쓰고 있었다 */
+  const slot = freeSlot(s);
+  const why = negoFor(s, c.id) ? '이미 협상 중인 매물입니다'
+            : slot < 0 ? (negoSlots(s) > 1 ? '두 협상단이 모두 나가 있습니다' : '이미 진행 중인 협상이 있습니다')
+            : overCap ? '회사 등급이 낮아 이 규모는 인수할 수 없습니다'
+            : !teamOf(s, slot).length ? `${slot + 1}팀에 배정된 직원이 없습니다`
+            : null;
+
   openModal({
     title: `${c.name} — ${SECTORS[c.sector].name}`,
     body: `
@@ -70,16 +79,15 @@ function openCompany(c) {
         run: () => { if (!s.stock.watch.includes(c.id)) s.stock.watch.push(c.id); setTab('stock'); toast('관심 종목 등록', 'good'); } }] : []),
       /* 파견을 두 갈래로 가른다. **위임에 페널티는 없다** — 있으면 '항상 직접'이
          정답이 되어 선택이 사라진다. 트레이드오프는 시간 대 성과다. */
+      /* 파견을 두 갈래로 가른다. **위임에 페널티는 없다** — 있으면 '항상 직접'이
+         정답이 되어 선택이 사라진다. 트레이드오프는 시간 대 성과다.
+         2팀이 열려 있으면 빈 슬롯이 자동으로 배정된다 — 팀을 고르게 하면
+         파견 한 번에 선택이 하나 더 붙는다. */
       { head: '준비가 끝나면', label: '협상단 파견 — 직접 협상한다',
-        dis: !!s.nego || overCap || !teamOf(s).length,
-        sub: s.nego ? '이미 진행 중인 협상이 있습니다'
-             : !teamOf(s).length ? '협상단에 배정된 직원이 없습니다'
-             : '막판에 협상 테이블이 한 판 열립니다 · 잘 두면 성공도와 인수가가 함께 좋아집니다',
+        dis: !!why, sub: why || '막판에 협상 테이블이 한 판 열립니다 · 잘 두면 성공도와 인수가가 함께 좋아집니다',
         run: () => { startNego(s, c, true); renderAll(); } },
-      { label: '협상단 파견 — 맡긴다', dis: !!s.nego || overCap || !teamOf(s).length,
-        sub: s.nego ? '이미 진행 중인 협상이 있습니다'
-             : !teamOf(s).length ? '협상단에 배정된 직원이 없습니다'
-             : `협상단 ${teamOf(s).length}명 · 협상력 ${Math.round(teamPower(s))} · 약 ${Math.ceil(100 / BAL.negoProgressPerDay)}일 소요${short ? ' · 성사 시 대출 필요' : ''}`,
+      { label: '협상단 파견 — 맡긴다', dis: !!why,
+        sub: why || `${slot + 1}팀 ${teamOf(s, slot).length}명 · 협상력 ${Math.round(teamPower(s, slot))} · 약 ${Math.ceil(100 / BAL.negoProgressPerDay)}일 소요${short ? ' · 성사 시 대출 필요' : ''}`,
         run: () => { startNego(s, c); renderAll(); } },
     ],
   });

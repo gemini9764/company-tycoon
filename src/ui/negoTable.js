@@ -28,7 +28,7 @@ function openTable(s, n, tgt, team, demands, i = 0, acc = { dS: 0, dP: 0, log: [
   /* mna → ui/negoTable → mna 순환이지만 번들러가 한 스코프로 합치고
      함수 선언이 호이스팅되므로 런타임 문제가 없다 (economy ↔ bank 와 같은 형태).
      동적 import 는 번들에서 돌지 않으므로 쓰지 않는다. */
-  if (i >= demands.length) { n.tableView = null; applyTable(n, acc); return judgeNego(s); }
+  if (i >= demands.length) { n.tableView = null; applyTable(n, acc); return judgeNego(s, n); }
 
   const dem = demands[i];
   /* 지금 라운드의 요구와 팀 순서를 상태에 노출한다. sim 봇과 스모크가
@@ -64,7 +64,7 @@ function openTable(s, n, tgt, team, demands, i = 0, acc = { dS: 0, dP: 0, log: [
         run: () => {
           const rest = delegateTable(team, demands.slice(i));
           acc.dS += rest.dS; acc.dP += rest.dP; acc.log.push(...rest.log);
-          n.tableView = null; applyTable(n, acc); judgeNego(s);
+          n.tableView = null; applyTable(n, acc); judgeNego(s, n);
         } },
     ],
   });

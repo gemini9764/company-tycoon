@@ -838,10 +838,15 @@ function drawWhiteboard() {
   X.fillStyle = '#635944'; X.fillRect(L - 3, ty - 3, w + 6, 2);
   X.fillStyle = '#EDEAE0'; X.fillRect(L, ty, w, h);
   X.fillStyle = '#C9C4B4'; X.fillRect(L, ty + h - 3, w, 3);
-  if (S.nego) {
-    drawText(x, ty + 14, `협상 · ${S.nego.name}`, { size: 10, color: '#26304A', shadow: false });
-    bar(x - w / 2 + 6, ty + 18, w - 12, 5, S.nego.progress / 100, '#4A86C7');
-    bar(x - w / 2 + 6, ty + 26, w - 12, 5, S.nego.success / 100, '#2FA37A');
+  const ns = S.negos || [];
+  if (ns.length) {
+    /* 협상이 둘이면 이름 대신 건수를 적는다 — 이 판때기는 93px 라 두 줄이 안 들어간다.
+       진행 막대는 가장 앞선 것을 보여 준다(먼저 끝날 것이 궁금하다). */
+    const lead = ns.reduce((a, b2) => (b2.progress > a.progress ? b2 : a));
+    drawText(x, ty + 14, ns.length > 1 ? `협상 ${ns.length}건 진행 중` : `협상 · ${lead.name}`,
+             { size: 10, color: '#26304A', shadow: false });
+    bar(x - w / 2 + 6, ty + 18, w - 12, 5, lead.progress / 100, '#4A86C7');
+    bar(x - w / 2 + 6, ty + 26, w - 12, 5, lead.success / 100, '#2FA37A');
   } else {
     const t = TIERS[S.co.tier];
     drawText(x, ty + 14, t.name, { size: 10, color: '#26304A', shadow: false });

@@ -1,5 +1,5 @@
 import { BAL } from '../core/balance.js';
-import { debtTotal } from '../core/derive.js';
+import { debtTotal, grossAssets } from '../core/derive.js';
 import { $, won } from '../core/util.js';
 import { creditIdx, loanRate, recalcCap } from './company.js';
 import { endGame } from './ending.js';
@@ -9,7 +9,7 @@ import { news, pushInbox, toast } from '../ui/toast.js';
 function loanLimit(s, kind, price) {
   const coef = 0.5 + creditIdx(s) * 0.09;
   if (kind === 'acq') return Math.round(price * BAL.acqLoanRatio * coef * 1.35);
-  return Math.max(0, Math.round(s.co.cap * BAL.opLoanRatio * coef) - debtTotal(s));
+  return Math.max(0, Math.round(grossAssets(s) * BAL.opLoanRatio * coef) - debtTotal(s));
 }
 
 function takeLoan(s, kind, amount, collateral) {
@@ -44,17 +44,21 @@ function seizeSub(s, l) {
 }
 
 function checkBankrupt(s) {
+  /* 연체 3회는 **현금이 양수여도** 파산이다. 예전에는 아래 early return 때문에
+     현금이 마이너스일 때만 판정돼, 연체 4회를 쌓고도 멀쩡히 완주하는 판이
+     나왔다 — 연체 알림은 "3회 누적 시 파산합니다"라고 약속하고 있었다. */
+  if (s.bank.overdue >= 3) return endGame(s, 'bankrupt');
   if (s.co.cash >= 0) { s.co.negMonths = 0; return; }
   s.co.negMonths++;
   if (s.bank.insured) {
     s.bank.insured = false;
     const cut = debtTotal(s) * 0.4;
     s.bank.loans.forEach(l => l.left *= 0.6);
-    s.co.cash = s.co.cap * 0.02;
+    s.co.cash = grossAssets(s) * 0.02;
     pushInbox(s, '파산 보험 발동', `부채 ${won(cut)}이 탕감되고 최소 운영 자금이 지급됐습니다. 보험은 소멸합니다.`, 'good');
     return;
   }
-  if (s.bank.overdue >= 3 || s.co.negMonths >= BAL.negMonthsToBust) endGame(s, 'bankrupt');
+  if (s.co.negMonths >= BAL.negMonthsToBust) endGame(s, 'bankrupt');
 }
 
 export { checkBankrupt, loanLimit, repayLoan, seizeSub, takeLoan };

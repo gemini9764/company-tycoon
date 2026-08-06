@@ -1,11 +1,12 @@
 import { BAL } from '../core/balance.js';
 import { SECTORS, SHOP_ZONES, gradeOf } from '../core/data.js';
-import { mgrOf, shopOf, sumStat } from '../core/derive.js';
-import { isHolding, perksOf, sectorBonusOf, subMgrLoad, subYieldMul, tagMarketing, tagSynergy } from '../core/tags.js';
+import { mgrOf, shopOf, grossAssets, sumStat } from '../core/derive.js';
+import { divisionsOf, isHolding, perksOf, sectorBonusOf, subMgrLoad, subYieldMul, tagMarketing, tagSynergy } from '../core/tags.js';
 import { $, clamp, rnd, won } from '../core/util.js';
 import { checkBankrupt, seizeSub } from './bank.js';
+import { crisisMul } from './crisis.js';
 import { rollSubVol } from './subs.js';
-import { pushInbox } from '../ui/toast.js';
+import { pushInbox, toast } from '../ui/toast.js';
 
 /* ── 매장 시설 ────────────────────────────────────────────
    레벨을 올리면 매출·손님·재고 유지 기간·관리 인력에 영구 보너스가 붙는다.
@@ -192,22 +193,47 @@ function dailySubIncome(s) {
   const pk  = 1 + perksOf(s).subIncome;                      // 제약 계열사
   const sum = s.co.subs.reduce((a, c) => {
     if (c.restruct) return a;                                // 재편 중에는 수익이 없다
-    return a + c.cap * BAL.subYield * (1 + SECTORS[c.sector].margin) * pmi(s, c) * subYieldMul(c, sec);
+    return a + c.cap * BAL.subYield * (1 + SECTORS[c.sector].margin) * pmi(s, c) * subYieldMul(c, sec) * crisisMul(s, c.sector);
   }, 0);
   return sum * syn * pk;
 }
 
 function dailyUpkeep(s) {
-  return s.co.subs.reduce((a, c) => a + c.cap * BAL.subYield * (pmi(s, c) < 1 ? 0.46 : 0.36), 0) + dailyRetail(s) * BAL.retailUpkeep;
+  return s.co.subs.reduce((a, c) => a + c.cap * BAL.subYield * (pmi(s, c) < 1 ? BAL.pmiUpkeep : BAL.subUpkeep), 0) + dailyRetail(s) * BAL.retailUpkeep;
+}
+
+/**
+ * 적자 경고.
+ *
+ * 일일 손익은 **회사 창을 열어야만** 보인다. 통합 중 계열사가 겹쳐 현금이 마르는
+ * 상황은 캐주얼 플레이어가 알아챌 방법이 없었다 — 어느 날 갑자기 자금이 0 이 된다.
+ * 캐주얼에서 최악은 "아무것도 잘못 안 했는데 망했다"이므로, 망하기 전에 반드시
+ * 신호가 먼저 가야 한다. 회복하면 초기화되어 같은 위기마다 한 번씩만 울린다.
+ */
+function warnDeficit(s, net) {
+  if (net >= 0) { s.co.negRun = 0; s.co.warned = false; return; }
+  s.co.negRun = (s.co.negRun || 0) + 1;
+  if (s.co.negRun < BAL.deficitWarnDays || s.co.warned) return;
+  s.co.warned = true;
+  const integ = s.co.subs.filter(c => pmi(s, c) < 1).length;
+  pushInbox(s, '적자 경고',
+    `${BAL.deficitWarnDays}일 연속 적자입니다. 남은 자금 <b>${won(s.co.cash)}</b>.` +
+    (integ ? `<br><br>통합 중인 계열사가 <b>${integ}개</b> 있습니다. 통합이 끝나기 전까지는 수익보다 유지비가 큽니다 — 통합이 끝날 때까지 새 인수를 미루면 회복됩니다.`
+           : '<br><br>매장 발주와 인지도를 점검하거나, 계열사를 정리해 자금을 확보하세요.'), 'bad');
+  toast(`${BAL.deficitWarnDays}일 연속 적자 — 자금 ${won(s.co.cash)}`, 'bad');
 }
 
 function tickEconomy(s) {
   tickInv(s);
+  /* 사업부 수를 상태에 적어 둔다. core/data.js 의 TIERS 가 승급 조건으로 쓰는데,
+     tags.js 가 data.js 를 import 하고 있어 반대 방향 import 를 걸 수 없다. */
+  s.co.divs = divisionsOf(s).length;
   const rev  = dailyRetail(s) * rnd(0.88, 1.14) + dailySubIncome(s);
   const cost = dailyUpkeep(s);
   s.co.revToday = rev; s.co.costToday = cost;
   s.co.cash += rev - cost;
   s.co.rev30.push(rev - cost);
+  warnDeficit(s, rev - cost);
   if (s.co.rev30.length > 30) s.co.rev30.shift();
   const pk = perksOf(s);
   const decay = 1 - (1 - BAL.marketingDecay) * (1 - Math.min(0.8, pk.mktKeep));   // 의류
@@ -242,7 +268,7 @@ function tickMonth(s) {
     }
   }
   if (s.bank.insured) {
-    const fee = s.co.cap * BAL.insuranceRate;
+    const fee = grossAssets(s) * BAL.insuranceRate;
     s.co.cash -= fee; lines.push(`파산 보험료 -${won(fee)}`);
   }
   s.co.donate = Math.max(0, s.co.donate - 0.4); // 기부 효과는 서서히 희석

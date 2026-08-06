@@ -19,11 +19,61 @@
  * 개발 도구다. 빌드에는 들어가지 않는다.
  */
 import { JSDOM } from 'jsdom';
-import { readFile } from 'node:fs/promises';
+import { parse } from 'acorn';
+import { readFile, readdir } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+/* ── 0. 중복 키 ────────────────────────────────────────────────
+   같은 객체 리터럴에 같은 키를 두 번 쓰면 JS 는 **조용히 뒤엣것을 택한다.**
+   문법 오류도 경고도 없다. 이름이 같으니 두 코드가 서로 다른 필드라고 믿고
+   각자 다른 타입을 쓰게 되고, 그러면 런타임에서야 터진다.
+
+   실제로 `state.js` 의 `co.divs` 가 숫자(economy)와 배열(mna) 두 주인을 갖게
+   되어, 사업부가 생긴 뒤 인수를 완료하면 게임이 멈췄다. smoke 138 케이스와
+   sim 이 전부 통과하는데도 살아 있던 버그다 — 정적으로는 한 줄로 잡힌다.
+   ───────────────────────────────────────────────────────────── */
+async function jsFiles(dir) {
+  const out = [];
+  for (const e of await readdir(join(ROOT, dir), { withFileTypes: true })) {
+    if (e.isDirectory()) out.push(...await jsFiles(join(dir, e.name)));
+    else if (e.name.endsWith('.js')) out.push(join(dir, e.name));
+  }
+  return out;
+}
+
+const dupes = [];
+for (const rel of await jsFiles('src')) {
+  const src = await readFile(join(ROOT, rel), 'utf8');
+  let ast;
+  try { ast = parse(src, { ecmaVersion: 'latest', sourceType: 'module', locations: true }); }
+  catch (e) { console.error(`✗ 파싱 실패 — ${rel}: ${e.message}`); process.exit(1); }
+
+  (function walk(n) {
+    if (!n || typeof n !== 'object') return;
+    if (n.type === 'ObjectExpression') {
+      const seen = new Map();
+      for (const p of n.properties) {
+        if (p.type !== 'Property' || p.computed) continue;
+        const k = p.key.name ?? p.key.value;
+        if (seen.has(k)) dupes.push(`${rel}:${p.loc.start.line}  "${k}"  (앞선 정의 ${seen.get(k)}행)`);
+        else seen.set(k, p.loc.start.line);
+      }
+    }
+    for (const v of Object.values(n)) {
+      if (Array.isArray(v)) v.forEach(walk);
+      else if (v && typeof v.type === 'string') walk(v);
+    }
+  })(ast);
+}
+if (dupes.length) {
+  console.error('✗ 객체 리터럴 중복 키 — 뒤엣것이 조용히 이깁니다');
+  dupes.forEach(d => console.error('  ' + d));
+  console.error('  같은 이름을 두 주인이 다른 타입으로 쓰고 있지 않은지 볼 것.');
+  process.exit(1);
+}
 const html = await readFile(join(ROOT, 'index.html'), 'utf8');
 const dom = new JSDOM(html, { url: 'https://localhost/', pretendToBeVisual: true });
 const { window: win } = dom;

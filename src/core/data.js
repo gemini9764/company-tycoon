@@ -1,14 +1,25 @@
 import { netWorth } from './derive.js';
 import { S } from './state.js';
 
+/* 승급 목표.
+ *
+ * **등급마다 병목이 되는 축이 달라야 한다.** 예전에는 4개 등급이 순자산 하나를
+ * 봤고, 순위마저 같은 값에서 나와 대기업 구간이 시드에 따라 1~7일로 스쳐
+ * 지나갔다(승급 연출이 이틀 사이 두 번). 지금은 자금 → 행동 → 수집 → 자금 →
+ * 도전 → 조합 → 순위 로 번갈아 간다.
+ *
+ * `divisionsOf` 를 여기서 쓰지 않고 `s.co.divs` 를 보는 이유는 core/tags.js 가
+ * core/data.js 를 import 하고 있어 서로 물리기 때문이다. 값은 매일 갱신된다
+ * (systems/economy.js:tickEconomy).
+ */
 const TIERS = [
-  { name:'구멍가게',   goal:'순자산 3,000만 확보',              bldg:0, ok:s=>netWorth(s)>=3e7 },
-  { name:'동네슈퍼',   goal:'순자산 1억 + 첫 M&A 성사',          bldg:1, ok:s=>netWorth(s)>=1e8 && s.co.subs.length>=1 },
-  { name:'스타트업',   goal:'계열사 3개 확보',                 bldg:2, ok:s=>s.co.subs.length>=3, unlock:'무당 시스템' },
-  { name:'중소기업',   goal:'순자산 500억 + 계열사 5개',          bldg:3, ok:s=>netWorth(s)>=5e10 && s.co.subs.length>=5, unlock:'국세청 이벤트' },
+  { name:'구멍가게',   goal:'순자산 2,000만 확보',              bldg:0, ok:s=>netWorth(s)>=2e7, at:s=>[netWorth(s), 2e7, 'won'] },
+  { name:'동네슈퍼',   goal:'첫 M&A 성사',                     bldg:1, ok:s=>s.co.subs.length>=1 },
+  { name:'스타트업',   goal:'계열사 3개 확보',                 bldg:2, ok:s=>s.co.subs.length>=3, unlock:'무당 시스템', at:s=>[s.co.subs.length, 3, 'n'] },
+  { name:'중소기업',   goal:'순자산 300억 + 계열사 8개',          bldg:3, ok:s=>netWorth(s)>=3e10 && s.co.subs.length>=8, unlock:'국세청 이벤트', at:s=>[netWorth(s), 3e10, 'won', s.co.subs.length, 8, '계열사'] },
   { name:'중견기업',   goal:"난이도 '상' 이상 기업 인수",       bldg:4, ok:s=>s.co.hardAcq>=1, unlock:'국가 이벤트' },
-  { name:'대기업',     goal:'순자산 7,000억 + 시총 순위 120위 입성',  bldg:5, ok:s=>netWorth(s)>=7e11 && s.co.rank<=120 },
-  { name:'글로벌그룹', goal:'시가총액 순위 1위',                bldg:6, ok:s=>s.co.rank<=1 },
+  { name:'대기업',     goal:'사업부 5개 — 그룹 본사 출범',        bldg:5, ok:s=>(s.co.divs || 0) >= 5, at:s=>[s.co.divs || 0, 5, 'n'] },
+  { name:'글로벌그룹', goal:'자산 순위 1위',                    bldg:6, ok:s=>s.co.rank<=1 },
 ];
 
 /* NPC 회사의 규모 등급. 플레이어 등급(TIERS)은 목표 달성으로 오르지만 NPC 는

@@ -142,7 +142,7 @@ const EV_CORP = [
       { label:'연봉 인상으로 방어', sub:'해당 직원 급여 +25%',
         run:()=>{ const e=pick(s.staff); if(e){e.salary=Math.round(e.salary*1.25); toast(`${e.name} 잔류`,'good');} } },
       { label:'보낸다', sub:'직원 1명 이탈 · 급여 부담 감소',
-        run:()=>{ const i=rint(0,s.staff.length-1); const e=s.staff[i]; if(e){ s.staff.splice(i,1); if(s.nego) s.nego.team=s.nego.team.filter(x=>x!==e.id); toast(`${e.name} 이직`,'bad'); } } },
+        run:()=>{ const i=rint(0,s.staff.length-1); const e=s.staff[i]; if(e){ s.staff.splice(i,1); (s.negos||[]).forEach(n=>{ n.team=n.team.filter(x=>x!==e.id); }); toast(`${e.name} 이직`,'bad'); } } },
     ] }),
 ];
 

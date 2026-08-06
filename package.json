@@ -15,6 +15,7 @@
   },
   "devDependencies": {
     "@napi-rs/canvas": "^1.0.3",
+    "acorn": "^8.18.0",
     "jsdom": "^27.0.0"
   }
 }

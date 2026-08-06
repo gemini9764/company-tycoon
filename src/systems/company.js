@@ -1,6 +1,6 @@
 import { BAL } from '../core/balance.js';
 import { CREDITS, TIERS } from '../core/data.js';
-import { debtTotal, sumStat, teamOf } from '../core/derive.js';
+import { debtTotal, grossAssets, netWorth, sumStat, teamOf } from '../core/derive.js';
 import { makeStaff } from '../core/state.js';
 import { facLv } from './economy.js';
 import { $, clamp } from '../core/util.js';
@@ -10,7 +10,7 @@ import { openModal } from '../ui/modal.js';
 import { news, pushInbox, toast } from '../ui/toast.js';
 
 function creditScore(s) {
-  const assets = Math.max(1, s.co.cap);
+  const assets = Math.max(1, grossAssets(s));   // 시총이 아니라 실물 자산으로 본다
   const ratio  = debtTotal(s) / assets;
   let v = 52 + s.co.tier * 4.5
         - ratio * 45
@@ -31,16 +31,26 @@ function loanRate(s, kind) {
        - Math.min(1.4, sumStat(s.staff, 'fin') * 0.012);
 }
 
+/**
+ * 시가총액과 순위.
+ *
+ *   보유 자금 = 현금
+ *   순자산    = 보유 자금 + 계열사 가치 − 부채   ← **순위는 이 값으로 매긴다**
+ *   시가총액  = 순자산 + 본업 가치(매장 수익 8배 자본화)
+ *
+ * 세 값이 포함 관계라 나란히 놓아도 헷갈리지 않는다. 예전에는 시총이 현금을
+ * 절반만, 부채를 60% 만 세는 별도 식이라 순자산과 관계가 설명되지 않았다.
+ *
+ * **순위를 시총이 아니라 순자산에서 뽑는다.** 본업 수익의 8배 자본화가 순위에
+ * 섞이면 "회사를 샀는데 순위가 그만큼 안 오른다"가 되어 인수의 보상이 흐려진다.
+ */
 function recalcCap(s) {
-  // 계열사 자산 + 본업 수익의 자본화(8배) + 현금 - 부채. 계열사 수익은 자산에 이미 반영돼
-  // 있으므로 중복 계산하지 않는다.
-  const subCap = s.co.subs.reduce((a, c) => a + c.cap, 0);
-  s.co.cap = Math.max(1e6,
-    subCap + dailyRetail(s) * 365 * 8 + s.co.cash * 0.5 - debtTotal(s) * 0.6);
-  // 순위: 시총 로그 위치를 볼록 곡선으로 매핑. 초반에도 순위가 조금씩 움직여
+  s.co.cap = Math.max(1e6, netWorth(s) + dailyRetail(s) * 365 * 8);
+  // 순위: 순자산의 로그 위치를 볼록 곡선으로 매핑. 초반에도 조금씩 움직여
   // 성장 실감을 주되, 상위권으로 갈수록 한 계단이 무거워진다.
+  const nw = Math.max(1e6, netWorth(s));
   const lo = Math.log10(BAL.rankFloor), hi = Math.log10(BAL.rankTop);
-  const frac = clamp((hi - Math.log10(s.co.cap)) / (hi - lo), 0, 1);
+  const frac = clamp((hi - Math.log10(nw)) / (hi - lo), 0, 1);
   s.co.rank = clamp(Math.round(1 + 4999 * Math.pow(frac, BAL.rankCurve)), 1, 5000);
 }
 
@@ -71,8 +81,8 @@ function checkTier(s) {
 const capCeiling = s => [3e8, 2e9, 2e10, 2e11, 1.5e12, 6e12, Infinity][s.co.tier];
 
 /* ── M&A ─────────────────────────────────────────────────── */
-function teamPower(s) {
-  const t = teamOf(s);
+function teamPower(s, slot) {
+  const t = teamOf(s, slot);
   if (!t.length) return 0;
   let p = sumStat(t, 'nego');
   p *= 1 + t.filter(e => e.trait.id === 'shark').length * 0.15;

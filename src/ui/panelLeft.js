@@ -1,11 +1,12 @@
 import { BAL } from '../core/balance.js';
+import { crisisOf, inCrisis } from '../systems/crisis.js';
 import { rivalOf } from '../core/rivals.js';
 import { DIFFS, SECTORS, TIERS } from '../core/data.js';
 import { S } from '../core/state.js';
 import { divisionName, divisionsOf, isHolding, tagChips } from '../core/tags.js';
 import { $, esc, pct, won } from '../core/util.js';
 import { capCeiling } from '../systems/company.js';
-import { NEGO_ACTS, negoAct, negoLeft } from '../systems/mna.js';
+import { NEGO_ACTS, negoAct, negoLeft, negoSlots, negosOf } from '../systems/mna.js';
 import { goalText } from '../systems/ending.js';
 import { managersHave, managersNeeded, pmi, synergyParts } from '../systems/economy.js';
 import { renderAll } from './index.js';
@@ -22,7 +23,7 @@ function negoActsHtml(s, n) {
   const btn = ([id, a]) => {
     const cost = a.cost(s, n);
     const off = (!a.free && left <= 0) || !!a.can(s, n);
-    return `<button class="btn ${a.free ? 'blood' : ''}" data-nact="${id}"
+    return `<button class="btn ${a.free ? 'blood' : ''}" data-nact="${id}" data-slot="${n.slot || 0}"
       ${off ? 'disabled' : ''} title="${a.d}${cost ? ` · 비용 ${won(cost)}` : ''}">
       ${a.n}${cost ? `<span class="c-dim" style="font-size:10px"> ${won(cost)}</span>` : ''}</button>`;
   };
@@ -49,6 +50,17 @@ function renderLeft() {
     <div class="meta">인수 가능 규모 상한 ${capCeiling(s) === Infinity ? '무제한' : won(capCeiling(s))}</div>
   </div>`;
 
+  /* 위기 배너 — 후반의 유일한 긴장이라 놓치면 안 된다. 남은 날과 무엇이
+     걸려 있는지를 한 줄로 낸다. */
+  if (inCrisis(s)) {
+    const c = crisisOf(s);
+    h += `<div class="row" style="border-color:var(--blood)">
+      <h4 class="c-blood">${c.name} — ${Math.max(0, c.until - s.day)}일 남음</h4>
+      <div class="meta">계열사 수익이 크게 떨어져 있습니다${c.hard ? ` · <b>${SECTORS[c.hard].name}</b>이(가) 가장 크게 맞는 중` : ''}.</div>
+      <div class="meta c-jade">매물 값도 ${Math.round((1 - BAL.crisisPriceMul) * 100)}% 싸졌습니다 — 현금이 있다면 기회입니다.</div>
+    </div>`;
+  }
+
   h += `<div class="row">
     <h4>일일 손익</h4>
     <div class="kv"><span>매출</span><b>${won(s.co.revToday)}</b></div>
@@ -59,10 +71,10 @@ function renderLeft() {
     <div class="meta c-dim">인지도·발주·시설은 <b>사옥 → 매장</b> 창에서 조작합니다.</div>
   </div>`;
 
-  if (s.nego) {
-    const n = s.nego;
+  const negos = negosOf(s), slots = negoSlots(s);
+  for (const n of negos) {
     h += `<div class="row" style="border-color:var(--sky)">
-      <h4 class="c-sky">진행 중 M&amp;A</h4>
+      <h4 class="c-sky">${slots > 1 ? `${(n.slot || 0) + 1}팀 — ` : ''}진행 중 M&amp;A</h4>
       <div style="font-size:12px;margin:3px 0">${esc(n.name)}</div>
       <div class="meta">난이도 ${DIFFS[n.diff].name} · 협상단 ${n.team.length}명 · 예상 웃돈 +${Math.round(n.prem * 100)}%${n.direct ? ' · 직접 협상' : ' · 위임'}</div>
       ${n.rivalDue ? `<div class="meta c-blood" style="font-size:11px" title="${rivalOf(n.id).who}">${rivalOf(n.id).n}도 접근 중 — <b>${Math.max(0, n.rivalDue - s.day)}일</b> 안에 마쳐야 합니다</div>` : ''}
@@ -73,9 +85,10 @@ function renderLeft() {
       <div class="meta">진행도 100% 도달 시 성공도 확률로 인수 여부가 결정됩니다.</div>
       ${negoActsHtml(s, n)}
     </div>`;
-  } else {
-    h += `<div class="row"><h4>진행 중 M&amp;A</h4>
-      <div class="empty">없음<br>도시 맵에서 회사를 클릭해<br>협상단을 파견하세요</div></div>`;
+  }
+  if (negos.length < slots) {
+    h += `<div class="row"><h4>${slots > 1 ? `대기 중 협상단 ${slots - negos.length}팀` : '진행 중 M&amp;A'}</h4>
+      <div class="empty">${negos.length ? '남은 협상단이 있습니다' : '없음'}<br>도시 맵에서 회사를 클릭해<br>협상단을 파견하세요</div></div>`;
   }
 
   h += `<div class="row">
@@ -129,19 +142,22 @@ function renderLeft() {
   $('panel-body').querySelectorAll('[data-nact]').forEach(el => {
     el.onclick = () => {
       const id = el.dataset.nact;
+      // 어느 협상에 거는지 버튼이 들고 있다 (2팀이면 블록이 둘이다)
+      const n = negosOf(S).find(x => (x.slot || 0) === Number(el.dataset.slot));
+      if (!n) return;
       // 중단만 되돌릴 수 없다. 위약금을 보여주고 한 번 묻는다
       if (id === 'quit') {
-        const fee = NEGO_ACTS.quit.cost(S, S.nego);
+        const fee = NEGO_ACTS.quit.cost(S, n);
         return openModal({
           title: '협상 중단',
-          body: `<p><b>${esc(S.nego.name)}</b> 인수 협상을 중단합니다. 협상단이 즉시 복귀해 다른 매물에 파견할 수 있습니다.</p>
+          body: `<p><b>${esc(n.name)}</b> 인수 협상을 중단합니다. 협상단이 즉시 복귀해 다른 매물에 파견할 수 있습니다.</p>
                  <div class="kv" style="margin-top:10px"><span>위약금</span><b class="c-blood">${won(fee)}</b></div>`,
           choices: [{ label: `중단하고 위약금을 낸다 — ${won(fee)}`,
-                      run: () => { negoAct(S, 'quit'); renderAll(); } },
+                      run: () => { negoAct(S, 'quit', n); renderAll(); } },
                     { label: '계속 진행한다' }],
         });
       }
-      if (negoAct(S, id)) renderAll();
+      if (negoAct(S, id, n)) renderAll();
     };
   });
 

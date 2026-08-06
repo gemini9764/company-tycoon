@@ -15,6 +15,30 @@
  * 전략을 나눠 여러 번 돌리고 결과를 합친다. --noref 는 등급 구간 측정을 건너뛴다.
  */
 import { boot, startGame } from './harness.mjs';
+import { statSync, readdirSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+/* ── 낡은 번들 경고 ────────────────────────────────────────────
+   sim 은 dist/ 번들을 잰다. `npm run sim` 은 build 부터 하지만 `node tools/sim.mjs`
+   는 안 한다 — 소스를 고치고 직접 돌리면 **이전 빌드를 재게 된다.**
+   숫자가 그럴듯하게 나와서 알아채기 어렵다. 실제로 이 함정 때문에 "밸런스
+   무영향" 비교 두 건이 같은 번들을 두 번 잰 것이었던 적이 있다 (§10-7).
+   ───────────────────────────────────────────────────────────── */
+{
+  const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const newest = dir => readdirSync(join(root, dir), { withFileTypes: true })
+    .flatMap(e => e.isDirectory() ? [newest(join(dir, e.name))]
+                : e.name.endsWith('.js') ? [statSync(join(root, dir, e.name)).mtimeMs] : [])
+    .reduce((a, b) => Math.max(a, b), 0);
+  try {
+    const built = statSync(join(root, 'dist/company-tycoon.html')).mtimeMs;
+    if (newest('src') > built) {
+      console.warn('\n⚠  dist/ 가 src/ 보다 오래됐습니다 — 지금 재는 것은 이전 빌드입니다.');
+      console.warn('   `npm run build` 를 먼저 돌리거나 `npm run sim -- ...` 으로 실행하세요.\n');
+    }
+  } catch { /* 아직 빌드 전이면 harness 가 알려 준다 */ }
+}
 
 const arg = (k, d) => {
   const m = process.argv.find(a => a.startsWith(`--${k}=`));
@@ -45,7 +69,9 @@ window.runSim = function (strategy, maxDays, seed) {
   const g = window.game, d0 = document;
   const S = g.setS(g.newState('시뮬', seed));
   S.speed = 0;
-  S.staff.forEach(e => e.onTeam = true);
+  /* 협상단 편성. 슬롯당 3명이 상한이고 2팀은 중견기업부터 열린다.
+     처음 직원은 전원 1팀에 넣는다 — 2팀이 열리면 아래 채용 루프가 채운다. */
+  S.staff.forEach(e => { e.onTeam = true; e.slot = 0; });
   /* 재고를 방치하면 매출이 stockFloor 까지 떨어진다. 봇은 '관리는 하는' 플레이를
      대표해야 하므로 자동 발주를 켠다 — 단가 할증까지 포함한 보수적인 기준선이다. */
   S.co.autoOrder = true;
@@ -58,7 +84,7 @@ window.runSim = function (strategy, maxDays, seed) {
       let pick = cs[0];
       /* 협상 테이블 — 선택지 라벨을 파싱하지 않고 상태(tableView)로 최선 수를 센다.
          판정은 systems/negoTable.js 의 순수 함수이고 UI 와 같은 것을 부른다. */
-      const tv = S.nego && S.nego.tableView;
+      const tv = g.negosOf(S).map(n => n.tableView).find(Boolean);
       if (tv) {
         const team = S.staff.filter(e => tv.team.includes(e.id));
         let best = 0, bestV = -Infinity;
@@ -130,7 +156,7 @@ window.runSim = function (strategy, maxDays, seed) {
        후반엔 팔 이유가 없다) 헐값 처분만 반복한다. 매각을 자금원으로 쓰는
        판단은 하나뿐이다 — 지금 살 수 있는 것보다 확실히 큰 매물이 팔면
        손에 들어오는가. 사업부가 깨지는 매각(그 업종이 정확히 3개)은 제외한다. */
-    if (!S.nego && subs.length > 5) {
+    if (!g.negosOf(S).length && subs.length > 5) {
       const ceil = g.capCeiling(S), by = g.sectorCount(S);
       const reach = cash => {
         const t = S.market.filter(x => !x.owned && !sold.has(x.id) && x.cap <= ceil
@@ -146,15 +172,25 @@ window.runSim = function (strategy, maxDays, seed) {
   }
 
   const marks = {};
-  let prevNego = null, nextId = null;
+  let prevNego = [], nextId = null;
+  const __tiers = []; let __lastTier = -1;
+  const crises = []; let __prevUntil = 0;
   /* 성공은 더 이상 엔딩이 아니다(무한 진행). 계측은 '시총 1위 도달'에서 끊는다. */
   const done = () => S.flags.ending || S.flags.ms.includes('rank1');
   for (let day = 1; day <= maxDays && !done(); day++) {
+    if (S.co.tier !== __lastTier) {
+      __lastTier = S.co.tier;
+      __tiers.push({ day, name: g.TIERS[S.co.tier].name, subs: S.co.subs.length,
+                     nw: Math.round(g.netWorth(S)/1e8), cash: Math.round(S.co.cash/1e8), rank: S.co.rank,
+                     divs: g.divisionsOf(S).length, hard: S.co.hardAcq || 0 });
+    }
     g.tickDay();
     resolve();
     /* 협상 결과 집계 — startNego 보다 **먼저** 봐야 한다. 같은 날 다음 협상이
-       시작되면 S.nego 가 다시 차서 방금 끝난 건이 집계에서 사라진다. */
-    if (prevNego && !S.nego) (S.co.subs.some(c => c.id === prevNego) ? acts.buy++ : acts.fail++);
+       시작되면 목록이 다시 차서 방금 끝난 건이 집계에서 사라진다.
+       2팀이 되면 여러 건이 동시에 끝날 수 있으므로 id 집합으로 센다. */
+    { const now = new Set(g.negosOf(S).map(n => n.id));
+      prevNego.forEach(id => { if (!now.has(id)) (S.co.subs.some(c => c.id === id) ? acts.buy++ : acts.fail++); }); }
 
     // 인수 판단 — 전략별로 감당할 자금 배수가 다르다
     /* 매장 근무 — 협상단 3명을 뺀 나머지의 절반을 매장에 세운다. 나머지 절반은
@@ -183,7 +219,7 @@ window.runSim = function (strategy, maxDays, seed) {
     if (window.__stake) {
       /* 지금 협상 중인 회사는 제외한다. 인수되면 지분이 흡수되므로 헛돈이다 */
       const ok = x => x && !x.owned && !avoid.has(x.id)
-        && x.id !== (S.nego && S.nego.id) && x.cap <= g.capCeiling(S);
+        && !g.negoFor(S, x.id) && x.cap <= g.capCeiling(S);
       let t = S.market.find(x => x.id === nextId);
       if (!ok(t)) {
         /* 다음 대상은 **지금 협상에 쓸 돈을 뺀 나머지**로 감당되는 것이어야 한다.
@@ -192,7 +228,7 @@ window.runSim = function (strategy, maxDays, seed) {
 
            비상장 매물도 대상이다 — 장외 지분 매입 경로가 열려 있다.
            (그 전에는 상장사만 대상이라 중소기업 구간에서 평균 ★0.7 이었다.) */
-        const cur = S.nego ? (S.market.find(x => x.id === S.nego.id)?.cap || 0) * 1.4 : 0;
+        const cur = g.negosOf(S).reduce((a, n) => a + (S.market.find(x => x.id === n.id)?.cap || 0) * 1.4, 0);
         const left = Math.max(0, S.co.cash - cur);
         t = S.market.filter(x => ok(x) && x.cap * 1.55 <= left * 0.62)
           .sort((a, b) => b.cap - a.cap)[0];
@@ -211,11 +247,11 @@ window.runSim = function (strategy, maxDays, seed) {
        **봇은 숨은 태그를 미리 보지 않는다.** hasHidden 으로 실사 여부를
        정하면 정보를 공짜로 얻는 셈이라 실사의 대가가 계측에서 사라진다.
        자금이 넉넉하면 무조건 한 번 실사하고, 드러난 것만 판단에 쓴다. */
-    if (window.__acts && S.nego) {
-      const n = S.nego, t = S.market.find(c => c.id === n.id);
+    for (const n of (window.__acts ? g.negosOf(S).slice() : [])) {
+      const t = S.market.find(c => c.id === n.id);
       const did = k => (n.done || []).includes(k);
       const rich = m => S.co.cash > g.NEGO_ACTS[m].cost(S, n) * 8;
-      const use = k => { const c = g.NEGO_ACTS[k].cost(S, n); if (g.negoAct(S, k)) { acts.use[k] = (acts.use[k] || 0) + 1; acts.spend += c; } };
+      const use = k => { const c = g.NEGO_ACTS[k].cost(S, n); if (g.negoAct(S, k, n)) { acts.use[k] = (acts.use[k] || 0) + 1; acts.spend += c; } };
       /* 숨은 특성은 이제 밑작업 ★★ 로만 드러난다 (개입 '실사' 폐지).
          --acts 단독이면 seen 이 비어 있고, --stake 와 같이 켤 때만 채워진다. */
       const bad = (t?.seen || []).includes('debt');
@@ -233,7 +269,7 @@ window.runSim = function (strategy, maxDays, seed) {
       else if (n.success >= 88 && n.progress < 65) use('push');
     }
 
-    if (!S.nego && !done()) {
+    if (g.freeSlot(S) >= 0 && !done()) {
       /* 예산 배수 = 이 봇의 '공격성'. 800일 계측 결과 1.5 는 대출을 0~1회밖에
          쓰지 않는다(총 차입 1,639만) — 그래서 leveraged 가 아니라 aggressive 다.
          실제로 빌리는 것은 3 뿐이다 (인수금융 4~12회 · 연체 2~4회 · 파산 1/3). */
@@ -256,7 +292,10 @@ window.runSim = function (strategy, maxDays, seed) {
         S.recruits = [g.makeStaff(lv), g.makeStaff(lv), g.makeStaff(lv)];
       }
       const e = S.recruits.shift();
-      e.onTeam = g.teamOf(S).length < 3;
+      /* 빈 자리가 있는 팀에 넣는다. 2팀이 열려도 관리 인력을 다 빼앗지 않도록
+         팀당 3명 상한은 그대로다. */
+      const room = Array.from({ length: g.negoSlots(S) }, (_, i) => i).find(i => g.teamOf(S, i).length < 3);
+      e.onTeam = room !== undefined; e.slot = room ?? 0;
       S.co.cash -= e.salary * 3;
       S.staff.push(e);
     }
@@ -279,7 +318,7 @@ window.runSim = function (strategy, maxDays, seed) {
     // 무속 루트는 협상마다 축원굿을 올린다
     if (strategy === 'occult' && S.shaman.unlocked) {
       if (!S.shaman.hired) S.shaman.hired = S.shaman.pool[S.shaman.pool.length - 1];
-      if (S.nego && day % 9 === 0 && S.co.cash > g.shamanFee(S, S.shaman.hired) * 3) {
+      if (g.negosOf(S).length && day % 9 === 0 && S.co.cash > g.shamanFee(S, S.shaman.hired) * 3) {
         g.doGut(S, 'bless');
       }
     }
@@ -307,20 +346,36 @@ window.runSim = function (strategy, maxDays, seed) {
     // 압류 — 담보 계열사가 줄면 뺏긴 것 (매각 봇은 sold 로 따로 센다)
     if (prevSubs2 > S.co.subs.length && window.__activeSold !== true) debt.seized += 0;
     prevSubs2 = S.co.subs.length;
-    prevNego = S.nego ? S.nego.id : null;
+    if (S.crisis && S.crisis.until > __prevUntil) {
+      __prevUntil = S.crisis.until;
+      crises.push({ day, name: S.crisis.name, hard: S.crisis.hard, cash: Math.round(S.co.cash / 1e8) });
+    }
+    prevNego = g.negosOf(S).map(n => n.id);
     if (marks['t' + S.co.tier] === undefined) marks['t' + S.co.tier] = day;
   }
   return {
     seed: S.seed, days: S.day, tier: g.TIERS[S.co.tier].name, ending: S.flags.ending || '미종료',
     subs: S.co.subs.length, total: S.market.length, cap: g.won(S.co.cap), rank: S.co.rank,
     syn: S.co.synergy.toFixed(2), mistrust: Math.round(S.co.mistrust),
-    probe: Math.round(S.co.probe), marks, ops, acts, debt,
+    probe: Math.round(S.co.probe), marks, ops, acts, debt, tiers: __tiers, crises,
     tied: Object.keys(S.stock.holds).reduce((a, id) => { const c = S.market.find(x => x.id === id); return a + (c ? S.stock.holds[id].qty * c.price : 0); }, 0),
   };
 };
 `);
 
-const run = (s, seed, days = MAX_DAYS) => win.runSim(s, days, seed);
+const run = (s, seed, days = MAX_DAYS) => {
+  const r = win.runSim(s, days, seed);
+  if (process.argv.includes('--tiers')) {
+    console.log(`\n[등급 전환 · ${s}·${seed}]`);
+    console.log('  일차   등급        계열사  순자산    현금     순위  사업부  상급인수');
+    r.tiers.forEach(x => console.log(
+      '  ' + String(x.day).padStart(4) + '  ' + x.name.padEnd(9) +
+      String(x.subs).padStart(4) + String(x.nw).padStart(9) + '억' +
+      String(x.cash).padStart(8) + '억' + String(x.rank).padStart(7) +
+      String(x.divs).padStart(6) + String(x.hard).padStart(8)));
+  }
+  return r;
+};
 
 // ── 등급 구간 ────────────────────────────────────────────────
 if (!NOREF) {
@@ -357,6 +412,8 @@ for (const s of STRATS) {
 for (const [s, sd] of plan) {
   const r = run(s, sd);
   if (r.ops && (r.ops.inv + r.ops.res + r.ops.sell)) console.log(`   \u2514 \uB2A5\uB3D9 \uC6B4\uC601: \uD22C\uC790 ${r.ops.inv} \u00B7 \uC7AC\uD3B8 ${r.ops.res} \u00B7 \uB9E4\uAC01 ${r.ops.sell} (${win.game.won(r.ops.sellSum)})`);
+  if (r.crises && r.crises.length) console.log('   \u2514 \uC704\uAE30: ' +
+    r.crises.map(c => `${c.name} ${c.day}\uC77C\uCC28(\uD604\uAE08 ${c.cash}\uC5B5)`).join(' \u00B7 '));
   console.log(`   \u2514 \uD611\uC0C1: \uC131\uC0AC ${r.acts.buy} \u00B7 \uACB0\uB82C/\uC911\uB2E8 ${r.acts.fail} (\uACB0\uB82C\uB960 ${Math.round(r.acts.fail / Math.max(1, r.acts.buy + r.acts.fail) * 100)}%)` +
     (r.acts.spend ? ` \u00B7 \uAC1C\uC785 ${JSON.stringify(r.acts.use)} \uC9C0\uCD9C ${win.game.won(r.acts.spend)}` : '') +
     (r.acts.starN ? ` \u00B7 \uD3C9\uADE0 \u2605${(r.acts.starSum / r.acts.starN).toFixed(1)} \u00B7 \uBB36\uC778 \uB3C8 ${win.game.won(r.tied)}` : ''));
