@@ -132,9 +132,9 @@ function tickStaff(s) {
 
    정원을 둔 이유는 "돈이 남으면 계속 뽑는다" 를 막기 위해서다. 자리가 차면
    **누구를 내보낼지** 고르게 되고, 그때 비로소 능력치 비교가 판단이 된다.
-   상한 13 은 사무실 책상 수다 — 앉을 자리보다 많이 뽑을 수는 없다.
+   상한 12 는 사무실 책상 수다 — 앉을 자리보다 많이 뽑을 수는 없다.
    ══════════════════════════════════════════════════════════════ */
-const staffCap = s => clamp(4 + s.co.tier + facLv(s, 'office') * 2, 4, 13);
+const staffCap = s => clamp(4 + s.co.tier + facLv(s, 'office') * 2, 4, 12);
 
 /** 모집 비용. 자사 시총 비례 — 고정값이면 후반에 금세 공짜가 된다 */
 const hireCost = (s, w) => Math.round(Math.max(3e5, s.co.cap * w.cost));

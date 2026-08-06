@@ -104,19 +104,20 @@ const QUEUE = { gx: 6, gy: 3 };         // 손님이 계산 줄 서는 자리
 /* gx 12 의 gy 0~2 는 **사장실 칸막이가 서는 자리**다. 예전 배치는 {12,1} 이
    그 벽과 겹쳐 책상이 벽에 박혀 있었다. 앞줄은 gx 10~11 만 쓴다.
    가운데 열(gy 4)을 통로로 비워 두 덩이로 나눈 것이 사무실처럼 읽히게 한다. */
-/* 가운데(gx 11)를 통로로 비우고 양옆(gx 10 · 12)에 둘씩 마주 놓는다.
-   사장실이 gx 12 의 gy 0~4 를 쓰므로 그 위쪽은 gx 10 만 쓴다. */
+/* 사장실 옆에 붙어 있던 자리를 없애고 **전부 가운데로** 모았다. 통로는 gx 12,
+   양옆 gx 11 · 13 에 마주 놓는다. 벽에 붙어 혼자 앉는 자리가 사라져
+   사무실이 한 덩이로 읽힌다. */
 const DESKS = [
-  { gx: 10, gy: 1 }, { gx: 10, gy: 2 },
-  { gx: 10, gy: 6 }, { gx: 12, gy: 6 },
-  { gx: 10, gy: 7 }, { gx: 12, gy: 7 },
-  { gx: 10, gy: 9 }, { gx: 12, gy: 9 },
-  { gx: 10, gy: 10 }, { gx: 12, gy: 10 },
+  { gx: 11, gy: 4 }, { gx: 13, gy: 4 },
+  { gx: 11, gy: 5 }, { gx: 13, gy: 5 },
+  { gx: 11, gy: 7 }, { gx: 13, gy: 7 },
+  { gx: 11, gy: 8 }, { gx: 13, gy: 8 },
+  { gx: 11, gy: 10 }, { gx: 13, gy: 10 },
   { gx: 14, gy: 4 }, { gx: 15, gy: 4 },
   { gx: 14, gy: 7 }, { gx: 15, gy: 7 },
 ];
 
-const BOSS = { desk: { gx: 14, gy: 2 }, seat: { gx: 14, gy: 1 } };   // 사장실 고정
+const BOSS = { desk: { gx: 14, gy: 1 }, seat: { gx: 14, gy: 0 } };   // 사장실 고정
 
 const FLOOR_SHOP = '#C9BC9B', FLOOR_SHOP2 = '#B9A981';
 const FLOOR_OFF = '#5A6180', FLOOR_OFF2 = '#525A78';
@@ -659,8 +660,8 @@ function addShopStaff(items) {
    손님은 gx < SPLIT_GX 밖으로 나오지 않으므로 통행 판정에 걸릴 일이 없다.
    ══════════════════════════════════════════════════════════════ */
 const ROOMS = [
-  { need: 1, n: '탕비실', gx: 14, gy: 11, w: 2, h: 3, floor: '#7A6E56', wall: '#5A5240' },
-  { need: 2, n: '회의실', gx: 10, gy: 11, w: 3, h: 4, floor: '#6E6480', wall: '#4E4660' },
+  { need: 1, n: '탕비실', gx: 14, gy: 12, w: 2, h: 3, floor: '#7A6E56', wall: '#5A5240' },
+  { need: 2, n: '회의실', gx: 10, gy: 12, w: 3, h: 3, floor: '#6E6455', wall: '#4E4638' },
 ];
 
 function addRooms(items) {
@@ -675,11 +676,11 @@ function addRooms(items) {
     for (let dx = 0; dx < r.w; dx++) {                       // 북쪽 벽 (첫 칸이 출입구)
       if (dx === 0) continue;
       const { x, y } = P(r.gx + dx, r.gy - 1);
-      items.push({ y, f: () => prism(X, x, y, HW, HH, 26, shade(r.wall, 0.16), shade(r.wall, -0.24), r.wall) });
+      items.push({ y, f: () => prism(X, x, y, HW, HH, 34, shade(r.wall, 0.16), shade(r.wall, -0.24), r.wall) });
     }
     for (let dy = 0; dy < r.h; dy++) {                       // 서쪽 벽
       const { x, y } = P(r.gx - 1, r.gy + dy);
-      items.push({ y, f: () => prism(X, x, y, HW, HH, 26, shade(r.wall, 0.16), shade(r.wall, -0.24), r.wall) });
+      items.push({ y, f: () => prism(X, x, y, HW, HH, 34, shade(r.wall, 0.16), shade(r.wall, -0.24), r.wall) });
     }
     if (r.n === '탕비실') addPantry(items, r); else addMeeting(items, r);
     const lab = P(r.gx, r.gy - 1);
@@ -823,10 +824,12 @@ function drawPartition(items) {
     put(SPLIT_GX, gy, 39, '#4A3E2A', '#2C2418', '#3A3020');
   }
   put(SPLIT_GX, 4, 8, '#4A3E2A', '#2C2418', '#3A3020');
-  /* 사장실은 회사의 얼굴이라 넉넉해야 한다. gx 12~, gy 0~4 로 넓혔다 */
-  for (let gy = 0; gy <= 4; gy++) put(12, gy, 30, '#5A4A38', '#3A2E20', '#4A3C2C');   // 사장실 세로 벽
-  for (let gx = 13; gx < ROOM_W; gx++)                   // 사장실 가로 벽 (문 한 칸)
-    put(gx, 5, gx === 13 ? 6 : 30, '#5A4A38', '#3A2E20', '#4A3C2C');
+  /* 사장실은 **가로로** 넓다 — gx 12~끝, gy 0~2. 세로로 늘리면 사무실의 앞줄을
+     통째로 먹어 직원이 뒤로 밀리고, 그러면 사장실만 크고 사무실은 좁아 보인다.
+     옆으로 넓히면 앞줄 전체가 사장실이 되어 배치가 정리된다. */
+  for (let gy = 0; gy <= 2; gy++) put(11, gy, 30, '#5A4A38', '#3A2E20', '#4A3C2C');   // 사장실 세로 벽
+  for (let gx = 12; gx < ROOM_W; gx++)                   // 사장실 가로 벽 (문 한 칸)
+    put(gx, 3, gx === 12 ? 6 : 30, '#5A4A38', '#3A2E20', '#4A3C2C');
 }
 
 /* ── 매장 집기 ───────────────────────────────────────────── */
