@@ -104,17 +104,19 @@ const QUEUE = { gx: 6, gy: 3 };         // 손님이 계산 줄 서는 자리
 /* gx 12 의 gy 0~2 는 **사장실 칸막이가 서는 자리**다. 예전 배치는 {12,1} 이
    그 벽과 겹쳐 책상이 벽에 박혀 있었다. 앞줄은 gx 10~11 만 쓴다.
    가운데 열(gy 4)을 통로로 비워 두 덩이로 나눈 것이 사무실처럼 읽히게 한다. */
+/* 가운데(gx 11)를 통로로 비우고 양옆(gx 10 · 12)에 둘씩 마주 놓는다.
+   사장실이 gx 12 의 gy 0~4 를 쓰므로 그 위쪽은 gx 10 만 쓴다. */
 const DESKS = [
-  { gx: 10, gy: 1 }, { gx: 11, gy: 1 },
-  { gx: 10, gy: 2 }, { gx: 11, gy: 2 },
-  { gx: 10, gy: 5 }, { gx: 11, gy: 5 }, { gx: 12, gy: 5 },
-  { gx: 10, gy: 6 }, { gx: 11, gy: 6 }, { gx: 12, gy: 6 },
-  { gx: 10, gy: 8 }, { gx: 11, gy: 8 }, { gx: 12, gy: 8 },
+  { gx: 10, gy: 1 }, { gx: 10, gy: 2 },
+  { gx: 10, gy: 6 }, { gx: 12, gy: 6 },
+  { gx: 10, gy: 7 }, { gx: 12, gy: 7 },
+  { gx: 10, gy: 9 }, { gx: 12, gy: 9 },
+  { gx: 10, gy: 10 }, { gx: 12, gy: 10 },
   { gx: 14, gy: 4 }, { gx: 15, gy: 4 },
   { gx: 14, gy: 7 }, { gx: 15, gy: 7 },
 ];
 
-const BOSS = { desk: { gx: 14, gy: 1 }, seat: { gx: 14, gy: 0 } };   // 사장실 고정
+const BOSS = { desk: { gx: 14, gy: 2 }, seat: { gx: 14, gy: 1 } };   // 사장실 고정
 
 const FLOOR_SHOP = '#C9BC9B', FLOOR_SHOP2 = '#B9A981';
 const FLOOR_OFF = '#5A6180', FLOOR_OFF2 = '#525A78';
@@ -138,9 +140,15 @@ function storeFloor() {
   const layer = makeLayer(storeW(), storeH());
   const g = layer.ctx;
   if (g) {
-    for (let gy = 0; gy < roomH(); gy++) for (let gx = 0; gx < ROOM_W; gx++) {
+    /* 벽이 얇아지면서 예전 벽이 덮고 있던 자리(gy -1, gx -1)가 맨바닥으로
+       드러났다. 그 줄까지 바닥을 깔아 빈 곳을 없앤다 — 벽 두께를 줄인 만큼
+       방이 그쪽으로 넓어진 셈이므로 바닥이 있는 게 맞다. */
+    for (let gy = -1; gy < roomH(); gy++) for (let gx = -1; gx < ROOM_W; gx++) {
       const { x, y } = P(gx, gy);
       if (gx === SPLIT_GX) { rhomb(g, x, y, HW, HH, '#4A4436'); continue; }
+      if (gx < 0 || gy < 0) {                       // 벽 밑동 — 어둡게 깔아 그림자로 읽히게
+        rhomb(g, x, y, HW, HH, gx < SPLIT_GX ? '#8A7E64' : '#3E4356'); continue;
+      }
       const alt = (gx + gy) % 2 === 0;
       if (gx < SPLIT_GX) { const f = shopFloorPal(); rhomb(g, x, y, HW, HH, alt ? f[0] : f[1]); }
       else if (inBossRoom(gx, gy)) { rhomb(g, x, y, HW, HH, FLOOR_BOSS); rhombEdge(g, x, y, HW, HH, '#5C4A38'); }
@@ -333,7 +341,11 @@ function stepCustomers(items) {
     const px = p.x, py = p.y, look = p.look, dir = p.dir, ph2 = p.phase;
     const ph = p.wait > 0 ? 1 : Math.floor(p.walk / 8);
     const i = customers.indexOf(p);
-    items.push({ y: py, f: () => {
+    /* 문 밖(gx < 0)에 선 손님은 **정렬 동률에서 지게** 한다. 벽 타일과 y 가 같아지는
+       자리가 있는데, 벽이 먼저 push 되므로 동률이면 사람이 나중에 그려져
+       얇아진 벽을 뚫고 보였다. 살짝 앞당겨 항상 벽 뒤로 보낸다. */
+    const out = tileOf(px, py).gx < 0;
+    items.push({ y: py - (out ? 0.6 : 0), f: () => {
       drawPerson(px, py, look, dir, ph);
       /* 멈춰 선 손님만 말한다 — 걸어가면서 띄우면 풍선이 화면을 가로지른다.
          진열대 앞과 계산대 앞의 대사가 달라야 "뭘 하는 중"인지가 읽힌다. */
@@ -538,8 +550,9 @@ function drawWalls(items) {
   }
   const d = P(-1, DOOR.gy);                              // 유리 자동문
   items.push({ y: d.y, f: () => {
-    prism(X, d.x, d.y, HW, HH, 51, '#9AB8D0', '#5C4E3C', '#8AB4D8');
-    faces(X, d.x, d.y, HW, HH, 0, 5, '#443A2C', '#3A3025');
+    /* 문도 벽과 같은 두께여야 한다 — 벽만 얇아지면 문만 툭 튀어나온다 */
+    slab(X, d.x, d.y, 51, WALL_T, -1, '#9AB8D0', '#8AB4D8', '#5C4E3C');
+    slabBand(X, d.x, d.y, WALL_T, -1, 0, 5, '#443A2C');
     glassPanel(d.x, d.y, HW, HH, 'r', 4, 6, 8, 32, '#A8C8DC');     // 두 짝으로 나뉜 유리
     glassPanel(d.x, d.y, HW, HH, 'r', 14, 6, 8, 32, '#A8C8DC');
     faces(X, d.x, d.y, HW, HH, 42, 45, '#6B5B47', '#8A7659');      // 상부 문틀
@@ -571,18 +584,22 @@ function drawWallFittings() {
 /** 천장 조명. 매대 위에 매달린 펜던트 — 위쪽이라 무엇도 가리지 않는다 */
 function drawLights() {
   const n = gradeOf(S).light;
-  const spots = [{ gx: 2, gy: 4 }, { gx: 5, gy: 4 }, { gx: 2, gy: 7 }];
+  /* 방이 깊어지면 조명도 따라 내려간다 — 남쪽 매대만 어두우면 증설한 자리가
+     창고처럼 보인다. 방 밖으로 나가는 자리는 걸러낸다. */
+  const spots = [{ gx: 2, gy: 4 }, { gx: 5, gy: 4 }, { gx: 2, gy: 7 }, { gx: 5, gy: 8 },
+                 { gx: 2, gy: 10 }, { gx: 5, gy: 11 }, { gx: 2, gy: 13 }]
+    .filter(o => o.gy < roomH()).slice(0, 2 + gradeOf(S).light * 2);
   /* 바닥에 깔리는 광원. **이게 없으면 조명이 안 보인다** — 펜던트만 그렸을 때는
      벽과 집기에 묻혀 켜졌는지도 알 수 없었다. 빛이 닿은 자리가 밝아져야
      "조명이 늘었다" 가 읽힌다. */
-  for (const o of spots.slice(0, n)) {
+  for (const o of spots) {
     const { x, y } = P(o.gx, o.gy);
     X.save(); X.globalAlpha = 0.16; 
     rhomb(X, x, y + 4, HW * 2.1, HH * 2.1, '#FFE9A8');
     X.globalAlpha = 0.10; rhomb(X, x, y + 4, HW * 3.2, HH * 3.2, '#FFE9A8');
     X.restore();
   }
-  for (const o of spots.slice(0, n)) {
+  for (const o of spots) {
     const { x, y } = P(o.gx, o.gy);
     const cx = Math.round(x), top = Math.round(y) - 74;
     X.fillStyle = '#3E3830'; X.fillRect(cx, top, 2, 14);              // 줄
@@ -642,8 +659,8 @@ function addShopStaff(items) {
    손님은 gx < SPLIT_GX 밖으로 나오지 않으므로 통행 판정에 걸릴 일이 없다.
    ══════════════════════════════════════════════════════════════ */
 const ROOMS = [
-  { need: 1, n: '탕비실', gx: 14, gy: 9, w: 2, h: 3, floor: '#6B6250', wall: '#5A5240' },
-  { need: 2, n: '회의실', gx: 10, gy: 10, w: 3, h: 4, floor: '#4E5673', wall: '#464E68' },
+  { need: 1, n: '탕비실', gx: 14, gy: 11, w: 2, h: 3, floor: '#7A6E56', wall: '#5A5240' },
+  { need: 2, n: '회의실', gx: 10, gy: 11, w: 3, h: 4, floor: '#6E6480', wall: '#4E4660' },
 ];
 
 function addRooms(items) {
@@ -806,9 +823,10 @@ function drawPartition(items) {
     put(SPLIT_GX, gy, 39, '#4A3E2A', '#2C2418', '#3A3020');
   }
   put(SPLIT_GX, 4, 8, '#4A3E2A', '#2C2418', '#3A3020');
-  for (let gy = 0; gy <= 2; gy++) put(12, gy, 30, '#5A4A38', '#3A2E20', '#4A3C2C');   // 사장실 세로 벽
+  /* 사장실은 회사의 얼굴이라 넉넉해야 한다. gx 12~, gy 0~4 로 넓혔다 */
+  for (let gy = 0; gy <= 4; gy++) put(12, gy, 30, '#5A4A38', '#3A2E20', '#4A3C2C');   // 사장실 세로 벽
   for (let gx = 13; gx < ROOM_W; gx++)                   // 사장실 가로 벽 (문 한 칸)
-    put(gx, 3, gx === 13 ? 6 : 30, '#5A4A38', '#3A2E20', '#4A3C2C');
+    put(gx, 5, gx === 13 ? 6 : 30, '#5A4A38', '#3A2E20', '#4A3C2C');
 }
 
 /* ── 매장 집기 ───────────────────────────────────────────── */
