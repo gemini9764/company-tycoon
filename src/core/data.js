@@ -92,14 +92,14 @@ const SECTOR_KEYS = Object.keys(SECTORS);
    늘리면 대기업과 글로벌그룹이 눈으로 구분되지 않는다.
    ══════════════════════════════════════════════════════════════ */
 const STORE_GRADE = [
-  //                깊이 진열대 계산대 냉장 조명 장식 창 러그 바닥 손님 벽
-  { depth: 0, shelf: 1, counter: 0, cold: 1, light: 0, deco: 0, win: 0, rug: 0, floor: 0, crowd:  4 },  // 구멍가게
-  { depth: 1, shelf: 2, counter: 1, cold: 2, light: 1, deco: 1, win: 0, rug: 0, floor: 0, crowd:  6 },  // 동네슈퍼
-  { depth: 3, shelf: 3, counter: 1, cold: 3, light: 1, deco: 1, win: 1, rug: 0, floor: 1, crowd:  9 },  // 스타트업
-  { depth: 3, shelf: 3, counter: 2, cold: 4, light: 2, deco: 2, win: 2, rug: 0, floor: 1, crowd: 12 },  // 중소기업
-  { depth: 4, shelf: 4, counter: 2, cold: 5, light: 2, deco: 2, win: 3, rug: 1, floor: 2, crowd: 15 },  // 중견기업
-  { depth: 6, shelf: 5, counter: 3, cold: 5, light: 3, deco: 3, win: 4, rug: 1, floor: 2, crowd: 18 },  // 대기업
-  { depth: 8, shelf: 5, counter: 3, cold: 5, light: 3, deco: 3, win: 4, rug: 1, floor: 3, crowd: 22 },  // 글로벌그룹
+  //                깊이 진열대 계산대 냉장 조명 장식 창 러그 바닥 손님 부속실 벽
+  { depth: 0, shelf: 1, counter: 0, cold: 1, light: 0, deco: 0, win: 0, rug: 0, floor: 0, crowd:  4, rooms: 0 },  // 구멍가게
+  { depth: 1, shelf: 2, counter: 1, cold: 2, light: 1, deco: 1, win: 0, rug: 0, floor: 0, crowd:  6, rooms: 0 },  // 동네슈퍼
+  { depth: 3, shelf: 3, counter: 1, cold: 3, light: 1, deco: 1, win: 1, rug: 0, floor: 1, crowd:  9, rooms: 0 },  // 스타트업
+  { depth: 3, shelf: 3, counter: 2, cold: 4, light: 2, deco: 2, win: 2, rug: 0, floor: 1, crowd: 12, rooms: 0 },  // 중소기업
+  { depth: 4, shelf: 4, counter: 2, cold: 5, light: 2, deco: 2, win: 3, rug: 1, floor: 2, crowd: 15, rooms: 1 },  // 중견기업
+  { depth: 6, shelf: 5, counter: 3, cold: 5, light: 3, deco: 3, win: 4, rug: 1, floor: 2, crowd: 18, rooms: 1 },  // 대기업
+  { depth: 8, shelf: 5, counter: 3, cold: 5, light: 3, deco: 3, win: 4, rug: 1, floor: 3, crowd: 22, rooms: 2 },  // 글로벌그룹
 ];
 
 const gradeOf = s => STORE_GRADE[Math.min(STORE_GRADE.length - 1, s.co.tier)];

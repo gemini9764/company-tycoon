@@ -497,6 +497,7 @@ function drawStore() {
   addOffice(items);
   addWindows(items);
   addShopStaff(items);
+  addRooms(items);
   addDeco(items);
   drawPartition(items);
   stepCustomers(items);
@@ -628,6 +629,91 @@ function addShopStaff(items) {
     if (!e.look) e.look = newLook(e.trait.id === 'star' ? '#F2B233' : null);
     items.push({ y, f: () => drawPerson(x, y, e.look, i % 2 ? 'e' : 's', Math.floor(frame / 34 + i) % 2) });
   });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   부속실 — 탕비실 · 회의실
+
+   등급이 방을 깊게 만들면 사무실 남쪽이 빈 바닥으로 남는다. 책상을 더 놓아
+   메우려면 정원(staffCap)까지 같이 올려야 하는데, 그건 밸런스를 건드리는 일이다.
+   **빈 자리를 사람이 아니라 공간으로 채운다** — 회사가 커지면 회의실과 탕비실이
+   생긴다는 건 그 자체로 성장의 그림이고, 규칙은 하나도 안 건드린다.
+
+   손님은 gx < SPLIT_GX 밖으로 나오지 않으므로 통행 판정에 걸릴 일이 없다.
+   ══════════════════════════════════════════════════════════════ */
+const ROOMS = [
+  { need: 1, n: '탕비실', gx: 14, gy: 9, w: 2, h: 3, floor: '#6B6250', wall: '#5A5240' },
+  { need: 2, n: '회의실', gx: 10, gy: 10, w: 3, h: 4, floor: '#4E5673', wall: '#464E68' },
+];
+
+function addRooms(items) {
+  const lv = gradeOf(S).rooms;
+  for (const r of ROOMS) {
+    if (lv < r.need || r.gy + r.h > roomH()) continue;
+    /* 바닥과 칸막이 — 문은 북쪽 한 칸을 비워 둔다 */
+    for (let dx = 0; dx < r.w; dx++) for (let dy = 0; dy < r.h; dy++) {
+      const { x, y } = P(r.gx + dx, r.gy + dy);
+      items.push({ y: y - 0.6, f: () => rhomb(X, x, y, HW, HH, ((dx + dy) & 1) ? r.floor : shade(r.floor, 0.06)) });
+    }
+    for (let dx = 0; dx < r.w; dx++) {                       // 북쪽 벽 (첫 칸이 출입구)
+      if (dx === 0) continue;
+      const { x, y } = P(r.gx + dx, r.gy - 1);
+      items.push({ y, f: () => prism(X, x, y, HW, HH, 26, shade(r.wall, 0.16), shade(r.wall, -0.24), r.wall) });
+    }
+    for (let dy = 0; dy < r.h; dy++) {                       // 서쪽 벽
+      const { x, y } = P(r.gx - 1, r.gy + dy);
+      items.push({ y, f: () => prism(X, x, y, HW, HH, 26, shade(r.wall, 0.16), shade(r.wall, -0.24), r.wall) });
+    }
+    if (r.n === '탕비실') addPantry(items, r); else addMeeting(items, r);
+    const lab = P(r.gx, r.gy - 1);
+    items.push({ y: lab.y + 0.5, f: () => drawText(lab.x, lab.y - 30, r.n, { size: 9, color: '#E8E2D2' }) });
+  }
+}
+
+/** 탕비실 — 싱크대와 냉장고, 커피 한 잔 */
+function addPantry(items, r) {
+  const sink = P(r.gx, r.gy);
+  items.push({ y: sink.y, f: () => {
+    prism(X, sink.x, sink.y, 20, 10, 16, '#C8CCD6', '#8A8F9C', '#A8AEBA');
+    X.fillStyle = '#7A8090'; X.fillRect(Math.round(sink.x) - 7, Math.round(sink.y) - 19, 14, 4);
+    X.fillStyle = '#E4E8F0'; X.fillRect(Math.round(sink.x) + 2, Math.round(sink.y) - 25, 3, 7);   // 수도
+  } });
+  const fr = P(r.gx + 1, r.gy);
+  items.push({ y: fr.y, f: () => {
+    prism(X, fr.x, fr.y, 18, 9, 34, '#E8ECF2', '#A8AEBA', '#D0D6E0');
+    X.fillStyle = '#9AA2B0'; X.fillRect(Math.round(fr.x) - 2, Math.round(fr.y) - 26, 2, 8);
+  } });
+  const tb = P(r.gx + 1, r.gy + 2);
+  items.push({ y: tb.y, f: () => {
+    prism(X, tb.x, tb.y, 16, 8, 13, '#A98A63', '#6B5136', '#8A6A4A');
+    X.fillStyle = '#F2EEE2'; X.fillRect(Math.round(tb.x) - 4, Math.round(tb.y) - 17, 4, 4);       // 컵
+    X.fillStyle = '#8C5A3C'; X.fillRect(Math.round(tb.x) + 3, Math.round(tb.y) - 16, 4, 3);
+  } });
+}
+
+/** 회의실 — 긴 탁자와 의자, 벽에 붙은 화이트보드 */
+function addMeeting(items, r) {
+  for (let dy = 1; dy < r.h - 1; dy++) {
+    const t = P(r.gx + 1, r.gy + dy);
+    items.push({ y: t.y, f: () => {
+      prism(X, t.x, t.y, 22, 11, 14, '#B39468', '#6B5136', '#94764F');
+      X.fillStyle = 'rgba(255,255,255,.10)'; X.fillRect(Math.round(t.x) - 12, Math.round(t.y) - 15, 24, 2);
+    } });
+    for (const dx of [0, 2]) {
+      const c = P(r.gx + dx, r.gy + dy);
+      items.push({ y: c.y, f: () => {
+        prism(X, c.x, c.y, 9, 5, 10, '#3E4658', '#242A38', '#333A4A');
+        prism(X, c.x, c.y - 10, 8, 4, 12, '#4A536A', '#2A3040', '#3A4254');
+      } });
+    }
+  }
+  const wb = P(r.gx + 1, r.gy);
+  items.push({ y: wb.y - 0.4, f: () => {
+    X.fillStyle = '#3A4254'; X.fillRect(Math.round(wb.x) - 22, Math.round(wb.y) - 46, 44, 20);
+    X.fillStyle = '#EDEAE0'; X.fillRect(Math.round(wb.x) - 20, Math.round(wb.y) - 44, 40, 16);
+    X.fillStyle = '#9FB4C8'; X.fillRect(Math.round(wb.x) - 15, Math.round(wb.y) - 39, 22, 2);
+    X.fillStyle = '#C4A2A2'; X.fillRect(Math.round(wb.x) - 15, Math.round(wb.y) - 34, 14, 2);
+  } });
 }
 
 /** 입구 러그와 화분. 사람이 오가는 자리를 피해 벽 쪽에만 둔다 */
