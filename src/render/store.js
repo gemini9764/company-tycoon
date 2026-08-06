@@ -511,6 +511,7 @@ function drawStore() {
   addWindows(items);
   addShopStaff(items);
   addRooms(items);
+  addOfficeFill(items);
   addDeco(items);
   drawPartition(items);
   stepCustomers(items);
@@ -734,6 +735,46 @@ function addMeeting(items, r) {
   } });
 }
 
+/**
+ * 사무실 동쪽 자투리(gx 14~15). 부속실을 맨 뒤로 밀면서 생긴 빈 벽면이다.
+ * 책상을 더 놓으면 정원까지 건드려야 하므로 **집기로 채운다** — 캐비닛과
+ * 복사기가 늘어선 벽은 그것만으로 사무실처럼 읽힌다.
+ * 등급이 오를수록(방이 깊어질수록) 늘어난다.
+ */
+function addOfficeFill(items) {
+  const rows = [
+    { gx: 15, gy: 4, k: 'cab' }, { gx: 15, gy: 5, k: 'cab' },
+    { gx: 14, gy: 4, k: 'water' }, { gx: 15, gy: 7, k: 'copier' },
+    { gx: 15, gy: 8, k: 'cab' }, { gx: 14, gy: 8, k: 'plant' },
+    { gx: 15, gy: 10, k: 'cab' }, { gx: 14, gy: 11, k: 'plant' },
+  ];
+  for (const o of rows) {
+    if (o.gy >= roomH() - 1) continue;
+    const { x, y } = P(o.gx, o.gy);
+    items.push({ y, f: () => {
+      X.save(); X.globalAlpha = 0.16; rhomb(X, x + 3, y + 2, 16, 8, '#000000'); X.restore();
+      if (o.k === 'cab') {                                    // 서류 캐비닛
+        prism(X, x, y, 18, 9, 30, '#9AA0B0', '#5E6474', '#7E8494');
+        for (let i = 0; i < 3; i++) {
+          X.fillStyle = '#C4CAD8'; X.fillRect(Math.round(x) - 8, Math.round(y) - 26 + i * 8, 15, 5);
+          X.fillStyle = '#5E6474'; X.fillRect(Math.round(x) - 2, Math.round(y) - 25 + i * 8, 4, 2);
+        }
+      } else if (o.k === 'copier') {                          // 복사기
+        prism(X, x, y, 19, 10, 22, '#D4D8E2', '#7E8494', '#AEB4C2');
+        prism(X, x, y - 22, 15, 8, 8, '#E8ECF2', '#8A90A0', '#C4CAD6');
+        X.fillStyle = '#3E4658'; X.fillRect(Math.round(x) - 6, Math.round(y) - 24, 12, 3);
+        X.fillStyle = '#6FBF7A'; X.fillRect(Math.round(x) + 4, Math.round(y) - 33, 3, 2);
+      } else if (o.k === 'water') {                           // 정수기
+        prism(X, x, y, 11, 6, 26, '#DCE2EC', '#8A90A0', '#B8BEC E'.replace(' ', ''));
+        prism(X, x, y - 26, 9, 5, 13, '#A8D4E8', '#6E9AB4', '#8CC0DA');
+      } else {                                                // 화분
+        prism(X, x, y, 10, 5, 9, '#A8724E', '#6E4A32', '#8C5C3E');
+        prism(X, x, y - 9, 13, 7, 15, '#6FAE7C', '#3E7A52', '#559566');
+      }
+    } });
+  }
+}
+
 /** 입구 러그와 화분. 사람이 오가는 자리를 피해 벽 쪽에만 둔다 */
 function addDeco(items) {
   const g = gradeOf(S);
@@ -827,9 +868,11 @@ function drawPartition(items) {
   /* 사장실은 **가로로** 넓다 — gx 12~끝, gy 0~2. 세로로 늘리면 사무실의 앞줄을
      통째로 먹어 직원이 뒤로 밀리고, 그러면 사장실만 크고 사무실은 좁아 보인다.
      옆으로 넓히면 앞줄 전체가 사장실이 되어 배치가 정리된다. */
-  for (let gy = 0; gy <= 2; gy++) put(11, gy, 30, '#5A4A38', '#3A2E20', '#4A3C2C');   // 사장실 세로 벽
+  /* 높이 24. 30 일 때는 앞줄에 앉은 직원의 머리와 겹쳐 얼굴이 잘렸다 —
+     사장실을 가리는 벽이 아니라 구획을 나누는 칸막이면 충분하다. */
+  for (let gy = 0; gy <= 2; gy++) put(11, gy, 24, '#5A4A38', '#3A2E20', '#4A3C2C');   // 사장실 세로 벽
   for (let gx = 12; gx < ROOM_W; gx++)                   // 사장실 가로 벽 (문 한 칸)
-    put(gx, 3, gx === 12 ? 6 : 30, '#5A4A38', '#3A2E20', '#4A3C2C');
+    put(gx, 3, gx === 12 ? 6 : 24, '#5A4A38', '#3A2E20', '#4A3C2C');
 }
 
 /* ── 매장 집기 ───────────────────────────────────────────── */
