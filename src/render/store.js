@@ -2,8 +2,8 @@ import { SECTORS, TIERS } from '../core/data.js';
 import { S } from '../core/state.js';
 import { viewRand } from '../core/rng.js';
 import { $, clamp, vpick, vrint, vrnd, won } from '../core/util.js';
-import { HH, HW, faces, isoWin, isoX, isoY, makeLayer, prism, rhomb, rhombEdge } from './iso.js';
-import { FOOT_Y, ROOM_H, ROOM_W, SPLIT_GX, STORE_H, STORE_O, STORE_W, X, bubbleTurn, customers, drawBubble, drawPerson, drawPops, drawSitter, drawText, faceOf, frame, newLook, pops, rrect, shade } from './canvas.js';
+import { HH, HW, faces, isoRoof, isoWin, isoX, isoY, makeLayer, prism, rhomb, rhombEdge } from './iso.js';
+import { FOOT_Y, ROOM_H, ROOM_W, SPLIT_GX, STORE_H, STORE_O, STORE_W, X, bubbleTurn, customers, drawBubble, drawPerson, drawPops, drawSitter, drawText, faceOf, frame, mix, newLook, pops, rrect, shade } from './canvas.js';
 import { dailyRetail } from '../systems/economy.js';
 
 /* ══════════════════════════════════════════════════════════════
@@ -270,26 +270,49 @@ function advancePhase(p) {
    배경도 단색 남색을 걷어내고 하늘 + 건너편 건물 실루엣으로 바꾼다. 흐릿하게
    뒤에 깔리는 것이라 디테일이 필요 없다 — 도트를 안 찍고도 되는 영역이다.
    ══════════════════════════════════════════════════════════════ */
-function drawBackdrop() {
-  /* 하늘은 단색 한 장이다. 색 띠를 여러 장 깔면 도트 그림에서 **이음매가 선으로
-     보인다** — 실제로 처음엔 셋으로 나눴다가 가로줄이 생겨 되돌렸다. */
-  X.fillStyle = '#161B2C'; X.fillRect(0, 0, STORE_W, STORE_H);
+/* 지평선. 하늘과 땅의 경계이자 **문 밖 거리를 잘라 내는 선**이다.
+   거리 타일은 gx -30 까지 뻗는데, 그대로 두면 화면 좌상단에서 하늘 위로
+   길이 솟아오른다. 배경과 거리가 같은 값을 봐야 어긋나지 않는다.
 
-  /* 건너편 건물 — 실루엣과 창문 불빛만. 결정론적이라 프레임마다 흔들리지 않는다 */
-  const base = Math.round(STORE_H * 0.30);
-  for (let i = 0, x = -20; x < STORE_W; i++) {
-    const w = 46 + ((i * 37) % 5) * 14, h = 60 + ((i * 61) % 7) * 22;
-    X.fillStyle = i % 2 ? '#232941' : '#1F2439';
-    X.fillRect(x, base - h, w, h + 40);
-    X.fillStyle = 'rgba(245,225,150,.13)';
-    for (let wy = base - h + 12; wy < base - 8; wy += 16) {
-      for (let wx = x + 8; wx < x + w - 8; wx += 14) {
-        if (((wx * 7 + wy * 13 + i) % 5) < 2) X.fillRect(wx, wy, 6, 7);
-      }
+   상수가 아니라 함수다 — store.js 와 canvas.js 가 서로 물려 있어 모듈 최상위에서
+   STORE_H 를 읽으면 아직 초기화 전이라 터진다. */
+/* 값이 방의 북쪽 꼭짓점(y=72)보다 조금 위다. 쿼터뷰에는 원래 지평선이 없지만,
+   화면 위쪽에 남는 좁은 띠를 하늘로 쓰고 그 아래를 전부 땅으로 채우면
+   "길 옆에 매장이 서 있다"로 읽힌다. 이 값을 내리면 문 밖 거리가 통째로
+   잘려 나가고(직접 겪었다), 올리면 원경 건물이 화면 밖으로 밀린다. */
+const horizonY = () => 44;
+
+function drawBackdrop() {
+  /* **하늘을 그리지 않는다.** 쿼터뷰에는 지평선이 없다. 억지로 평면 스카이라인을
+     얹었더니 두 가지가 깨졌다 — 투영이 달라 뒤에 붙인 배경지처럼 보였고,
+     지평선이 도로를 가로질러 잘라 **톱니 모양 가장자리**를 만들었다.
+
+     화면 좌상단은 타일 좌표로 gx≈-12, gy≈5 근처다. 즉 거기는 하늘이 아니라
+     **길 건너 블록**이 있어야 할 자리다. 땅으로 전부 덮고 그 위에 아이소 건물을
+     세우면 도로 끝은 건물이 알아서 가린다 — 자를 필요가 없어진다. */
+  const M = 900;
+  X.fillStyle = '#9BA2B4'; X.fillRect(-M, -M, STORE_W + M * 2, STORE_H + M * 2);
+}
+
+/* 길 건너 블록. 평면 띠가 아니라 **같은 투영의 아이소 건물**이라야 배경이
+   장면의 일부로 읽힌다. 한 채가 3×3 타일이다. */
+const FAR_BODY = ['#B9C2D0', '#C6CCD8', '#AEB7C6', '#CAD0DA', '#B2BAC8'];
+const FAR_ROOF = ['#8E97A8', '#9AA2B2', '#848DA0', '#9EA6B4', '#8A93A4'];
+
+function drawFarBuilding(gx, gy, k) {
+  const a = P(gx, gy), b = P(gx + 2, gy + 2);
+  const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+  const h = 40 + k * 17;
+  const body = FAR_BODY[k], roof = FAR_ROOF[k];
+  X.save(); X.globalAlpha = 0.12; rhomb(X, cx + 4, cy + 2, HW * 3, HH * 3, '#000000'); X.restore();
+  prism(X, cx, cy, HW * 3, HH * 3, h, roof, shade(body, -0.26), body);
+  for (let up = 10; up < h - 10; up += 13) {          // 창문 줄
+    for (let off = 8; off < HW * 3 - 8; off += 14) {
+      isoWin(X, cx, cy, HW * 3, HH * 3, 'r', off, up, 8, 7, 'rgba(120,140,166,.42)');
+      isoWin(X, cx, cy, HW * 3, HH * 3, 'l', off, up, 8, 7, 'rgba(104,122,148,.42)');
     }
-    x += w + 6;
   }
-  X.fillStyle = 'rgba(22,27,44,.62)'; X.fillRect(0, base - 6, STORE_W, 54);   // 안개로 뒤로 민다
+  faces(X, cx, cy, HW * 3, HH * 3, h - 4, h, shade(body, -0.34), shade(body, -0.14));   // 처마
 }
 
 /** 매장 서쪽 — 인도와 차도. 손님이 여기서 걸어 들어온다 */
@@ -301,45 +324,63 @@ function drawOutside() {
 
      차도 하나만 깔면 길이 아니라 회색 띠다. **건너편 인도까지** 놓아야
      "길 건너에서 이쪽으로 온다"로 읽힌다. */
-  for (let gy = -22; gy < ROOM_H + 24; gy++) {
+  for (let gy = -26; gy < ROOM_H + 28; gy++) {
     for (let gx = -30; gx < -1; gx++) {
       const { x, y } = P(gx, gy);
-      if (x < -40 || x > STORE_W + 40 || y < -40 || y > STORE_H + 40) continue;
+      if (x < -240 || x > STORE_W + 240 || y < -60 || y > STORE_H + 60) continue;
       if (gx >= -3) {                                    // 이쪽 인도
-        rhomb(X, x, y, HW, HH, ((gx + gy) & 1) ? '#4C5164' : '#464B5D');
-        rhombEdge(X, x, y, HW, HH, '#3F4456');
+        rhomb(X, x, y, HW, HH, ((gx + gy) & 1) ? '#C6CBD8' : '#BEC3D0');
+        rhombEdge(X, x, y, HW, HH, '#AFB6C6');
       } else if (gx >= -7) {                             // 차도
-        rhomb(X, x, y, HW, HH, gx === -4 || gx === -7 ? '#3E4356' : '#363B4C');
+        /* 인도와 명도가 붙어 있으면 길이 아니라 회색 판이다. 아스팔트를 확실히
+           어둡게 깔고, 그 위에 얼룩과 차선을 얹어야 노면으로 읽힌다. */
+        rhomb(X, x, y, HW, HH, gx === -4 || gx === -7 ? '#767C90' : '#6B7185');
+        X.fillStyle = 'rgba(255,255,255,.05)';           // 노면 얼룩
+        X.fillRect(Math.round(x - 10 + ((gy * 7) % 16)), Math.round(y - 3 + ((gx * 5) % 6)), 4, 2);
         if (gx === -6 && ((gy % 3) + 3) % 3 === 0) {
-          X.fillStyle = 'rgba(255,248,214,.22)';         // 중앙선
+          X.fillStyle = 'rgba(255,248,214,.78)';         // 중앙선
           X.fillRect(Math.round(x - 4), Math.round(y - 1), 9, 2);
         }
+        if (gy === DOOR.gy + 1 || gy === DOOR.gy + 2) {  // 문 앞 횡단보도
+          X.fillStyle = 'rgba(255,255,255,.62)';
+          for (let i = -10; i <= 10; i += 7) X.fillRect(Math.round(x + i), Math.round(y - 5 - i / 2), 5, 5);
+        }
       } else if (gx >= -9) {                             // 건너편 인도
-        rhomb(X, x, y, HW, HH, ((gx + gy) & 1) ? '#43485A' : '#3E4354');
-        rhombEdge(X, x, y, HW, HH, '#383D4E');
+        rhomb(X, x, y, HW, HH, ((gx + gy) & 1) ? '#BAC0CE' : '#B2B8C6');
+        rhombEdge(X, x, y, HW, HH, '#A4AABA');
       } else {                                            // 건너편 건물 그늘
-        rhomb(X, x, y, HW, HH, '#22273A');
+        rhomb(X, x, y, HW, HH, '#8A90A4');
       }
     }
     if (gy === DOOR.gy) {
       const { x, y } = P(-2, gy);
-      rhomb(X, x, y, HW, HH, '#5E6478');                 // 문 앞 매트
+      rhomb(X, x, y, HW, HH, '#C7A97E');                 // 문 앞 매트
     }
   }
   /* 연석 — 차도와 인도의 단차. 평면감을 줄이는 데 이게 제일 크다 */
   for (let gy = -10; gy < ROOM_H + 12; gy++) {
     const { x, y } = P(-4, gy);
-    if (y < -20 || y > STORE_H + 20) continue;
-    X.fillStyle = '#565B6E'; X.fillRect(Math.round(x - HW), Math.round(y - 2), HW * 2, 2);
+    if (y < -40 || y > STORE_H + 20) continue;
+    X.fillStyle = '#DDE1EA'; X.fillRect(Math.round(x - HW), Math.round(y - 3), HW * 2, 2);   // 연석 윗면
+    X.fillStyle = '#8C93A6'; X.fillRect(Math.round(x - HW), Math.round(y - 1), HW * 2, 2);
   }
   /* 가로등 두 개 — 거리라는 신호 */
   for (const gy of [-3, 3, ROOM_H, ROOM_H + 6]) {
     const { x, y } = P(-3, gy);
     X.save(); X.globalAlpha = 0.18; rhomb(X, x + 1, y + 1, 5, 3, '#000000'); X.restore();
-    X.fillStyle = '#6E7488'; X.fillRect(Math.round(x) - 1, Math.round(y) - 26, 2, 26);
-    X.fillStyle = '#F5E3A8'; X.fillRect(Math.round(x) - 3, Math.round(y) - 30, 6, 5);
-    X.save(); X.globalAlpha = 0.16; X.fillStyle = '#FFE9A8';
-    X.fillRect(Math.round(x) - 9, Math.round(y) - 28, 18, 24); X.restore();
+    X.fillStyle = '#78809A'; X.fillRect(Math.round(x) - 1, Math.round(y) - 26, 2, 26);
+    X.fillStyle = '#C9CEDC'; X.fillRect(Math.round(x) - 3, Math.round(y) - 30, 6, 5);
+  }
+
+  /* 길 건너 블록. 뒤(gx+gy 가 작은 쪽)부터 그려야 서로 안 겹친다. */
+  const far = [];
+  for (let gy = -24; gy < ROOM_H + 24; gy += 3) far.push([-12, gy]);   // 길 건너 줄
+  for (let gx = -33; gx <= -15; gx += 3) far.push([gx, -6]);           // 길 끝을 막는 줄
+  far.sort((a, b) => (a[0] + a[1]) - (b[0] + b[1]));
+  for (const [gx, gy] of far) {
+    const c = P(gx + 1, gy + 1);
+    if (c.x < -300 || c.x > STORE_W + 300 || c.y < -220 || c.y > STORE_H + 120) continue;
+    drawFarBuilding(gx, gy, (((gx * 7 + gy * 13) % 5) + 5) % 5);
   }
 }
 
@@ -349,9 +390,8 @@ function drawStore() {
   const f = storeFloor();
   if (f && f.c) X.drawImage(f.c, 0, 0);
 
-  drawWalls();
-
   const items = [];
+  drawWalls(items);
   for (const o of fridgesNow()) items.push({ y: P(o.gx, o.gy).y, f: () => drawFridge(o) });
   for (const o of FREEZERS) items.push({ y: P(o.gx, o.gy).y, f: () => drawFreezer(o) });
   for (const o of shelvesNow()) items.push({ y: P(o.gx, o.gy).y, f: () => drawShelf(o) });
@@ -369,32 +409,45 @@ function drawStore() {
 }
 
 /* 뒤쪽 두 면만 세운 컷어웨이. 앞쪽은 터야 안이 보인다. */
-function drawWalls() {
+/**
+ * 벽. **깊이 정렬 목록에 넣는다** — 통째로 먼저 그리면 문 밖에서 걸어 들어오는
+ * 손님이 벽보다 뒤(북서)에 있는데도 벽 위에 겹쳐 그려져, 사람이 벽을 뚫고
+ * 서 있는 것처럼 보인다. 벽 타일도 다른 사물과 같은 y 규칙으로 정렬해야 한다.
+ */
+function drawWalls(items) {
   /* 벽은 통짜 상자였다. 걸레받이와 허리 몰딩을 넣어 높이를 읽히게 한다. */
   for (let gx = 0; gx < ROOM_W; gx++) {                 // 북동쪽 벽 (gy = -1)
     const { x, y } = P(gx, -1);
     const shop = gx < SPLIT_GX;
-    prism(X, x, y, HW, HH, 51, shop ? '#7D6B53' : '#585140', shop ? '#5C4E3C' : '#3E3A2C', shop ? '#6B5B47' : '#4A4436');
-    faces(X, x, y, HW, HH, 0, 5, shop ? '#4A3E2E' : '#332F24', shop ? '#584A38' : '#3C3829');    // 걸레받이
-    faces(X, x, y, HW, HH, 22, 24, shop ? '#6B5B47' : '#4A4436', shop ? '#8A7659' : '#635944');  // 허리 몰딩
+    items.push({ y, f: () => {
+      prism(X, x, y, HW, HH, 51, shop ? '#7D6B53' : '#585140', shop ? '#5C4E3C' : '#3E3A2C', shop ? '#6B5B47' : '#4A4436');
+      faces(X, x, y, HW, HH, 0, 5, shop ? '#4A3E2E' : '#332F24', shop ? '#584A38' : '#3C3829');    // 걸레받이
+      faces(X, x, y, HW, HH, 22, 24, shop ? '#6B5B47' : '#4A4436', shop ? '#8A7659' : '#635944');  // 허리 몰딩
+    } });
   }
   for (let gy = -1; gy < ROOM_H; gy++) {                // 북서쪽 벽 (gx = -1)
     if (gy === DOOR.gy) continue;                        // 자동문 자리
     const { x, y } = P(-1, gy);
-    prism(X, x, y, HW, HH, 51, '#6E5E48', '#5C4E3C', '#4A3E30');
-    faces(X, x, y, HW, HH, 0, 5, '#443A2C', '#3A3025');
-    faces(X, x, y, HW, HH, 22, 24, '#6B5B47', '#584A38');
+    items.push({ y, f: () => {
+      prism(X, x, y, HW, HH, 51, '#6E5E48', '#5C4E3C', '#4A3E30');
+      faces(X, x, y, HW, HH, 0, 5, '#443A2C', '#3A3025');
+      faces(X, x, y, HW, HH, 22, 24, '#6B5B47', '#584A38');
+    } });
   }
   const d = P(-1, DOOR.gy);                              // 유리 자동문
-  prism(X, d.x, d.y, HW, HH, 51, '#9AB8D0', '#5C4E3C', '#8AB4D8');
-  faces(X, d.x, d.y, HW, HH, 0, 5, '#443A2C', '#3A3025');
-  glassPanel(d.x, d.y, HW, HH, 'r', 4, 6, 8, 32, '#A8C8DC');       // 두 짝으로 나뉜 유리
-  glassPanel(d.x, d.y, HW, HH, 'r', 14, 6, 8, 32, '#A8C8DC');
-  faces(X, d.x, d.y, HW, HH, 42, 45, '#6B5B47', '#8A7659');        // 상부 문틀
+  items.push({ y: d.y, f: () => {
+    prism(X, d.x, d.y, HW, HH, 51, '#9AB8D0', '#5C4E3C', '#8AB4D8');
+    faces(X, d.x, d.y, HW, HH, 0, 5, '#443A2C', '#3A3025');
+    glassPanel(d.x, d.y, HW, HH, 'r', 4, 6, 8, 32, '#A8C8DC');     // 두 짝으로 나뉜 유리
+    glassPanel(d.x, d.y, HW, HH, 'r', 14, 6, 8, 32, '#A8C8DC');
+    faces(X, d.x, d.y, HW, HH, 42, 45, '#6B5B47', '#8A7659');      // 상부 문틀
+  } });
 
-  drawSignboard();
-  drawWhiteboard();
-  drawPartition();
+  /* 간판·화이트보드·칸막이는 벽에 붙어 있으므로 벽보다 뒤로 가면 안 된다.
+     벽 타일보다 살짝 큰 y 를 줘서 같은 자리에서 항상 나중에 그리게 한다. */
+  items.push({ y: P(2, -1).y + 0.5, f: drawSignboard });
+  items.push({ y: P(ROOM_W - 2, -1).y + 0.5, f: drawWhiteboard });
+  items.push({ y: P(SPLIT_GX, -1).y + 0.5, f: drawPartition });
 }
 
 /** 매장 간판 — 북동쪽 벽 위에 얹는다 */

@@ -295,7 +295,7 @@ function draw() {
   frame++;
   X.setTransform(1, 0, 0, 1, 0, 0);
   X.imageSmoothingEnabled = false;
-  X.fillStyle = S.mode === 'city' ? '#8FBE8C' : '#151928';   // 여백도 배경과 같은 색
+  X.fillStyle = S.mode === 'city' ? '#8FBE8C' : '#9BA2B4';   // 여백도 배경과 같은 색
   X.fillRect(0, 0, CV.width, CV.height);
   X.setTransform(PX, 0, 0, PX, OX, OY);
   S.mode === 'city' ? drawCity() : drawStore();
@@ -426,7 +426,7 @@ function drawPed(x, y, look, dir = 's', step = 1) {
   if (!back) {                                                  // 눈 — 뒤돌면 안 그린다
     X.fillStyle = '#3B3546';
     const ex = dir === 'e' ? 1 : dir === 'w' ? -1 : 0;
-    X.fillRect(x - 2 + ex, b - 13, 1, 2); X.fillRect(x + 1 + ex, b - 13, 1, 2);
+    X.fillRect(x - 2 + ex, b - 13, 1, 2); X.fillRect(x + 2 + ex, b - 13, 1, 2);   // 머리 x-3~x+3 의 중심은 x
   }
 }
 
@@ -471,7 +471,10 @@ function drawHead(x, b, skin, hair, dir, style = 0) {
   drawHair(x, t, hair, dir, style);
   if (dir === 'n') return;                         // 뒤통수 — 얼굴이 안 보인다
 
-  const eyes = dir === 's' ? [-6, 3] : dir === 'e' ? [3] : [-6];
+  /* 얼굴은 x-9 부터 19px 이라 중심이 x 다. 눈은 3px 폭이므로 좌우 여백이 같으려면
+     -6(=x-6~x-4) 과 +4(=x+4~x+6) 여야 한다. 오른눈이 +3 이면 한 칸씩 왼쪽으로
+     쏠려 보이는데, 얼굴이 20px 밖에 안 돼 1px 이 그대로 눈에 띈다. */
+  const eyes = dir === 's' ? [-6, 4] : dir === 'e' ? [4] : [-6];
   for (const ex of eyes) {
     X.fillStyle = '#332E3E'; X.fillRect(x + ex, t + 9, 3, 5);
     X.fillStyle = 'rgba(255,255,255,.7)'; X.fillRect(x + ex, t + 9, 1, 2);
