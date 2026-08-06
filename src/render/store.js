@@ -2,7 +2,7 @@ import { SECTORS, SHOP_ZONES, TIERS, gradeOf } from '../core/data.js';
 import { S } from '../core/state.js';
 import { viewRand } from '../core/rng.js';
 import { $, clamp, vpick, vrint, vrnd, won } from '../core/util.js';
-import { HH, HW, faces, isoRoof, isoWin, isoX, isoY, makeLayer, prism, rhomb, rhombEdge } from './iso.js';
+import { HH, HW, faces, isoRoof, isoWin, isoX, isoY, makeLayer, prism, rhomb, rhombEdge, slab, slabBand } from './iso.js';
 import { shopOf } from '../core/derive.js';
 import { footY, ROOM_W, roomH, SPLIT_GX, storeH, storeO, storeW, X, bubbleTurn, customers, drawBubble, drawPerson, drawPops, drawSitter, drawText, faceOf, frame, mix, newLook, pops, rrect, shade } from './canvas.js';
 import { dailyRetail, productLines, shopZones } from '../systems/economy.js';
@@ -18,6 +18,10 @@ import { dailyRetail, productLines, shopZones } from '../systems/economy.js';
    ══════════════════════════════════════════════════════════════ */
 
 const DOOR = { gx: 0, gy: 7 };          // 매장 서쪽 자동문
+/* 벽 두께. 1 이면 예전처럼 타일 한 칸을 통째로 먹는다 — 그 두께가
+   '벽이 너무 두껍다' 의 원인이었다. */
+const WALL_T = 0.44;
+
 const STREET_GX = -3;                   // 인도 (gx -3, -2 두 열)
 const STREET_MIN = -9;                  // 인도에서 오갈 수 있는 위쪽 끝
 /* 함수다 — canvas.js 와 서로 물려 있어 최상위에서 roomH() 를 읽으면 초기화 전이다 */
@@ -33,12 +37,21 @@ const SHELVES = [
 ];
 const FLATS = [{ gx: 1, gy: 8 }, { gx: 2, gy: 8 }, { gx: 5, gy: 3 }];
 const COUNTER = [{ gx: 7, gy: 2 }, { gx: 7, gy: 3 }];
+/* 등급으로 방이 깊어지면 남쪽이 빈 바닥으로 남는다. 깊어진 만큼 매대도 따라
+   내려간다 — 가게만 커지고 안이 비면 커진 게 손해로 보인다.
+   시설 단계(EXTRA_SHELF)와 달리 **돈이 아니라 깊이**가 여는 자리다. */
+const DEPTH_SHELF = [
+  { gx: 1, gy: 9 }, { gx: 2, gy: 9 }, { gx: 3, gy: 9 }, { gx: 5, gy: 9 },
+  { gx: 1, gy: 11 }, { gx: 2, gy: 11 }, { gx: 3, gy: 11 }, { gx: 5, gy: 11 },
+  { gx: 1, gy: 13 }, { gx: 2, gy: 13 }, { gx: 3, gy: 13 }, { gx: 5, gy: 13 },
+];
+
 const SHOP_PROPS = [{ gx: 6, gy: 8, k: 'carts' }, { gx: 7, gy: 8, k: 'plant' }, { gx: 4, gy: 0, k: 'plant' }, { gx: 7, gy: 5, k: 'pop' }];
 
 const CLERK = { gx: 8, gy: 2 };         // 점원 자리 — 계산대 안쪽
 
 const SHOP_BLOCK = new Set(
-  [...FRIDGES, ...FREEZERS, ...SHELVES, ...FLATS, ...COUNTER, ...SHOP_PROPS, CLERK, { gx: 8, gy: 3 }].map(o => `${o.gx},${o.gy}`)
+  [...FRIDGES, ...FREEZERS, ...SHELVES, ...DEPTH_SHELF, ...FLATS, ...COUNTER, ...SHOP_PROPS, CLERK, { gx: 8, gy: 3 }].map(o => `${o.gx},${o.gy}`)
 );
 
 /* ── 시설 증설로 늘어나는 집기 ────────────────────────────────
@@ -65,7 +78,10 @@ const CLERK2 = EXTRA_CLERK[0];
 const fl = k => (S.co.facil && S.co.facil[k]) || 0;
 
 /** 지금 레벨에서 실제로 깔린 집기 목록 */
-function shelvesNow() { return SHELVES.concat(EXTRA_SHELF.slice(0, fl('shelf'))); }
+function shelvesNow() {
+  return SHELVES.concat(EXTRA_SHELF.slice(0, fl('shelf')),
+                        DEPTH_SHELF.filter(o => o.gy <= roomH() - 2));
+}
 
 function fridgesNow() { return FRIDGES.concat(EXTRA_FRIDGE.slice(0, fl('cold'))); }
 
@@ -85,10 +101,15 @@ function blockedAt(gx, gy) {
 const QUEUE = { gx: 6, gy: 3 };         // 손님이 계산 줄 서는 자리
 
 /* 사무실 — 책상 자리는 고용 순서대로 채운다 */
+/* gx 12 의 gy 0~2 는 **사장실 칸막이가 서는 자리**다. 예전 배치는 {12,1} 이
+   그 벽과 겹쳐 책상이 벽에 박혀 있었다. 앞줄은 gx 10~11 만 쓴다.
+   가운데 열(gy 4)을 통로로 비워 두 덩이로 나눈 것이 사무실처럼 읽히게 한다. */
 const DESKS = [
-  { gx: 10, gy: 1 }, { gx: 11, gy: 1 }, { gx: 12, gy: 1 },
-  { gx: 10, gy: 4 }, { gx: 11, gy: 4 }, { gx: 12, gy: 4 },
-  { gx: 10, gy: 7 }, { gx: 11, gy: 7 }, { gx: 12, gy: 7 },
+  { gx: 10, gy: 1 }, { gx: 11, gy: 1 },
+  { gx: 10, gy: 2 }, { gx: 11, gy: 2 },
+  { gx: 10, gy: 5 }, { gx: 11, gy: 5 }, { gx: 12, gy: 5 },
+  { gx: 10, gy: 6 }, { gx: 11, gy: 6 }, { gx: 12, gy: 6 },
+  { gx: 10, gy: 8 }, { gx: 11, gy: 8 }, { gx: 12, gy: 8 },
   { gx: 14, gy: 4 }, { gx: 15, gy: 4 },
   { gx: 14, gy: 7 }, { gx: 15, gy: 7 },
 ];
@@ -500,18 +521,18 @@ function drawWalls(items) {
     const { x, y } = P(gx, -1);
     const shop = gx < SPLIT_GX;
     items.push({ y, f: () => {
-      prism(X, x, y, HW, HH, 51, shop ? '#7D6B53' : '#585140', shop ? '#5C4E3C' : '#3E3A2C', shop ? '#6B5B47' : '#4A4436');
-      faces(X, x, y, HW, HH, 0, 5, shop ? '#4A3E2E' : '#332F24', shop ? '#584A38' : '#3C3829');    // 걸레받이
-      faces(X, x, y, HW, HH, 22, 24, shop ? '#6B5B47' : '#4A4436', shop ? '#8A7659' : '#635944');  // 허리 몰딩
+      slab(X, x, y, 51, WALL_T, 1, shop ? '#7D6B53' : '#585140', shop ? '#6B5B47' : '#4A4436', shop ? '#5C4E3C' : '#3E3A2C');
+      slabBand(X, x, y, WALL_T, 1, 0, 5, shop ? '#4A3E2E' : '#332F24');     // 걸레받이
+      slabBand(X, x, y, WALL_T, 1, 22, 24, shop ? '#8A7659' : '#635944');   // 허리 몰딩
     } });
   }
   for (let gy = -1; gy < roomH(); gy++) {                // 북서쪽 벽 (gx = -1)
     if (gy === DOOR.gy) continue;                        // 자동문 자리
     const { x, y } = P(-1, gy);
     items.push({ y, f: () => {
-      prism(X, x, y, HW, HH, 51, '#6E5E48', '#5C4E3C', '#4A3E30');
-      faces(X, x, y, HW, HH, 0, 5, '#443A2C', '#3A3025');
-      faces(X, x, y, HW, HH, 22, 24, '#6B5B47', '#584A38');
+      slab(X, x, y, 51, WALL_T, -1, '#6E5E48', '#5C4E3C', '#4A3E30');
+      slabBand(X, x, y, WALL_T, -1, 0, 5, '#443A2C');
+      slabBand(X, x, y, WALL_T, -1, 22, 24, '#6B5B47');
     } });
   }
   const d = P(-1, DOOR.gy);                              // 유리 자동문

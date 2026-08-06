@@ -179,6 +179,49 @@ function isoRoof(X, cx, cy, rx, ry, rise, left, right, ridge) {
   }
 }
 
+/**
+ * 얇은 벽. 상자(prism)로 벽을 세우면 **타일 한 칸을 통째로** 차지해 두껍다.
+ * `prism` 의 반지름을 줄이면 두께뿐 아니라 길이도 같이 줄어 타일 사이에 틈이
+ * 벌어지므로, 벽에는 별도 도형이 필요하다.
+ *
+ * 윗면은 평행사변형이다 — 벽을 따라가는 두 변은 기울기 +0.5 로 나란하고,
+ * 두께 쪽 두 변은 -0.5 다. 그래서 한 열(x)마다 위아래 y 만 구하면 채울 수 있다.
+ *   윗변  y = -HH + |x|/2
+ *   아랫변 y = min( (2t-1)·HH + x/2 , (HW - x)/2 )
+ * 앞쪽은 벽을 따라가는 안쪽 면, 뒤쪽은 끝면이라 색을 달리한다.
+ *
+ * @param {number} t   두께 비율 (1 이면 예전 상자와 같다)
+ * @param {number} dir +1 이면 gy 가 작은 쪽(북동 벽), -1 이면 좌우를 뒤집는다
+ */
+function slab(X, cx, cy, h, t, dir, top, inner, end) {
+  cx = Math.round(cx); cy = Math.round(cy);
+  const x0 = -Math.round(t * HW), edge = (1 - t) * HW;
+  for (let x = x0; x < HW; x += 2) {
+    const yt = -HH + Math.abs(x) / 2;
+    const dc = (2 * t - 1) * HH + x / 2;             // 안쪽 긴 변
+    const bc = (HW - x) / 2;                          // 끝면 변
+    const yb = Math.min(dc, bc);
+    if (yb <= yt) continue;
+    const sx = Math.round(cx + (dir < 0 ? -x - 2 : x));
+    X.fillStyle = x < edge ? inner : end;             // 몸통
+    X.fillRect(sx, Math.round(cy + yb - h), 2, Math.max(1, Math.round(h)));
+    X.fillStyle = top;                                // 윗면
+    X.fillRect(sx, Math.round(cy + yt - h), 2, Math.max(1, Math.round(yb - yt)));
+  }
+}
+
+/** 얇은 벽의 띠(걸레받이·몰딩). 벽 안쪽 면에만 얹는다 */
+function slabBand(X, cx, cy, t, dir, up, hi, col) {
+  cx = Math.round(cx); cy = Math.round(cy);
+  const x0 = -Math.round(t * HW), edge = (1 - t) * HW;
+  X.fillStyle = col;
+  for (let x = x0; x < edge; x += 2) {
+    const yb = (2 * t - 1) * HH + x / 2;
+    const sx = Math.round(cx + (dir < 0 ? -x - 2 : x));
+    X.fillRect(sx, Math.round(cy + yb - hi), 2, Math.max(1, hi - up));
+  }
+}
+
 /** 바닥에 깔리는 그림자. 상자 밑동을 어둡게 눌러 준다. */
 function isoShadow(X, cx, cy, rx, ry) {
   X.save();
@@ -198,4 +241,4 @@ function makeLayer(w, h) {
   return { c, ctx };
 }
 
-export { FACES4, HH, HW, TH, TW, depth, isoRotMat, rotFace, rotG, rotGf, faces, isoRoof, isoShadow, isoWin, isoX, isoY, makeLayer, prism, rhomb, rhombEdge, unIso };
+export { FACES4, HH, HW, TH, TW, depth, isoRotMat, rotFace, rotG, rotGf, faces, isoRoof, isoShadow, isoWin, slab, slabBand, isoX, isoY, makeLayer, prism, rhomb, rhombEdge, unIso };
