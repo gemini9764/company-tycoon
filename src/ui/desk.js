@@ -1,5 +1,6 @@
 import { sfx } from '../core/audio.js';
 import { BAL } from '../core/balance.js';
+import { gainExp } from '../systems/company.js';
 import { S } from '../core/state.js';
 import { clamp, won } from '../core/util.js';
 import { retailPotential } from '../systems/economy.js';
@@ -45,7 +46,8 @@ const ITEMS = [
     id: 'care', n: '사내 복지', mul: 1.2,
     sub: () => '전 직원 경험치 +12 · 인지도 +0.08',
     run: s => {
-      s.staff.forEach(e => { e.exp = (e.exp || 0) + 12; });
+      // 경험치가 실제로 레벨로 이어진다. 예전엔 exp 를 올려 놓고 아무도 안 읽었다
+      s.staff.forEach(e => gainExp(s, e, BAL.expBase * 0.18));
       s.co.marketing = clamp(s.co.marketing + 0.08, 0, BAL.marketingCap);
       toast('직원 사기가 올랐습니다', 'good');
     },

@@ -625,6 +625,63 @@ try {
   })()`);
   rivalOk.forEach(([n, ok, d]) => check(n, ok, d));
 
+  /* ── 직원 육성 ───────────────────────────────────────────
+     `exp` 는 필드만 있고 읽는 코드가 없었다. 두 경로(일해서 / 교육비로)가
+     같은 함수를 타는지, 무료 경로만 상한을 받는지 확인한다. */
+  const growOk = win.eval(`(() => {
+    const g = window.game, B = g.BAL, r = [];
+    const S = g.setS(g.newState('육성', 1001));
+    S.co.cash = 1e13;
+    const a = S.staff[0], b = S.staff[1];
+    a.onTeam = true; b.onTeam = false;
+
+    S.nego = { id: 'x', name: 'x', progress: 0, success: 0, prem: 0.3, team: [a.id], marks: [], acts: 3, done: [] };
+    S.co.subs.push({ id: 'sub1', sector: 'daily', cap: 1e9, pmi: 99 });
+    const e0 = a.exp || 0, e1 = b.exp || 0;
+    g.tickStaff(S);
+    r.push(['협상단은 협상에서 경험치', a.exp - e0 === B.expNego, '+' + (a.exp - e0)]);
+    r.push(['관리 인력은 계열사에서 경험치', b.exp - e1 === B.expManage, '+' + (b.exp - e1)]);
+
+    // 편성만 해 두고 협상이 없으면 대기 취급
+    S.nego = null;
+    const e2 = a.exp;
+    g.tickStaff(S);
+    r.push(['협상 없으면 협상단도 대기', a.exp - e2 === B.expIdle, '+' + (a.exp - e2)]);
+
+    // 경험치가 차면 레벨과 월급이 오른다
+    const c = g.makeStaff(1); S.staff.push(c); c.lv = 1; c.exp = 0;
+    const sal = c.salary;
+    g.gainExp(S, c, g.expNeed(c));
+    r.push(['경험치가 차면 승급', c.lv === 2 && c.salary > sal, 'Lv.' + c.lv]);
+
+    // 무료 경로는 상한에서 멈춘다
+    const d = g.makeStaff(1); S.staff.push(d); d.lv = 1; d.exp = 0;
+    g.gainExp(S, d, 1e9);
+    r.push(['무료 경로는 상한에서 멈춘다', d.lv === B.expFreeCap, 'Lv.' + d.lv]);
+    const stuck = d.exp;
+    g.gainExp(S, d, 1e6);
+    r.push(['상한에서 경험치가 고인다', d.exp === stuck, '']);
+
+    // 교육비 경로는 상한을 받지 않는다
+    g.gainExp(S, d, g.expNeed(d), true);
+    r.push(['교육비 경로는 상한 없음', d.lv === B.expFreeCap + 1, 'Lv.' + d.lv]);
+    return r;
+  })()`);
+  growOk.forEach(([n, ok, d]) => check(n, ok, d));
+
+  // 사장실 '사내 복지' 가 약속한 대로 실제 경험치를 주는가
+  const careOk = win.eval(`(() => {
+    const g = window.game, S = g.setS(g.newState('복지', 2002));
+    S.co.cash = 1e13;
+    const before = S.staff.map(e => e.exp || 0);
+    const care = (g.ITEMS || []).find(a => a.id === 'care');
+    if (!care) return [['사내 복지 결재 존재', false, 'ITEMS 에서 못 찾음']];
+    care.run(S);
+    return [['사내 복지가 경험치를 준다',
+             S.staff.every((e, i) => (e.exp || 0) > before[i] || e.lv > 1), '']];
+  })()`);
+  careOk.forEach(([n, ok, d]) => check(n, ok, d));
+
   check('출력 무결성', !/NaN|undefined|Infinity/.test(all),
         (all.match(/.{0,30}(NaN|undefined|Infinity)/) || [''])[0]);
 } catch (e) {

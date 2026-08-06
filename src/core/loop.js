@@ -2,7 +2,7 @@ import { BAL } from './balance.js';
 import { S } from './state.js';
 import { saveGame } from './storage.js';
 import { draw } from '../render/canvas.js';
-import { checkTier, recalcCap } from '../systems/company.js';
+import { checkTier, recalcCap, tickStaff } from '../systems/company.js';
 import { tickEconomy, tickMonth } from '../systems/economy.js';
 import { checkEnding } from '../systems/ending.js';
 import { tickEvent } from '../systems/events.js';
@@ -30,6 +30,7 @@ function tickDay() {
   tickStock(s);
   tickStake(s);     // 미리 사두기 — 켜 둔 대상에 매일 소액이 나간다
   tickNego(s);
+  tickStaff(s);     // 협상·관리에 나간 하루가 경험치가 된다
   tickRumor(s);
   tickEvent(s);
   if (s.day % BAL.monthDays === 0) tickMonth(s);

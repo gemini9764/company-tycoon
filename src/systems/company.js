@@ -5,7 +5,7 @@ import { $, clamp } from '../core/util.js';
 import { dailyRetail } from './economy.js';
 import { checkEnding } from './ending.js';
 import { openModal } from '../ui/modal.js';
-import { news } from '../ui/toast.js';
+import { news, pushInbox, toast } from '../ui/toast.js';
 
 function creditScore(s) {
   const assets = Math.max(1, s.co.cap);
@@ -78,4 +78,51 @@ function teamPower(s) {
   return p;
 }
 
-export { capCeiling, checkTier, creditIdx, creditName, creditScore, loanRate, recalcCap, teamPower };
+/* ══════════════════════════════════════════════════════════════
+   직원 육성
+
+   레벨은 sumStat 이 `1 + (lv-1) * 0.15` 로 읽는다. 즉 레벨 하나가 그 사람의
+   전 능력치를 실효 15% 올린다 — 협상력·정보력·영업력이 한꺼번에 오른다.
+   그래서 경험치를 후하게 주면 후반 협상이 통째로 쉬워진다. 반드시 sim 으로
+   완주일을 보고 조정할 것.
+   ══════════════════════════════════════════════════════════════ */
+
+/** 다음 레벨까지 필요한 경험치 */
+const expNeed = e => Math.round(BAL.expBase * Math.pow(BAL.expGrow, e.lv - 1));
+
+/**
+ * 경험치를 넣고, 넘치면 레벨을 올린다. 교육비를 내는 쪽도 이 함수를 쓴다 —
+ * 두 경로가 갈리면 "돈으로 올린 레벨" 과 "일해서 오른 레벨" 이 서로 다른
+ * 규칙을 갖게 되고, 그때부터 어느 쪽이 이득인지 아무도 모른다.
+ * @param {boolean} paid 교육비 경로인가 (상한을 받지 않는다)
+ */
+function gainExp(s, e, amt, paid = false) {
+  e.exp = (e.exp || 0) + amt;
+  let up = 0;
+  while (e.exp >= expNeed(e) && (paid || e.lv < BAL.expFreeCap)) {
+    e.exp -= expNeed(e); e.lv++; up++;
+    e.salary = Math.round(e.salary * 1.12);
+  }
+  if (!paid && e.lv >= BAL.expFreeCap) e.exp = Math.min(e.exp, expNeed(e));   // 상한에서 고인다
+  return up;
+}
+
+/**
+ * 하루치 경험치. **실제로 한 일에서만 나온다.**
+ * 협상단에 편성돼 있어도 협상이 안 돌면 관리 인력과 같은 취급이다 —
+ * 편성만 해 두고 노는 것이 이득이 되면 안 된다.
+ */
+function tickStaff(s) {
+  const managing = s.co.subs.length > 0;
+  for (const e of s.staff) {
+    const amt = (e.onTeam && s.nego) ? BAL.expNego
+      : (!e.onTeam && managing) ? BAL.expManage
+        : BAL.expIdle;
+    if (gainExp(s, e, amt)) {
+      toast(`${e.name} Lv.${e.lv} — 전 능력치 실효 +15%`, 'good');
+      pushInbox(s, '승급', `${e.name} 사원이 <b>Lv.${e.lv}</b> 이 되었습니다. 월급이 함께 올랐습니다.`, 'good');
+    }
+  }
+}
+
+export { capCeiling, checkTier, creditIdx, creditName, creditScore, expNeed, gainExp, loanRate, recalcCap, teamPower, tickStaff };

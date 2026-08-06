@@ -3,7 +3,7 @@ import { SECTORS, SHAMAN_TIERS } from '../core/data.js';
 import { sumStat, teamOf } from '../core/derive.js';
 import { S, makeStaff } from '../core/state.js';
 import { $, clamp, esc, won } from '../core/util.js';
-import { teamPower } from '../systems/company.js';
+import { expNeed, gainExp, teamPower } from '../systems/company.js';
 import { managersHave, managersNeeded } from '../systems/economy.js';
 import { useRumor } from '../systems/rumor.js';
 import { doGut, shamanFee } from '../systems/shaman.js';
@@ -54,6 +54,7 @@ function tabStaff() {
       <h4>${esc(e.name)} <span style="font-size:10px;font-family:var(--f-sm)" class="${e.onTeam ? 'c-sky' : 'c-dim'}">${e.onTeam ? '협상단' : 'Lv.' + e.lv}</span></h4>
       <div>${chip(e)}</div>
       <div class="meta">${e.trait.name} — ${e.trait.desc} · 월급 ${won(e.salary)}</div>
+      <div class="meta">${e.onTeam && s.nego ? '협상 중' : e.onTeam ? '대기' : s.co.subs.length ? '계열사 관리' : '대기'} · 숙련 ${e.lv >= BAL.expFreeCap ? '최고' : Math.round((e.exp || 0) / expNeed(e) * 100) + '%'}</div>
       <div class="btn-row">
         <button class="btn ${e.onTeam ? '' : 'sky'}" data-team="${e.id}" ${!e.onTeam && team.length >= 3 ? 'disabled' : ''}>${e.onTeam ? '협상단 제외' : '협상단 편성'}</button>
         <button class="btn" data-train="${e.id}">교육 ${won(trainCost(e))}</button>
@@ -81,7 +82,10 @@ function tabStaff() {
   R.querySelectorAll('[data-train]').forEach(b => b.onclick = () => {
     const e = s.staff.find(x => x.id === b.dataset.train), c = trainCost(e);
     if (s.co.cash < c) return toast('자금이 부족합니다', 'bad');
-    s.co.cash -= c; e.lv++; e.salary = Math.round(e.salary * 1.12);
+    s.co.cash -= c;
+    /* 교육은 **다음 레벨까지를 한 번에 채우는** 지름길이다. 경험치 경로와
+       같은 함수를 타야 두 길이 같은 규칙을 갖는다 (systems/company.js). */
+    gainExp(s, e, expNeed(e) - (e.exp || 0), true);
     toast(`${e.name} Lv.${e.lv} — 전 능력치 실효 +15%`, 'good'); renderRight(); renderHud();
   });
   R.querySelectorAll('[data-fire]').forEach(b => b.onclick = () => {
