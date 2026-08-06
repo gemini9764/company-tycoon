@@ -17,7 +17,10 @@ import { dailyRetail } from '../systems/economy.js';
    ══════════════════════════════════════════════════════════════ */
 
 const DOOR = { gx: 0, gy: 7 };          // 매장 서쪽 자동문
-const SPAWN_GX = -4;                    // 문 밖 대기 위치
+const STREET_GX = -3;                   // 인도 (gx -3, -2 두 열)
+const STREET_MIN = -9;                  // 인도에서 오갈 수 있는 위쪽 끝
+/* 함수다 — canvas.js 와 서로 물려 있어 최상위에서 ROOM_H 를 읽으면 초기화 전이다 */
+const streetMax = () => ROOM_H + 8;     //                   아래쪽 끝
 
 /* 매장 집기 — 타일 한 칸을 차지하고 손님이 못 지나간다 */
 const FRIDGES = [{ gx: 1, gy: 0 }, { gx: 2, gy: 0 }, { gx: 3, gy: 0 }];
@@ -161,7 +164,8 @@ function spawnCustomers() {
 }
 
 function newCustomer() {
-  const p = P(SPAWN_GX, DOOR.gy);
+  const sp = streetSpot();          // 길에서 나타나 문까지 걸어온다
+  const p = P(sp.gx, sp.gy);
   const c = {
     x: p.x, y: p.y, look: newLook(), sp: vrnd(1.35, 2.25),
     walk: 0, dir: 'e', wait: vrint(0, 90), phase: 'shelf', path: [],
@@ -173,10 +177,21 @@ function newCustomer() {
 /* 격자 위 최단 경로. 90칸짜리 판이라 너비 우선으로 충분하다.
    집기를 막아 두었으므로 손님이 진열대를 뚫고 지나가지 않는다. */
 function walkable(gx, gy) {
-  if (gy !== DOOR.gy && gx < 0) return false;
-  if (gx < SPAWN_GX || gx > SPLIT_GX - 1 || gy < 0 || gy > ROOM_H - 1) return false;
-  return gx < 0 || !blockedAt(gx, gy);
+  /* 문 밖은 **인도 두 열이 세로로 길게** 열려 있다. 예전에는 문 앞 한 줄만
+     통행 가능해서, 손님이 갈 수 있는 곳이 그 자리뿐이었고 그래서 걸어오는 게
+     아니라 소환되는 것처럼 보였다. 인도를 열어 두면 길찾기가 알아서
+     "인도를 따라 오다가 문 앞에서 꺾어 들어온다" 를 만든다. */
+  if (gx < 0) {
+    if (gx === -1) return gy === DOOR.gy;                       // 자동문 한 칸
+    return gx >= STREET_GX && gy >= STREET_MIN && gy <= streetMax();
+  }
+  if (gx > SPLIT_GX - 1 || gy < 0 || gy > ROOM_H - 1) return false;
+  return !blockedAt(gx, gy);
 }
+
+/** 인도 위의 아무 지점. 들어올 때와 나갈 때의 출발·도착지로 쓴다 */
+const streetSpot = () => ({ gx: viewRand() < 0.5 ? STREET_GX : STREET_GX + 1,
+                            gy: vrint(STREET_MIN, streetMax()) });
 
 function findPath(from, to) {
   const key = (a, b) => `${a},${b}`;
@@ -208,7 +223,7 @@ function retarget(p) {
   let to;
   if (p.phase === 'shelf') { const s = vpick(shelvesNow()); to = { gx: s.gx, gy: s.gy + 1 }; }
   else if (p.phase === 'counter') to = { gx: QUEUE.gx, gy: QUEUE.gy + (viewRand() < 0.5 ? 0 : 1) };
-  else to = { gx: SPAWN_GX, gy: DOOR.gy };
+  else to = streetSpot();          // 나갈 때도 길을 따라 멀어진다
   if (!walkable(to.gx, to.gy)) to = { gx: 5, gy: 5 };
   p.path = findPath(from, to);
 }
@@ -263,9 +278,10 @@ function advancePhase(p) {
 /* ══════════════════════════════════════════════════════════════
    문 밖 거리
 
-   손님이 `SPAWN_GX = -4` 에서 나타나 문으로 걸어 들어오는 동선은 원래 있었다.
-   그런데 **그 자리가 검은 허공이라** 걸어오는 게 아니라 소환되는 것처럼 보였다.
-   길과 인도를 깔면 같은 동선이 "밖에서 들어온다"로 읽힌다.
+   손님은 인도(gx -3, -2)의 아무 지점에서 나타나 길을 따라 걸어와 문으로 꺾는다.
+   나갈 때도 길을 따라 멀어진다. 예전에는 문 앞 한 칸만 통행 가능해서 갈 수 있는
+   곳이 그 자리뿐이었고, 그래서 걸어오는 게 아니라 **소환되는 것처럼** 보였다.
+
 
    배경도 단색 남색을 걷어내고 하늘 + 건너편 건물 실루엣으로 바꾼다. 흐릿하게
    뒤에 깔리는 것이라 디테일이 필요 없다 — 도트를 안 찍고도 되는 영역이다.
@@ -399,10 +415,12 @@ function drawStore() {
   for (const o of SHOP_PROPS) items.push({ y: P(o.gx, o.gy).y, f: () => drawProp(o) });
   items.push({ y: P(COUNTER[1].gx, COUNTER[1].gy).y, f: drawCounter });
   addOffice(items);
+  drawPartition(items);
   stepCustomers(items);
 
   items.sort((a, b) => a.y - b.y);
   for (const it of items) it.f();
+  drawWallFittings();
 
   drawPops();
   drawFoot();
@@ -443,11 +461,18 @@ function drawWalls(items) {
     faces(X, d.x, d.y, HW, HH, 42, 45, '#6B5B47', '#8A7659');      // 상부 문틀
   } });
 
-  /* 간판·화이트보드·칸막이는 벽에 붙어 있으므로 벽보다 뒤로 가면 안 된다.
-     벽 타일보다 살짝 큰 y 를 줘서 같은 자리에서 항상 나중에 그리게 한다. */
-  items.push({ y: P(2, -1).y + 0.5, f: drawSignboard });
-  items.push({ y: P(ROOM_W - 2, -1).y + 0.5, f: drawWhiteboard });
-  items.push({ y: P(SPLIT_GX, -1).y + 0.5, f: drawPartition });
+}
+
+/**
+ * 벽 부착물. **정렬 목록에 넣으면 안 된다.**
+ * 간판은 벽 네 칸(gx 1~4)에 걸쳐 있는데 정렬 키는 한 칸의 y 하나뿐이라,
+ * 더 큰 gx 의 벽 타일이 나중에 그려지면서 글자를 덮어 버렸다 — 회사 이름이
+ * 안 보이던 원인이다. 벽보다 항상 앞이고 사람 머리 위에 붙어 있으므로
+ * 정렬에서 빼고 마지막에 한 번 그리는 게 맞다.
+ */
+function drawWallFittings() {
+  drawSignboard();
+  drawWhiteboard();
 }
 
 /** 매장 간판 — 북동쪽 벽 위에 얹는다 */
@@ -485,23 +510,19 @@ function bar(x, y, w, h, v, c) {
 }
 
 /** 매장과 사무실을 가르는 칸막이 + 사장실 벽 */
-function drawPartition() {
+function drawPartition(items) {
+  const put = (gx, gy, h, a, b, c) => {
+    const { x, y } = P(gx, gy);
+    items.push({ y, f: () => prism(X, x, y, HW, HH, h, a, b, c) });
+  };
   for (let gy = 0; gy < ROOM_H; gy++) {
     if (gy === 4) continue;                              // 통로
-    const { x, y } = P(SPLIT_GX, gy);
-    prism(X, x, y, HW, HH, 39, '#4A3E2A', '#2C2418', '#3A3020');
+    put(SPLIT_GX, gy, 39, '#4A3E2A', '#2C2418', '#3A3020');
   }
-  const d = P(SPLIT_GX, 4);
-  prism(X, d.x, d.y, HW, HH, 8, '#4A3E2A', '#2C2418', '#3A3020');
-  for (let gy = 0; gy <= 2; gy++) {                      // 사장실 세로 벽
-    const { x, y } = P(12, gy);
-    prism(X, x, y, HW, HH, 30, '#5A4A38', '#3A2E20', '#4A3C2C');
-  }
-  for (let gx = 13; gx < ROOM_W; gx++) {                 // 사장실 가로 벽 (문 한 칸)
-    const { x, y } = P(gx, 3);
-    if (gx === 13) { prism(X, x, y, HW, HH, 6, '#5A4A38', '#3A2E20', '#4A3C2C'); continue; }
-    prism(X, x, y, HW, HH, 30, '#5A4A38', '#3A2E20', '#4A3C2C');
-  }
+  put(SPLIT_GX, 4, 8, '#4A3E2A', '#2C2418', '#3A3020');
+  for (let gy = 0; gy <= 2; gy++) put(12, gy, 30, '#5A4A38', '#3A2E20', '#4A3C2C');   // 사장실 세로 벽
+  for (let gx = 13; gx < ROOM_W; gx++)                   // 사장실 가로 벽 (문 한 칸)
+    put(gx, 3, gx === 13 ? 6 : 30, '#5A4A38', '#3A2E20', '#4A3C2C');
 }
 
 /* ── 매장 집기 ───────────────────────────────────────────── */
@@ -794,4 +815,4 @@ function drawFoot() {
   });
 }
 
-export { drawBackdrop, drawOutside, glassPanel, BOSS, CLERK, CLERK2, COUNTER, DESKS, DOOR, EXTRA_COUNTER, EXTRA_FRIDGE, EXTRA_SHELF, FLATS, FREEZERS, FRIDGES, HOTSPOTS, P, QUEUE, SHELVES, SHOP_BLOCK, SHOP_PROPS, SPAWN_GX, addOffice, advancePhase, bar, blockedAt, countersNow, drawBossDesk, drawCounter, drawDesk, drawEmptyChair, drawFlat, drawFoot, drawFreezer, drawFridge, drawOfficeProp, drawPartition, drawProp, drawShelf, drawSignboard, drawStore, drawWalls, drawWhiteboard, facilKey, findPath, fl, fridgesNow, inBossRoom, invRatio, newCustomer, offFloorPal, palette, retarget, shelvesNow, shopFloorPal, spawnCustomers, stepCustomers, stocked, storeFloor, storeHit, tileOf, walkable };
+export { drawBackdrop, drawOutside, glassPanel, BOSS, CLERK, CLERK2, COUNTER, DESKS, DOOR, EXTRA_COUNTER, EXTRA_FRIDGE, EXTRA_SHELF, FLATS, FREEZERS, FRIDGES, HOTSPOTS, P, QUEUE, SHELVES, SHOP_BLOCK, SHOP_PROPS, STREET_GX, STREET_MIN, addOffice, advancePhase, bar, blockedAt, countersNow, drawBossDesk, drawCounter, drawDesk, drawEmptyChair, drawFlat, drawFoot, drawFreezer, drawFridge, drawOfficeProp, drawPartition, drawProp, drawShelf, drawSignboard, drawStore, drawWallFittings, drawWalls, drawWhiteboard, facilKey, streetMax, streetSpot, findPath, fl, fridgesNow, inBossRoom, invRatio, newCustomer, offFloorPal, palette, retarget, shelvesNow, shopFloorPal, spawnCustomers, stepCustomers, stocked, storeFloor, storeHit, tileOf, walkable };
