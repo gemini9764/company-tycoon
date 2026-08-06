@@ -530,8 +530,8 @@ try {
     S.staff.forEach(e => e.onTeam = true);
     const team = g.teamOf(S);
 
-    r.push(['라운드 수 = 2 + 난이도',
-            [0,1,2,3].every(d => g.tableRounds(d) === 2 + d), '하 2 ~ 최상 5']);
+    r.push(['테이블은 단판',
+            [0,1,2,3].every(d => g.tableRounds(d) === 1), '난이도와 무관하게 단판']);
 
     const d0 = g.delegateTable();
     r.push(['위임은 성공도·인수가에 무영향', d0.dS === 0 && d0.dP === 0, '기준선 보존']);

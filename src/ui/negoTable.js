@@ -38,7 +38,7 @@ function openTable(s, n, tgt, team, demands, i = 0, acc = { dS: 0, dP: 0, log: [
   const nowP = Math.max(0.02, n.prem + acc.dP);
 
   openModal({
-    title: `${tgt.name} — 협상 테이블 ${i + 1}/${demands.length}`,
+    title: `${tgt.name} — 협상 테이블`,
     body: `
       <p>상대 대표단이 말한다.<br><b class="c-blood">"${DEMANDS[dem].n}"</b></p>
       <div style="margin-top:10px" title="성공도 ${pct(nowS)} · 예상 인수가 ${won(Math.round(tgt.cap * (1 + nowP) * (n.tagMul ?? 1)))}">

@@ -7,7 +7,6 @@ import { $, won } from '../core/util.js';
 import { loanLimit } from '../systems/bank.js';
 import { capCeiling, loanRate, teamPower } from '../systems/company.js';
 import { startNego } from '../systems/mna.js';
-import { tableRounds } from '../systems/negoTable.js';
 import { useRumor } from '../systems/rumor.js';
 import { doGut, shamanFee } from '../systems/shaman.js';
 import { sellStock } from '../systems/stock.js';
@@ -74,7 +73,7 @@ function openCompany(c) {
         dis: !!s.nego || overCap || !teamOf(s).length,
         sub: s.nego ? '이미 진행 중인 협상이 있습니다'
              : !teamOf(s).length ? '협상단에 배정된 직원이 없습니다'
-             : `막판에 협상 테이블이 열립니다 · ${tableRounds(c.diff)}라운드 · 잘 두면 성공도와 인수가가 함께 좋아집니다`,
+             : '막판에 협상 테이블이 한 판 열립니다 · 잘 두면 성공도와 인수가가 함께 좋아집니다',
         run: () => { startNego(s, c, true); renderAll(); } },
       { label: '협상단 파견 — 맡긴다', dis: !!s.nego || overCap || !teamOf(s).length,
         sub: s.nego ? '이미 진행 중인 협상이 있습니다'

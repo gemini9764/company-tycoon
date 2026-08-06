@@ -48,13 +48,22 @@ function approachOf(e) {
   return (e.intel || 0) > (e.nego || 0) ? 'evidence' : 'persuade';
 }
 
-/** 난이도가 높을수록 길게. 하 2 · 중 3 · 상 4 · 최상 5 라운드 */
-const tableRounds = diff => 2 + diff;
+/**
+ * **단판이다.** 난이도별로 2~5 라운드를 돌렸더니 완주까지 이 모달만 60~80번
+ * 뜬다 — 카이로 문법에서 한 사이클의 결정 수를 넘는다. 라운드를 1로 줄이고
+ * 대신 한 수의 무게를 키웠다 (BAL.tableHit/Miss).
+ */
+const tableRounds = () => 1;
 
-/** 라운드별 상대 요구를 미리 뽑는다. 게임 rng 라 시드가 같으면 같은 판이다 */
+/**
+ * 상대 요구를 뽑는다. 쓰는 것은 앞의 1개뿐이지만 **뽑기는 예전과 같은 횟수로
+ * 한다** — rand() 소비량이 달라지면 시드 스트림이 밀려 이전 계측과 비교
+ * 자체가 불가능해진다 (기획서 §7-1 에서 한 번 밟은 함정).
+ */
 function rollDemands(diff) {
-  const n = tableRounds(diff);
-  return Array.from({ length: n }, () => DEMAND_KEYS[Math.floor(rand() * DEMAND_KEYS.length)]);
+  const drawn = Array.from({ length: 2 + diff },
+                           () => DEMAND_KEYS[Math.floor(rand() * DEMAND_KEYS.length)]);
+  return drawn.slice(0, tableRounds());
 }
 
 /**
