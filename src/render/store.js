@@ -174,7 +174,16 @@ function storeHit(p) {
 /* ── 손님 ────────────────────────────────────────────────── */
 function spawnCustomers() {
   customers.length = 0;
-  for (let i = 0; i < 6; i++) customers.push(newCustomer());
+  /* 처음 몇은 **매장 안에서** 시작한다. 전부 길에서 걸어 들어오게 하면 탭을
+     연 순간 가게가 텅 비어 있고, 사람이 차기까지 십수 초가 걸린다.
+     들어오는 그림은 그 뒤로 계속 채워지는 손님들이 만든다. */
+  for (let i = 0; i < 6; i++) {
+    const c = newCustomer();
+    const t = vpick(shelvesNow());
+    const p = P(t.gx, t.gy + 1);
+    c.x = p.x; c.y = p.y; c.wait = vrint(0, 40); c.path = [];
+    customers.push(c);
+  }
 }
 
 function newCustomer() {
@@ -203,9 +212,19 @@ function walkable(gx, gy) {
   return !blockedAt(gx, gy);
 }
 
-/** 인도 위의 아무 지점. 들어올 때와 나갈 때의 출발·도착지로 쓴다 */
-const streetSpot = () => ({ gx: viewRand() < 0.5 ? STREET_GX : STREET_GX + 1,
-                            gy: vrint(STREET_MIN, streetMax()) });
+/**
+ * 인도 위의 지점. 들어올 때와 나갈 때의 출발·도착지다.
+ *
+ * **문 근처로 잡는다.** 인도 전체(-9 ~ roomH+8)에서 아무 데나 고르면, 손님이
+ * 많아질수록 오가는 시간이 길어져 밖에 사람이 고인다 — 등급 손님을 24명으로
+ * 올렸더니 스무 명이 길에 줄을 선 그림이 나왔다. 걸어 들어오는 맛은 살리되
+ * 왕복이 짧아야 사람이 매장 안에 있는다.
+ */
+function streetSpot() {
+  const near = vrint(-3, 3);
+  return { gx: viewRand() < 0.5 ? STREET_GX : STREET_GX + 1,
+           gy: clamp(DOOR.gy + near, STREET_MIN, streetMax()) };
+}
 
 function findPath(from, to) {
   const key = (a, b) => `${a},${b}`;
@@ -267,9 +286,13 @@ function sayShop(i) {
 function stepCustomers(items) {
   /* 손님 수. 등급이 오르면 가게가 커지고 사람도 늘어야 한다 — 넓어진 매장에
      같은 인원이 서 있으면 오히려 썰렁해 보인다. 상한도 같이 올린다. */
+  /* 등급이 손님 수를 정한다. **crowd 가 하한이자 기준**이고, 인지도와 계열사가
+     그 위로 얹힌다. 하한을 둔 이유는 초반에 마케팅이 0 이어도 가게가 비면
+     안 되기 때문이고, 상한을 둔 이유는 넓어진 매장 대비 인원이 그림을 정한다는
+     것뿐 아니라 이 배열이 매 프레임 경로를 도는 비용이기 때문이다. */
   const g = gradeOf(S);
-  const want = clamp(3 + g.deco + Math.round(S.co.marketing * 3) + S.co.subs.length,
-                     3 + g.deco, 8 + g.deco * 2);
+  const want = clamp(Math.round(g.crowd * 0.7) + Math.round(S.co.marketing * 4) + S.co.subs.length,
+                     Math.round(g.crowd * 0.7), g.crowd);
   while (customers.length < want) customers.push(newCustomer());
   while (customers.length > want) customers.pop();
 
