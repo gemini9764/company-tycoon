@@ -1,11 +1,12 @@
 import './debug.js';   // QA 핸들 (window.game)
 import { unlockAudio, startBgm } from './core/audio.js';
 import { BAL } from './core/balance.js';
-import { TIERS } from './core/data.js';
+import { DIFFS, TIERS } from './core/data.js';
 import { frameLoop } from './core/loop.js';
 import { S, newState, setS } from './core/state.js';
 import { SAVE_KEY, Store, loadGame, loadPrefs, saveInfo } from './core/storage.js';
 import { $, won } from './core/util.js';
+import { capCeiling } from './systems/company.js';
 import { initCanvas, rotateCity, setMode, zoomBy, zoomInto } from './render/canvas.js';
 import { renderHud } from './ui/hud.js';
 import { closePanel, renderAll } from './ui/index.js';
@@ -111,6 +112,17 @@ function intro() {
       S.speed = 1;
       news(`${S.co.name} 설립 — 자본금 ${won(BAL.startCash)}`);
       pushInbox(S, '창업', `${S.co.name}이(가) 문을 열었습니다. 첫 목표는 ${TIERS[0].goal}입니다.`, 'good');
+      /* **첫 M&A 를 언제 노려야 하는지 알려 준다.** 인수는 등급으로 잠겨 있지
+         않은데(구멍가게도 capCeiling 3억), 맵에 보이는 건물 대부분이 자릿수가
+         달라 "아직 못 하는 것" 으로 읽힌다. 실제로 살 수 있는 매물을 이름으로
+         짚어 주면 그 오해가 사라진다. 조작은 하나도 늘지 않는다. */
+      const first = S.market.filter(c => !c.owned && c.cap <= capCeiling(S))
+                            .sort((a, b) => a.cap - b.cap)[0];
+      if (first) {
+        pushInbox(S, '첫 인수 후보',
+          `지금 등급으로도 인수할 수 있는 회사가 있습니다 — <b>${first.name}</b> (시가총액 ${won(first.cap)}, 난이도 ${DIFFS[first.diff].name}).<br>`
+          + `맵에서 클릭해 상세를 볼 수 있고, <b>자금이 모자라도 협상은 시작할 수 있습니다</b> — 성사 시점에 인수 대출로 메우면 됩니다.`, 'good');
+      }
       renderAll();
     } }],
   });

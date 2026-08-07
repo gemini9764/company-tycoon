@@ -13,7 +13,12 @@ import { S } from './state.js';
  * (systems/economy.js:tickEconomy).
  */
 const TIERS = [
-  { name:'구멍가게',   goal:'순자산 2,000만 확보',              bldg:0, ok:s=>netWorth(s)>=2e7, at:s=>[netWorth(s), 2e7, 'won'] },
+  /* 스타터 매물(state.js:STARTER_CAPS)의 인수가가 약 1,100만이라, 목표를
+     2,000만에 두면 **인수할 돈이 생긴 뒤에도 한참 구멍가게로 남는다.**
+     그러면 순자산 2,000만을 찍는 순간 동네슈퍼 → (첫 M&A 이미 완료) → 스타트업
+     으로 승급이 이틀 사이 두 번 터진다 (§11-2 가 대기업에서 겪은 그 증상).
+     1,000만으로 낮춰 '자금 → 행동' 순서를 지킨다. */
+  { name:'구멍가게',   goal:'순자산 1,000만 확보',              bldg:0, ok:s=>netWorth(s)>=1e7, at:s=>[netWorth(s), 1e7, 'won'] },
   { name:'동네슈퍼',   goal:'첫 M&A 성사',                     bldg:1, ok:s=>s.co.subs.length>=1 },
   { name:'스타트업',   goal:'계열사 3개 확보',                 bldg:2, ok:s=>s.co.subs.length>=3, unlock:'무당 시스템', at:s=>[s.co.subs.length, 3, 'n'] },
   { name:'중소기업',   goal:'순자산 300억 + 계열사 8개',          bldg:3, ok:s=>netWorth(s)>=3e10 && s.co.subs.length>=8, unlock:'국세청 이벤트', at:s=>[netWorth(s), 3e10, 'won', s.co.subs.length, 8, '계열사'] },

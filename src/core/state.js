@@ -73,6 +73,9 @@ function newState(companyName, seed) {
 /* NPC 회사를 도시 맵 격자에 배치. 규모는 셔플해 위치와 무관하게 흩뿌린다.
    블록은 cityBlocks² 칸이고 그중 npcCount+1 칸을 회사가 쓴다. 블록 좌표는 blockPitch 주기다. 남는 칸은 렌더가
    도심 오피스·아파트·상가·공원·논밭으로 채운다. */
+/* 구멍가게가 처음 노려볼 매물. 난이도는 cap 에서 자동으로 '하'가 된다. */
+const STARTER_CAPS = [1.0e7, 1.6e7, 2.4e7];
+
 function seedMarket(s) {
   const N = BAL.cityBlocks;
   const lots = [];
@@ -87,9 +90,18 @@ function seedMarket(s) {
     let nm;
     do { nm = pick(NAME_A) + pick(SECTORS[sector].suf); } while (used.has(nm));
     used.add(nm);
-    // 6천만 ~ 15조. 등급 상한과 맞물려 초반엔 소형사만 손댈 수 있다.
+    /* 6천만 ~ 15조. 등급 상한과 맞물려 초반엔 소형사만 손댈 수 있다.
+       **단, 맨 아래 세 칸은 스타터 매물로 따로 깐다.**
+       M&A 는 등급으로 잠겨 있지 않다 — 구멍가게도 capCeiling 3억까지 살 수 있다.
+       그런데 곡선의 최저 매물이 5,000~6,700만이라 시작 자금 500만으로는
+       자기자금 도달에 43~50일이 걸렸고, 실제 첫 인수는 117일차였다.
+       메인 콘텐츠가 플레이 시간의 17% 지점에 열리는 셈이라 앞으로 당긴다.
+       곡선 자체는 손대지 않는다 — 밑동을 낮추면 중반 사다리가 통째로 밀린다.
+       rnd() 는 어느 갈래로 가든 **한 번만** 소비한다 (시드 스트림 보존). */
     const t = i / (seats.length - 1);
-    const cap = Math.round(6e7 * Math.pow(250000, t) * rnd(0.7, 1.45));
+    const cap = i < STARTER_CAPS.length
+      ? Math.round(STARTER_CAPS[i] * rnd(0.85, 1.15))
+      : Math.round(6e7 * Math.pow(250000, t) * rnd(0.7, 1.45));
     const diff = cap > 2e12 ? 3 : cap > 1e11 ? 2 : cap > 3e9 ? 1 : 0;
     const listed = capTier(cap) >= LIST_TIER;   // 중견기업 이상은 무조건 상장
     return {

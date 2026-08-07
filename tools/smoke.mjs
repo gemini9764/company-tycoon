@@ -50,7 +50,29 @@ try {
   const badList = game.S.market.filter(c => c.listed !== (game.capTier(c.cap) >= game.LIST_TIER));
   check('상장 기준 — 중견기업 이상', badList.length === 0,
         `상장 ${game.S.market.filter(c => c.listed).length}개 · 예외 ${badList.length}`);
+  /* 스타터 매물 — M&A 는 등급으로 잠겨 있지 않다(구멍가게도 capCeiling 3억).
+     늦는 이유는 최저 매물값이라, 맨 아래 세 칸을 따로 깐다. 이게 없으면
+     자기자금으로 최저 인수가에 닿는 데 43~50일, 실제 첫 인수는 117일차였다. */
+  {
+    const cheap = [...game.S.market].sort((a, b) => a.cap - b.cap);
+    const first = cheap[0];
+    const price = first.cap * (1 + game.DIFFS[first.diff].prem);
+    check('스타터 매물이 깔린다', cheap.slice(0, 3).every(c => c.cap < 4e7),
+          cheap.slice(0, 3).map(c => game.won(c.cap)).join(' · '));
+    check('첫 매물은 등급 상한 안에 있다', first.cap <= game.capCeiling(game.S),
+          `상한 ${game.won(game.capCeiling(game.S))}`);
+    check('첫 매물 난이도는 하', first.diff === 0, game.DIFFS[first.diff].name);
+    /* 승급 목표가 첫 인수가보다 낮아야 '자금 → 행동' 순서가 유지된다.
+       역전되면 순자산 목표를 찍는 순간 동네슈퍼 → 스타트업 이 이틀 사이
+       두 번 터진다 (§11-2 가 대기업에서 겪은 증상). */
+    check('구멍가게 목표 < 첫 인수가', 1e7 < price,
+          `목표 ${game.won(1e7)} < 인수가 ${game.won(price)}`);
+  }
+
   check('창업 후 HUD 렌더', text('hud').includes('테스트상사'));
+  check('첫 인수 후보를 짚어 준다',
+        game.S.inbox.some(m => m.title === '첫 인수 후보'),
+        game.S.inbox.find(m => m.title === '첫 인수 후보') ? '인박스에 등록' : '없음');
 
   win.eval('for (let i = 0; i < 300; i++) game.tickDay();');
   check('300일 진행', game.S.day >= 300, `${game.S.day}일차 · 자금 ${game.won(game.S.co.cash)}`);
