@@ -3,8 +3,8 @@ import { SECTORS } from '../core/data.js';
 import { S } from '../core/state.js';
 import { viewRand } from '../core/rng.js';
 import { $, clamp, vchance, vpick, vrnd } from '../core/util.js';
-import { HH, HW, faces, isoRotMat, isoWin, isoX, isoY, makeLayer, prism, rhomb, rhombEdge, rotFace, rotG, rotGf } from './iso.js';
-import { CITY_H, CITY_O, CITY_PAD_X, CITY_PAD_Y, CITY_W, MAP_H, MAP_W, X, drawLabel, drawPerson, drawPops, drawText, frame, hoverId, mix, newLook, shade, textW } from './canvas.js';
+import { HH, HW, faces, isoRoof, isoRotMat, isoWin, isoX, isoY, makeLayer, prism, rhomb, rhombEdge, rotFace, rotG, rotGf } from './iso.js';
+import { CITY_H, CITY_O, CITY_PAD_X, CITY_PAD_Y, CITY_W, MAP_H, MAP_W, X, bubbleTurn, drawBubble, drawLabel, drawPed, drawPops, drawText, frame, hoverId, mix, newLook, shade, textW } from './canvas.js';
 
 /* ══════════════════════════════════════════════════════════════
    도시 (M&A) — 쿼터뷰
@@ -241,20 +241,47 @@ function kindOf(tx, ty) {
   return e ? e.kind : 'company';
 }
 
+/* 지붕 채색. 몸통이 전부 흰색 30% 를 섞은 파스텔이라 형태가 서로 뭉갠다.
+   지붕만 채도를 살려 대비를 만든다 — 참조한 카이로 화면의 빨강·주황·초록 지붕이
+   하는 일이 이것이다. */
+const ROOF_TINT = ['#D8735F', '#E0925A', '#6FA87E', '#5F86B8', '#C4694F', '#7FA05C'];
+
+/* 도로. 차량이 상자 두 개라 실루엣으로는 자동차가 되지 않는다 —
+   **맥락으로 읽히게** 한다. 도로가 도로처럼 보이면 그 위 상자는 차로 읽힌다.
+   그래서 여기 얹는 것은 전부 사각형과 선이다: 연석 · 아스팔트 얼룩 · 중앙선
+   (실선/점선 구분) · 정지선 · 굵은 횡단보도. */
 function drawRoadTile(g, x, y, rx, ry) {
-  rhomb(g, x, y, HW, HH, rx && ry ? '#989EB2' : ROAD);
+  const cross = rx && ry;
+  rhomb(g, x, y, HW, HH, cross ? '#989EB2' : ROAD);
   rhombEdge(g, x, y, HW, HH, ROAD_EDGE);
-  if (rx && ry) {                                   // 교차로 — 횡단보도
-    g.fillStyle = 'rgba(255,255,255,.55)';
-    for (let i = -12; i <= 12; i += 6) {
-      g.fillRect(Math.round(x + i), Math.round(y - 8 - i / 2), 3, 3);
-      g.fillRect(Math.round(x + i), Math.round(y + 5 - i / 2), 3, 3);
+
+  // 노면 얼룩 — 단색 회색 띠로 보이던 것을 아스팔트로 만든다
+  g.fillStyle = 'rgba(255,255,255,.05)';
+  for (let i = 0; i < 3; i++) {
+    g.fillRect(Math.round(x - 12 + h2(x + i * 31, y + i * 17) * 24),
+               Math.round(y - 4 + h2(y + i, x) * 8), 4, 2);
+  }
+
+  if (cross) {                                      // 교차로 — 횡단보도 + 정지선
+    g.fillStyle = 'rgba(255,255,255,.68)';
+    for (let i = -12; i <= 12; i += 5) {
+      g.fillRect(Math.round(x + i), Math.round(y - 9 - i / 2), 4, 4);
+      g.fillRect(Math.round(x + i), Math.round(y + 5 - i / 2), 4, 4);
     }
+    g.fillStyle = 'rgba(255,255,255,.42)';          // 정지선
+    g.fillRect(Math.round(x - 14), Math.round(y - 1), 6, 3);
+    g.fillRect(Math.round(x + 9), Math.round(y - 1), 6, 3);
     return;
   }
-  g.fillStyle = 'rgba(255,248,214,.7)';            // 차선
+
+  g.fillStyle = 'rgba(255,248,214,.72)';            // 중앙선 — 안쪽은 실선
   if (rx) { g.fillRect(Math.round(x - 8), Math.round(y - 2), 12, 2); g.fillRect(Math.round(x - 2), Math.round(y + 3), 9, 2); }
   else    { g.fillRect(Math.round(x - 5), Math.round(y + 2), 12, 2); g.fillRect(Math.round(x - 2), Math.round(y - 3), 9, 2); }
+
+  /* 연석 — 도로와 인도의 단차. 평면감을 줄이는 데 이게 제일 크다. */
+  g.fillStyle = 'rgba(255,255,255,.30)';
+  g.fillRect(Math.round(x - 15), Math.round(y - 1), 4, 2);
+  g.fillRect(Math.round(x + 12), Math.round(y - 1), 4, 2);
 }
 
 /* 블록 바닥 — 용도마다 색과 무늬가 다르다 */
@@ -334,8 +361,10 @@ function pedFace(t) {
 /* 상자 프리미티브는 정사각 바닥만 그린다. 진행 축으로 두 채를 겹쳐
    길쭉한 차체를 만든다. */
 function drawCar(t, x, y) {
-  const long = t.kind === 'bus' ? 12 : t.kind === 'truck' ? 9 : 6;
-  const h = t.kind === 'bus' ? 17 : 12, rx = 12, ry = 6;
+  /* 보행자를 16px 로 줄였으므로 차도 같이 줄인다. 사람 옆에 놓았을 때
+     차가 사람 두 배쯤 되어야 도로 폭과 맞는다. */
+  const long = t.kind === 'bus' ? 9 : t.kind === 'truck' ? 7 : 5;
+  const h = t.kind === 'bus' ? 12 : 9, rx = 9, ry = 4.5;
   /* 차체를 진행 축으로 늘린다. 회전하면 화면상 진행 축도 바뀌므로 같이 돌린다. */
   const ne = rotFace(pedFace(t), viewOf()) === 'n' || rotFace(pedFace(t), viewOf()) === 's';
   const ox = long, oy = ne ? -long / 2 : long / 2;
@@ -346,10 +375,17 @@ function drawCar(t, x, y) {
     prism(X, cx, cy, rx, ry, h, shade(t.c, 0.24), shade(t.c, -0.26), t.c);
   }
   prism(X, x, y, rx, ry, h, shade(t.c, 0.24), shade(t.c, -0.26), t.c);
-  isoWin(X, x + ox, y + oy, rx, ry, 'r', 5, h - 8, 9, 6, '#5C6580');
-  isoWin(X, x, y, rx, ry, 'l', 5, h - 8, 9, 6, '#56607A');
-  X.fillStyle = '#FFEBA8'; X.fillRect(Math.round(x + ox + 6), Math.round(y + oy + 2), 3, 2);
+  isoWin(X, x + ox, y + oy, rx, ry, 'r', 4, h - 6, 7, 4, '#5C6580');
+  isoWin(X, x, y, rx, ry, 'l', 4, h - 6, 7, 4, '#56607A');
+  X.fillStyle = '#FFEBA8'; X.fillRect(Math.round(x + ox + 5), Math.round(y + oy + 1), 2, 2);
 }
+
+/* 거리에서 오가는 말. 회사 이름을 섞어 도시가 우리 그룹을 의식하는 것처럼 만든다. */
+const STREET_TALK = [
+  '오늘도 야근인가', '점심 뭐 먹지', '저 회사 요즘 잘나간대',
+  '집값이 또 올랐대', '커피 한잔 하고 갈까', '주가 봤어?',
+  '이 동네 많이 변했네', '퇴근하고 싶다', '저기 새로 생겼더라',
+];
 
 /* ── 그리기 ──────────────────────────────────────────────── */
 function drawCity() {
@@ -371,13 +407,26 @@ function drawCity() {
     const p = lotC(e);
     items.push({ y: lotY(e), box: bboxOf({ x: p.x, y: p.y, rx: 46, ry: 23, h: 66 }), f: () => drawTerrain(e) });
   }
-  for (const t of traffic) {
+  if (!props) props = buildProps();
+  for (const p of props) {
+    const x = cityX(CITY_O, p.gx, p.gy), y = cityY(CITY_O, p.gx, p.gy);
+    items.push({
+      y,
+      f: p.kind === 'lamp' ? () => drawLamp(x, y)
+        : p.kind === 'bench' ? () => drawBench(x, y)
+          : () => drawTree(x, y, p.r),
+    });
+  }
+  for (const [i, t] of traffic.entries()) {
     const p = trafficPos(t);
     const x = cityX(CITY_O, p.gx, p.gy), y = cityY(CITY_O, p.gx, p.gy);
     items.push({
       y,
       f: t.type === 'car' ? () => drawCar(t, x, y)
-        : () => drawPerson(x, y, t.look, rotFace(pedFace(t), viewOf()), Math.floor(t.walk * 5)),
+        : () => {
+          drawPed(x, y, t.look, rotFace(pedFace(t), viewOf()), Math.floor(t.walk * 5));
+          if (bubbleTurn(i)) drawBubble(x, y - 20, STREET_TALK[(i * 7) % STREET_TALK.length]);
+        },
     });
   }
   items.sort((a, b) => a.y - b.y);
@@ -501,12 +550,61 @@ function drawRoofProps(x, y, h, rx, k) {
 }
 
 /* 소품들은 메인 캔버스와 지면 레이어 양쪽에 그려야 하므로 컨텍스트를 받는다. */
+/* 나무. 상자였을 때는 외곽 전체가 **초록 큐브밭**이라 도시가 아니라 격자로 보였다.
+   외곽이 화면 면적의 절반을 넘으므로 여기 실루엣이 전체 인상을 좌우한다.
+   침엽수(원뿔 두 단)와 활엽수(돔)로 갈라 줄만 서지 않게 한다. */
 function drawTree(x, y, r, g = X) {
   const big = r > 0.5;
   g.save(); g.globalAlpha = 0.13; rhomb(g, x + 2, y + 2, big ? 12 : 10, big ? 6 : 5, '#000000'); g.restore();
-  g.fillStyle = '#9C7A5E'; g.fillRect(Math.round(x) - 2, Math.round(y) - 11, 5, 11);
+  g.fillStyle = '#9C7A5E'; g.fillRect(Math.round(x) - 2, Math.round(y) - 9, 5, 9);
   const c = big ? '#6FAE7C' : '#7EBC8A';
-  prism(g, x, y - 11, big ? 16 : 12, big ? 8 : 6, big ? 15 : 12, shade(c, 0.32), shade(c, -0.24), c);
+  const w = big ? 15 : 12;
+
+  if (r > 0.34 && r < 0.66) {                       // 침엽수
+    isoRoof(g, x, y - 8, w, w / 2, big ? 15 : 12, shade(c, -0.28), c, shade(c, 0.30));
+    isoRoof(g, x, y - (big ? 18 : 15), w - 4, (w - 4) / 2, big ? 13 : 10,
+            shade(c, -0.22), shade(c, 0.08), shade(c, 0.36));
+  } else {                                          // 활엽수 — 기둥 위에 돔
+    prism(g, x, y - 8, w, w / 2, 9, null, shade(c, -0.26), c);
+    for (let i = 0; i < 3; i++) {
+      const t = 1 - i * 0.24;
+      rhomb(g, x, y - 17 - i * 3, w * t, w * t / 2, shade(c, 0.08 + i * 0.13));
+    }
+  }
+}
+
+/* ── 가로 소품 ────────────────────────────────────────────
+   참조로 삼은 카이로 화면과의 가장 큰 차이는 도트 품질이 아니라 **밀도**다.
+   빈 포장 바닥이 넓게 보이면 그 자체로 도시가 비어 보인다.
+
+   지면 레이어에 구워 넣지 않고 정렬 목록에 넣는다 — 구워 넣으면 건물이 나중에
+   그려져, 건물 **앞**에 있어야 할 나무를 덮어 버린다. */
+let props = null;
+
+function buildProps() {
+  const out = [], P = BAL.blockPitch;
+  for (let gx = 1; gx < MAP_W - 1; gx++) {
+    for (let gy = 1; gy < MAP_H - 1; gy++) {
+      if (isRoad(gx) || isRoad(gy)) continue;
+      const mx = ((gx % P) + P) % P, my = ((gy % P) + P) % P;
+      if (mx !== 1 && mx !== P - 2 && my !== 1 && my !== P - 2) continue;   // 도로변 한 줄만
+      const k = KIND_FLOOR[kindOf(blockOrigin(gx), blockOrigin(gy))] || 'pave';
+      if (k !== 'pave' && k !== 'plaza') continue;
+      const r = h2(gx * 37 + 11, gy * 53 + 7);
+      if (r < 0.46) continue;                       // 다 채우면 오히려 지저분하다
+      out.push({ gx, gy, r, kind: r > 0.90 ? 'lamp' : r > 0.78 ? 'bench' : 'tree' });
+    }
+  }
+  return out;
+}
+
+/** 가로등 — 밤 표현을 붙일 때 여기 불이 들어온다 */
+function drawLamp(x, y) {
+  X.save(); X.globalAlpha = 0.13; rhomb(X, x + 1, y + 1, 5, 3, '#000000'); X.restore();
+  X.fillStyle = '#8A8FA2'; X.fillRect(Math.round(x) - 1, Math.round(y) - 18, 2, 18);
+  X.fillStyle = '#6E7488'; X.fillRect(Math.round(x) - 1, Math.round(y) - 3, 2, 3);
+  X.fillStyle = '#C9B478'; X.fillRect(Math.round(x) - 4, Math.round(y) - 18, 8, 1);
+  X.fillStyle = '#F5E3A8'; X.fillRect(Math.round(x) - 3, Math.round(y) - 22, 6, 4);
 }
 
 function drawBench(x, y) {
@@ -537,8 +635,10 @@ function drawHouse(x, y, r, g = X) {
   prism(g, x, y, 18, 9, 18, shade(wall, 0.14), shade(wall, -0.26), wall);
   isoWin(g, x, y, 18, 9, 'r', 6, 6, 6, 6, '#FFE79E');
   isoWin(g, x, y, 18, 9, 'l', 6, 6, 6, 6, '#BEDCEE');
-  prism(g, x, y - 18, 20, 10, 6, shade(roof, 0.22), shade(roof, -0.26), roof);
-  rhomb(g, x, y - 30, 10, 5, shade(roof, 0.1));
+  /* 경사 지붕 — 처마를 벽보다 2px 내밀어 그림자가 지게 한다. 주택은 도시 외곽을
+     통째로 덮으므로 여기 실루엣 하나가 전체 인상을 바꾼다. */
+  faces(g, x, y - 18, 20, 10, 0, 3, shade(roof, -0.42), shade(roof, -0.22));
+  isoRoof(g, x, y - 21, 20, 10, 13, shade(roof, -0.24), roof, shade(roof, 0.30));
 }
 
 function drawFountain(x, y) {
@@ -569,7 +669,12 @@ function drawBuilding(c) {
   const { x, y, rx, ry, h } = g;
 
   drawApron(x, y, c.lot);
-  X.save(); X.globalAlpha = 0.15; rhomb(X, x + 5, y + 3, rx, ry, '#000000'); X.restore();
+  /* 그림자를 높이에 비례해 밀어 낸다. 고정 오프셋이면 30px 짜리와 100px 짜리가
+     같은 그림자를 달고 있어 높이 차이가 눈에 안 들어온다. */
+  X.save(); X.globalAlpha = 0.13;
+  rhomb(X, x + 4 + h * 0.10, y + 2 + h * 0.05, rx, ry, '#000000');
+  X.globalAlpha = 0.10; rhomb(X, x + 7 + h * 0.16, y + 4 + h * 0.08, rx * 0.86, ry * 0.86, '#000000');
+  X.restore();
   prism(X, x, y, rx, ry, h, shade(body, 0.26), shade(body, -0.28), body);
 
   if (g.style === 'tower') drawTower(c, g, sec, seed, body);
@@ -835,7 +940,14 @@ function drawShop(c, g, sec, seed) {
   faces(X, x, y, rx, ry, top, h, shade(sec.color, -0.40), shade(sec.color, -0.20));         // 처마
   const rr = rx + 4;
   prism(X, x, y - h, rr, rr / 2, 3, shade(sec.color, 0.24), shade(sec.color, -0.28), sec.color);
-  prism(X, x - 2, y - h - 3, 14, 7, 10, '#F5F2EA', shade(sec.color, -0.30), shade(sec.color, 0.16));  // 옥상 간판
+  /* 같은 양식이라도 지붕을 둘로 가른다 — 전부 평지붕이면 위쪽 윤곽이 죄다 같은
+     마름모라 도시가 격자처럼 보인다. 씨드로 갈라 반은 경사 지붕을 얹는다. */
+  if (h2(seed * 3, seed * 7) < 0.45) {
+    const rc = ROOF_TINT[seed % ROOF_TINT.length];
+    isoRoof(X, x, y - h - 3, rr, rr / 2, 15, shade(rc, -0.26), rc, shade(rc, 0.28));
+  } else {
+    prism(X, x - 2, y - h - 3, 14, 7, 10, '#F5F2EA', shade(sec.color, -0.30), shade(sec.color, 0.16));  // 옥상 간판
+  }
 }
 
 function drawNamePlate(x, y, name, color, hit) { plates.push({ x, y, name, color, hit }); }
@@ -970,4 +1082,4 @@ function myGeom() {
   return { x, y, rx, ry: rx / 2, h: MY_H[S.co.tier] };
 }
 
-export { beginRotate, rotating, awning, cornerPost, floorBands, pane, parapet, roofDeck, windowGrid, isRoad, blockOrigin, bboxOf, boxHits, focusOf, isoHit, plateHit, bldgGeom, flushPlates, drawOutskirts, emptyKind, drawFillApart, drawFillOffice, drawFillShops, drawRoofProps, KIND_FLOOR, FILL_BODY, buildEmpties, cityGround, cityHit, drawApron, drawBench, drawBlockTile, drawBuilding, drawCar, drawCity, drawCrop, drawFountain, drawHouse, drawLab, drawMyBuilding, drawNamePlate, drawNegoMark, drawNeon, drawPlant, drawPond, drawRoadTile, drawShed, drawShop, drawSign, drawTerrain, drawTower, drawTree, ensureTraffic, h2, kindOf, lotC, lotY, moveTraffic, myGeom, pedFace, speckle, trafficPos };
+export { buildProps, drawLamp, beginRotate, rotating, awning, cornerPost, floorBands, pane, parapet, roofDeck, windowGrid, isRoad, blockOrigin, bboxOf, boxHits, focusOf, isoHit, plateHit, bldgGeom, flushPlates, drawOutskirts, emptyKind, drawFillApart, drawFillOffice, drawFillShops, drawRoofProps, KIND_FLOOR, FILL_BODY, buildEmpties, cityGround, cityHit, drawApron, drawBench, drawBlockTile, drawBuilding, drawCar, drawCity, drawCrop, drawFountain, drawHouse, drawLab, drawMyBuilding, drawNamePlate, drawNegoMark, drawNeon, drawPlant, drawPond, drawRoadTile, drawShed, drawShop, drawSign, drawTerrain, drawTower, drawTree, ensureTraffic, h2, kindOf, lotC, lotY, moveTraffic, myGeom, pedFace, speckle, trafficPos };
