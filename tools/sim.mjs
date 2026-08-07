@@ -216,21 +216,29 @@ window.runSim = function (strategy, maxDays, seed) {
        돈만 여기저기 묶인다(첫 정책이 그랬다 — 협상 시작 시 평균 ★0.7).
        한 번 정한 대상을 붙들고, 그 대상에 협상을 건다.
        소문 문턱 직전에서 멈춘다 — 넘기면 난이도가 올라 매집한 값어치를 반납한다. */
+    /* 예산 배수 = 이 봇의 '공격성'. 800일 계측 결과 1.5 는 대출을 0~1회밖에
+       쓰지 않는다(총 차입 1,639만) — 그래서 leveraged 가 아니라 aggressive 다.
+       실제로 빌리는 것은 3 뿐이다 (인수금융 4~12회 · 연체 2~4회 · 파산 1/3).
+       인수 판단과 매집 대상 선정이 **같은 잣대**를 써야 하므로 여기서 한 번만 잡는다. */
+    const mult = strategy === 'reckless' ? 3 : strategy === 'aggressive' ? 1.5 : 0.62;
+
     if (window.__stake) {
       /* 지금 협상 중인 회사는 제외한다. 인수되면 지분이 흡수되므로 헛돈이다 */
       const ok = x => x && !x.owned && !avoid.has(x.id)
         && !g.negoFor(S, x.id) && x.cap <= g.capCeiling(S);
       let t = S.market.find(x => x.id === nextId);
       if (!ok(t)) {
-        /* 다음 대상은 **지금 협상에 쓸 돈을 뺀 나머지**로 감당되는 것이어야 한다.
-           현재 현금 기준으로 고르면 인수 대금이 빠진 뒤 그 대상을 못 사고
-           매집한 돈이 통째로 버려진다.
+        /* 다음 대상은 **아래 인수 판단과 같은 잣대**로 고른다.
+           예전에는 '현금 − 진행 중 협상 cap × 1.4' 라는 잔여분으로 골랐는데,
+           그 잔여분이 현금의 44% 라 다음 대상이 늘 지금 대상의 **절반 이하**로
+           내려앉았다. 그 결과 (a) 매집이 거의 안 붙고(평균 ★0.5) (b) nextId
+           우선 규칙 때문에 인수 사다리까지 같이 낮아졌다 — --stake 가 완주에
+           영향이 없던 원인이 이것이다.
+           매집 지출은 하루 cap × stakeStep(1.2%) 이라 인수가와 자릿수가 다르다.
+           감당 여부를 인수가로 거는 것 자체가 잘못된 제약이었다.
 
-           비상장 매물도 대상이다 — 장외 지분 매입 경로가 열려 있다.
-           (그 전에는 상장사만 대상이라 중소기업 구간에서 평균 ★0.7 이었다.) */
-        const cur = g.negosOf(S).reduce((a, n) => a + (S.market.find(x => x.id === n.id)?.cap || 0) * 1.4, 0);
-        const left = Math.max(0, S.co.cash - cur);
-        t = S.market.filter(x => ok(x) && x.cap * 1.55 <= left * 0.62)
+           비상장 매물도 대상이다 — 장외 지분 매입 경로가 열려 있다. */
+        t = S.market.filter(x => ok(x) && x.cap * 1.55 <= S.co.cash * mult)
           .sort((a, b) => b.cap - a.cap)[0];
         nextId = t ? t.id : null;
       }
@@ -270,10 +278,6 @@ window.runSim = function (strategy, maxDays, seed) {
     }
 
     if (g.freeSlot(S) >= 0 && !done()) {
-      /* 예산 배수 = 이 봇의 '공격성'. 800일 계측 결과 1.5 는 대출을 0~1회밖에
-         쓰지 않는다(총 차입 1,639만) — 그래서 leveraged 가 아니라 aggressive 다.
-         실제로 빌리는 것은 3 뿐이다 (인수금융 4~12회 · 연체 2~4회 · 파산 1/3). */
-      const mult = strategy === 'reckless' ? 3 : strategy === 'aggressive' ? 1.5 : 0.62;
       const budget = S.co.cash * mult;
       const pool = S.market
         .filter(x => !x.owned && !sold.has(x.id) && !avoid.has(x.id) && x.cap <= g.capCeiling(S) && x.cap * 1.55 <= budget);

@@ -52,7 +52,7 @@ function openCompany(c) {
               : '<p style="margin-top:8px;font-size:12px" class="c-jade">자기자금으로 지불할 수 있습니다.</p>'}` }
       ${c.owned ? '<p style="margin-top:10px" class="c-jade">이미 우리 그룹 계열사입니다.</p>' : ''}
       ${overCap ? `<p style="margin-top:10px" class="c-blood">현재 등급(${TIERS[s.co.tier].name})으로는 인수할 수 없는 규모입니다. 상한 ${won(capCeiling(s))}</p>` : ''}
-      ${stars || priv ? `<div class="kv"><span>사둔 지분</span><b class="c-gold">${'★'.repeat(stars)}${'☆'.repeat(BAL.stakeStars - stars)}${priv ? ` <span class="c-dim">장외 ${won(priv)}</span>` : ''}</b></div>` : ''}
+      ${stars || priv ? `<div class="kv"><span>사둔 지분</span><b class="c-gold">${'★'.repeat(stars)}${'☆'.repeat(BAL.stakeStars - stars)}${priv ? ` <span class="c-dim">투입 ${won(priv)}</span>` : ''}</b></div>` : ''}
       ${c.leak ? '<p style="margin-top:10px" class="c-blood">지분을 사 모으는 것이 알려졌습니다 — 주가가 오르고 난이도가 한 단계 올라갔습니다.</p>' : ''}
       ${c.rivalOwned ? `<p style="margin-top:10px" class="c-blood">한 번 <b>${c.rivalName || rivalOf(c.id).n}</b>에 뺏긴 회사입니다 — 값이 오르고 난이도가 한 단계 높습니다.</p>` : ''}
       ${c.curse ? '<p style="margin-top:10px" class="c-mauve">살(煞)이 걸려 있습니다 — 협상 성공도 증가율 +45%</p>' : ''}

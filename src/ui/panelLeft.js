@@ -19,7 +19,10 @@ import { TAB } from './tabs.js';
    아이콘 개수). 판정은 전부 systems/mna.js 에 있고 여기는 버튼만 그린다. */
 function negoActsHtml(s, n) {
   const left = negoLeft(n);
-  const pips = '◆'.repeat(left) + '◇'.repeat(Math.max(0, BAL.negoActs - left));
+  /* 직접 협상은 파견 시점에 1회를 먼저 뗀다 — 칸 수와 안내 문구가 그걸 같이 말해야
+     "왜 2회지?" 가 안 생긴다 */
+  const total = BAL.negoActs - (n.direct ? 1 : 0);
+  const pips = '◆'.repeat(left) + '◇'.repeat(Math.max(0, total - left));
   const btn = ([id, a]) => {
     const cost = a.cost(s, n);
     const off = (!a.free && left <= 0) || !!a.can(s, n);
@@ -31,7 +34,7 @@ function negoActsHtml(s, n) {
   /* 손절(중단)은 개입이 아니라 탈출구다. 같은 줄에 두면 횟수를 먹는 것처럼 읽혀
      쓰기를 망설이게 된다. 줄을 나누고 횟수 표시에서도 뺐다. */
   return `<div class="meta" style="margin-top:7px">개입 <b class="c-gold">${pips}</b>
-      — 협상 1건에 ${BAL.negoActs}회. 남은 횟수는 다음 협상으로 넘어가지 않습니다.</div>
+      — 이 협상에 ${total}회${n.direct ? ' <span class="c-dim">(직접 협상으로 1회 사용)</span>' : ''}. 남은 횟수는 다음 협상으로 넘어가지 않습니다.</div>
     <div class="btn-row">${acts.filter(([, a]) => !a.free).map(btn).join('')}</div>
     <div class="btn-row">${acts.filter(([, a]) => a.free).map(btn).join('')}</div>`;
 }

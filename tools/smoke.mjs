@@ -134,6 +134,49 @@ try {
   if (repay) repay.click();
   check('일시 상환', game.debtTotal(game.S) === 0);
 
+  /* ── 은행 — 연체와 압류 ────────────────────────────────────
+     연체는 **연속** 3회에 파산이다. 예전에는 영구 누적이라 초반에 세 번
+     미끄러지면 회복이 불가능했고, 압류까지 같은 카운트를 올려 인수 대출
+     3건이 압류되면 그 자체로 파산이었다. 반대로 압류가 대출을 통째로
+     지우고 있어서, 카운트에서 빼자 '빌려 쓰고 회사만 반납' 이 무료
+     탈출구가 됐다 (reckless 0/6 파산 · 무차입보다 20% 빠름). */
+  const bankOk = win.eval(`(() => {
+    const g = window.game, r = [], B = g.BAL;
+    /* 이 블록은 별도 판을 만들어 쓴다. **끝나면 반드시 원래 판으로 되돌린다** —
+       아래로 이어지는 검사들이 같은 플레이스루를 계속 쓰기 때문이다. */
+    const keep = g.S;
+
+    // 연체 → 정상 상환 → 초기화
+    const S = g.setS(g.newState('연체', 1001));
+    S.co.cash = 1e9; g.takeLoan(S, 'op', 1e9, null);
+    S.co.cash = 0; g.tickMonth(S);
+    const after1 = S.bank.overdue;
+    S.co.cash = 1e12; g.tickMonth(S);
+    r.push(['연체가 쌓인다', after1 === 1, after1 + '회']);
+    r.push(['정상 상환하면 연체가 초기화된다', S.bank.overdue === 0, after1 + ' → ' + S.bank.overdue]);
+
+    // 압류 — 담보를 가져가되 부족분은 무담보 채무로 남는다
+    const T = g.setS(g.newState('압류', 1001));
+    const t = T.market.find(c => c.cap <= g.capCeiling(T));
+    T.co.cash = 1e13; g.completeAcq(T, t, t.cap);
+    const sub = T.co.subs[T.co.subs.length - 1];
+    const loan = t.cap * 3;                       // 처분가(cap × subSellRate)로는 못 갚는 규모
+    T.co.cash = 0;
+    T.bank.loans.push({ kind: 'acq', principal: loan, left: loan, rate: 8,
+                        months: B.loanTermMonths, due: loan, collateral: sub.name });
+    const subs0 = T.co.subs.length;
+    g.tickMonth(T);
+    r.push(['상환 실패 시 담보 계열사를 잃는다', T.co.subs.length === subs0 - 1, subs0 + ' → ' + T.co.subs.length]);
+    r.push(['압류도 연체로 센다', T.bank.overdue >= 1, T.bank.overdue + '회']);
+    r.push(['처분가로 못 갚은 만큼은 채무로 남는다',
+            g.debtTotal(T) > 0 && T.bank.loans.every(l => !l.collateral),
+            '잔여 ' + Math.round(g.debtTotal(T) / 1e8) + '억 · 무담보']);
+
+    g.setS(keep);
+    return r;
+  })()`);
+  bankOk.forEach(([n, ok, d]) => check(n, ok, d));
+
   win.eval(`
     game.S.staff.forEach(e => { e.onTeam = true; e.slot = 0; });
     const t = game.S.market.filter(c => !c.owned && c.cap <= game.capCeiling(game.S))
@@ -417,7 +460,20 @@ try {
     const t = S.market.find(c => c.cap <= g.capCeiling(S));
     t.tags = ['debt']; t.seen = [];
     g.startNego(S, t);
-    r.push(['개입 초기 횟수', g.negoLeft(g.negosOf(S)[0]) === g.BAL.negoActs, g.negoLeft(g.negosOf(S)[0]) + '회']);
+    r.push(['개입 초기 횟수 — 위임', g.negoLeft(g.negosOf(S)[0]) === g.BAL.negoActs, g.negoLeft(g.negosOf(S)[0]) + '회']);
+
+    /* 직접 협상은 개입 1회를 먼저 뗀다. 공짜였을 때는 클릭 한 번에 결렬률이
+       49% → 21% 로 내려가 위임이 죽은 선택지였다. */
+    {
+      const U = g.setS(g.newState('개입직접', 1001));
+      U.staff.forEach(e => e.onTeam = true); U.co.cash = 1e13;
+      const t2 = U.market.find(c => c.cap <= g.capCeiling(U));
+      g.startNego(U, t2, true);
+      const n2 = g.negosOf(U)[0];
+      r.push(['직접 협상은 개입 1회를 쓴다', g.negoLeft(n2) === g.BAL.negoActs - 1 && n2.direct === true,
+              g.negoLeft(n2) + '회 남음']);
+      g.setS(S);
+    }
 
     const s0 = g.negosOf(S)[0].success, p0 = S.co.probe, cash0 = S.co.cash;
     g.negoAct(S, 'wine');
@@ -547,13 +603,20 @@ try {
       r.push(['인수 시 지분 흡수', !S.stock.holds[c2.id] && !(S.stock.stake || {})[c2.id], '']);
     }
 
-    // 자금 부족이면 조용히 멈추지 않는다
+    /* 자금 부족이면 조용히 멈추지 않되 **끄지도 않는다.**
+       예전에는 토글을 지워서, ★ 한 칸이 차기까지 2.5일 걸리는 매집이 하루만
+       현금에 스쳐도 투입금만 남고 ★ 는 안 붙었다 (계측 평균 ★0.47). */
     const T = g.setS(g.newState('매집2', 1001));
     const c3 = T.market.filter(x => x.listed)[0];
     T.co.cash = 1e13; g.toggleStake(T, c3); g.tickStake(T);
+    const qty0 = T.stock.holds[c3.id].qty;
     T.co.cash = 1;    g.tickStake(T);
-    r.push(['자금 부족 시 자동 해제', !T.stock.stake[c3.id] && !!T.stock.holds[c3.id],
+    r.push(['자금 부족이면 쉰다 — 끄지 않는다', T.stock.stake[c3.id] === 'paused' && !!T.stock.holds[c3.id],
             '사둔 지분은 남는다']);
+    r.push(['쉬는 동안은 안 산다', T.stock.holds[c3.id].qty === qty0, '']);
+    T.co.cash = 1e13; g.tickStake(T);
+    r.push(['자금이 생기면 이어서 산다', T.stock.stake[c3.id] === true && T.stock.holds[c3.id].qty > qty0,
+            qty0 + ' → ' + T.stock.holds[c3.id].qty]);
     return r;
   })()`);
   stakeOk.forEach(([n, ok, d]) => check(n, ok, d));
@@ -569,6 +632,18 @@ try {
 
     r.push(['테이블은 단판',
             [0,1,2,3].every(d => g.tableRounds(d) === 1), '난이도와 무관하게 단판']);
+
+    /* 두 접근으로 요구 4종을 다 덮으면 편성 한 번으로 적중률이 100% 가 되어
+       테이블이 판단이 아니게 된다. 예전 표(설득 job·delay / 자료 price·data)가
+       정확히 그랬다 — 위임 결렬률 49% vs 직접 21%.
+       네 종을 다 덮으려면 세 접근을 전부 갖춰야 한다. */
+    const AK = Object.keys(g.APPROACH);
+    const cover = ks => g.DEMAND_KEYS.filter(d => ks.some(k => g.APPROACH[k].beats.includes(d))).length;
+    const pairs = [];
+    for (let i = 0; i < AK.length; i++) for (let j = i + 1; j < AK.length; j++) pairs.push([AK[i], AK[j]]);
+    r.push(['두 접근으로는 요구를 다 못 덮는다', pairs.every(p => cover(p) < g.DEMAND_KEYS.length),
+            pairs.map(p => cover(p)).join('/') + ' of ' + g.DEMAND_KEYS.length]);
+    r.push(['세 접근을 다 갖추면 덮인다', cover(AK) === g.DEMAND_KEYS.length, '']);
 
     const d0 = g.delegateTable();
     r.push(['위임은 성공도·인수가에 무영향', d0.dS === 0 && d0.dP === 0, '기준선 보존']);

@@ -85,6 +85,13 @@ function toggleStake(s, c) {
 /**
  * 하루치 매집. 플레이어가 매수 타이밍을 판단할 일이 없도록 자동으로 나간다.
  * **자금이 모자라면 조용히 멈추지 않는다** — 알림 없이 꺼지면 이유를 모른다.
+ *
+ * 다만 **끄지는 않는다.** 예전에는 하루라도 현금이 스치면 토글을 지웠는데,
+ * 매집은 며칠에 걸쳐 ★ 한 칸이 차는 구조라 (stakePerStar / stakeStep ≈ 2.5일)
+ * 중간에 한 번 꺼지면 이미 넣은 돈만 남고 ★ 는 안 붙는다. 계측에서 평균 ★0.5 에
+ * 묶인 돈 1,300~4,300억이 나온 원인이 이것이다 — 기능이 순손실로 뒤집혀 있었다.
+ * 지금은 그날만 건너뛰고 다음 날 이어서 산다. 값은 `true`(매집 중) /
+ * `'paused'`(자금 부족으로 쉬는 중) 둘 다 truthy 라 `staking()` 은 그대로다.
  */
 function tickStake(s) {
   const m = stakeMap(s);
@@ -95,11 +102,15 @@ function tickStake(s) {
 
     const spend = c.cap * BAL.stakeStep;
     if (s.co.cash < spend) {
-      delete m[id];
-      toast(`자금 부족 — ${c.name} 매집을 멈췄습니다`, 'bad');
-      pushInbox(s, '매집 중단', `${c.name} ${c.listed ? '주식' : '지분'} 매집에 필요한 ${won(spend)}이(가) 모자라 자동으로 멈췄습니다. 사둔 지분은 그대로 남아 있습니다.`, 'bad');
+      /* 알림은 쉬기 시작할 때 한 번만. 매일 띄우면 토스트가 도배된다 */
+      if (m[id] !== 'paused') {
+        m[id] = 'paused';
+        toast(`자금 부족 — ${c.name} 매집을 쉽니다`, 'bad');
+        pushInbox(s, '매집 중단', `${c.name} ${c.listed ? '주식' : '지분'} 매집에 필요한 하루치 ${won(spend)}이(가) 모자라 오늘은 건너뜁니다. 자금이 생기면 자동으로 이어서 사들이고, 사둔 지분은 그대로 남아 있습니다.`, 'bad');
+      }
       continue;
     }
+    if (m[id] === 'paused') { m[id] = true; toast(`${c.name} 매집을 재개했습니다`, 'good'); }
     if (c.listed) {
       const qty = Math.floor(spend / c.price);
       if (qty <= 0) continue;

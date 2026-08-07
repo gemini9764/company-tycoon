@@ -247,6 +247,13 @@ function tickMonth(s) {
   const pay = s.staff.reduce((a, e) => a + e.salary, 0);
   if (pay) { s.co.cash -= pay; lines.push(`급여 -${won(pay)}`); }
 
+  /* 연체는 **연속** 3회에 파산이다. 예전에는 영구 누적이라 초반에 작은 대출로
+     세 번 미끄러지면 그 뒤 아무리 잘 굴려도 사형이 예약돼 있었다. 게다가
+     초반에 작은 대출로 세 번 미끄러지면 그 뒤 아무리 잘 굴려도 사형이
+     예약돼 있었다 (계측: reckless 가 120일차·계열사 0개로 죽었다. 첫 M&A
+     평균보다 이르다). 이번 달 원리금을 다 갚으면 카운트를 0 으로 되돌린다 —
+     '연속으로 못 갚으면 죽는다' 로 바뀌었을 뿐 무리한 차입의 대가는 그대로다. */
+  let missed = false;
   for (const l of s.bank.loans.slice()) {
     if (s.co.cash >= l.due) {
       s.co.cash -= l.due; l.left = Math.max(0, l.left - (l.due - l.left * l.rate / 1200));
@@ -256,16 +263,23 @@ function tickMonth(s) {
         lines.push(`${l.kind === 'acq' ? '인수 대출' : '운영자금'} 완제`);
       }
     } else if (l.collateral) {
-      // 인수금융 상환 실패 → 담보로 잡힌 계열사 압류
+      // 인수금융 상환 실패 → 담보로 잡힌 계열사 압류 (seizeSub 이 연체로 센다)
+      missed = true;
       seizeSub(s, l);
       s.bank.loans.splice(s.bank.loans.indexOf(l), 1);
       lines.push(`<b class="c-blood">${l.collateral} 압류</b>`);
     } else {
+      missed = true;
       s.bank.overdue++;
       l.left *= 1.08;
-      lines.push(`<b class="c-blood">연체 발생 (누적 ${s.bank.overdue}회)</b>`);
-      pushInbox(s, '연체', `${won(l.due)} 상환 실패. 연체 이자가 붙고 신용 등급이 하락합니다. 3회 누적 시 파산합니다.`, 'bad');
+      lines.push(`<b class="c-blood">연체 발생 (연속 ${s.bank.overdue}회)</b>`);
+      pushInbox(s, '연체', `${won(l.due)} 상환 실패. 연체 이자가 붙고 신용 등급이 하락합니다. <b>연속 3회</b>면 파산하며, 한 달만 정상 상환하면 초기화됩니다.`, 'bad');
     }
+  }
+  if (!missed && s.bank.overdue) {
+    lines.push('연체 해소 — 상환 정상화');
+    pushInbox(s, '연체 해소', '이번 달 원리금을 모두 상환해 연체 누적이 초기화됐습니다.', 'good');
+    s.bank.overdue = 0;
   }
   if (s.bank.insured) {
     const fee = grossAssets(s) * BAL.insuranceRate;

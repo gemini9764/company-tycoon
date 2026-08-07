@@ -18,7 +18,14 @@ const TIERS = [
   { name:'스타트업',   goal:'계열사 3개 확보',                 bldg:2, ok:s=>s.co.subs.length>=3, unlock:'무당 시스템', at:s=>[s.co.subs.length, 3, 'n'] },
   { name:'중소기업',   goal:'순자산 300억 + 계열사 8개',          bldg:3, ok:s=>netWorth(s)>=3e10 && s.co.subs.length>=8, unlock:'국세청 이벤트', at:s=>[netWorth(s), 3e10, 'won', s.co.subs.length, 8, '계열사'] },
   { name:'중견기업',   goal:"난이도 '상' 이상 기업 인수",       bldg:4, ok:s=>s.co.hardAcq>=1, unlock:'국가 이벤트' },
-  { name:'대기업',     goal:'사업부 5개 — 그룹 본사 출범',        bldg:5, ok:s=>(s.co.divs || 0) >= 5, at:s=>[s.co.divs || 0, 5, 'n'] },
+  /* 대기업 구간은 '난이도 상 인수' 직후부터 시작하는데, 그 시점이면 계열사가
+     이미 20개를 넘어 사업부 5개가 며칠 만에 채워진다 — 구간이 18~39일이라
+     승급 연출이 스쳐 지나가고 등급 하나가 낭비됐다.
+     **사업부를 6개로 올리는 안은 폐기했다** — 업종 분포 운에 걸려 6시드 중
+     하나가 아예 막혔다(§12-7 이 경고한 그 위험). 대신 조합(사업부 5개) 위에
+     자금 축을 겹친다. 순자산은 중소기업 이후 관문으로 안 쓰였고, 순위(글로벌)와
+     달리 절대값이라 §11-2 가 지적한 '같은 지표 두 번' 에도 걸리지 않는다. */
+  { name:'대기업',     goal:'사업부 5개 + 순자산 6조',            bldg:5, ok:s=>(s.co.divs || 0) >= 5 && netWorth(s) >= 6e12, at:s=>[s.co.divs || 0, 5, '사업부', netWorth(s), 6e12, 'won'] },
   { name:'글로벌그룹', goal:'자산 순위 1위',                    bldg:6, ok:s=>s.co.rank<=1 },
 ];
 

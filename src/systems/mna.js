@@ -72,7 +72,12 @@ function startNego(s, target, direct = false) {
     progress: 0, success: 12 + sumStat(team, 'nego') * 0.08 + stake.success,
     prem: Math.max(0.02, prem), tagMul, team: team.map(e => e.id),
     marks: [25, 50, 75], blessed: 0,
-    acts: BAL.negoActs, done: [],   // 능동 개입 잔여 횟수와 이력
+    /* 직접 협상은 개입 1회를 먼저 뗀다. 예전에는 파견 모달에서 '직접'을 누르는 것이
+       **완전 공짜**였다 — 클릭 한 번에 결렬률이 49% → 21% 로 내려가니 위임은 고를
+       이유가 없는 죽은 선택지였다. 클로징에서 손을 쓰겠다면 협상 중에 쓸 손이 하나
+       줄어드는 게 맞다. 마감(rivalDue)이 걸린 판에서는 이 한 칸이 `시한 제시`를
+       못 쓰게 만들어, '직접 둘까 빨리 끝낼까'가 처음으로 선택이 된다. */
+    acts: BAL.negoActs - (direct ? 1 : 0), done: [],   // 능동 개입 잔여 횟수와 이력
     direct,                          // 클로징에서 테이블을 열지 (false = 협상단에 위임)
   };
   negosOf(s).push(n);
@@ -169,8 +174,11 @@ function estPrice(s, n) {
 const negoLeft = n => n.acts ?? BAL.negoActs;
 
 const NEGO_ACTS = {
+  /* 설명 문구의 숫자는 **전부 상수에서 뽑는다.** 하드코딩해 두었더니 접대비의
+     수사 압박이 5 → 3 으로 내려간 뒤에도 툴팁은 +5 를 계속 보여줬다
+     (§13-2 의 '긴축' 문구와 같은 종류의 어긋남). */
   wine: {
-    n: '접대비 집행', d: '성공도 +12 · 수사 압박 +5',
+    n: '접대비 집행', d: `성공도 +${BAL.negoWineSuccess} · 수사 압박 +${BAL.negoWineProbe}`,
     cost: s => negoBill(s, BAL.negoWineCost),
     can: (s) => s.co.cash < negoBill(s, BAL.negoWineCost) ? '자금이 부족합니다' : null,
     run: (s, n) => {
@@ -180,7 +188,7 @@ const NEGO_ACTS = {
     },
   },
   push: {
-    n: '시한 제시', d: '진행도 +30 · 성공도 -8',
+    n: '시한 제시', d: `진행도 +${BAL.negoPushProgress} · 성공도 ${BAL.negoPushSuccess}`,
     cost: () => 0,
     can: (s, n) => n.progress >= 100 ? '이미 마무리 단계입니다' : null,
     run: (s, n) => {
@@ -194,7 +202,7 @@ const NEGO_ACTS = {
      매집에 정보 가치가 붙어 그 기능이 두터워지고 조작은 하나도 늘지 않는다. */
   quit: {
     free: true,        // 개입 횟수를 먹지 않는다. 손절은 개입이 아니라 탈출구다
-    n: '협상 중단', d: '즉시 종료 · 위약금 = 예상 인수가의 3%',
+    n: '협상 중단', d: `즉시 종료 · 위약금 = 예상 인수가의 ${Math.round(BAL.negoQuitFee * 100)}%`,
     cost: (s, n) => Math.round(estPrice(s, n) * BAL.negoQuitFee),
     can: (s, n) => s.co.cash < Math.round(estPrice(s, n) * BAL.negoQuitFee) ? '위약금을 낼 자금이 없습니다' : null,
     run: (s, n) => {
@@ -268,8 +276,12 @@ function negoEvent(s, n, team) {
  * 클로징. 진행도 100% 에서 불린다.
  *
  * 테이블을 **먼저** 치르고 그 결과를 성공도·프리미엄에 얹은 뒤 판정한다.
- * 위임이면 같은 판을 봇 정책으로 즉시 계산한다 — 직접 하는 쪽이 늘 유리해지지
- * 않도록 위임도 최선 수를 둔다.
+ *
+ * **위임은 정확히 0 이다** (`delegateTable`). 난수도 쓰지 않는다. 테이블은 기존
+ * 밸런스 **위에** 얹은 판정이라, 맡기기만 해도 ± 가 붙으면 기준선이 통째로
+ * 밀린다 — 위임에 최선 수를 두게 했다가 한 번, 무작위 수를 두게 했다가 한 번
+ * 되돌린 자리다 (MNA_HANDOFF §3-b). 이 주석이 오래 반대로 적혀 있었으니
+ * 고치기 전에 `delegateTable` 본문을 먼저 읽을 것.
  */
 function finishNego(s, n = negosOf(s)[0]) {
   const tgt = s.market.find(c => c.id === n.id);

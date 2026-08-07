@@ -32,11 +32,25 @@ const DEMANDS = {
 const DEMAND_KEYS = Object.keys(DEMANDS);
 
 /* ── 우리 접근 3종과 상성 ──────────────────────────────────
-   가위바위보 수준으로 얕게 유지한다. 각 접근이 요구 2종에 강하다. */
+   가위바위보 수준으로 얕게 유지한다. 각 접근이 요구 2종에 강하다.
+
+   **세 접근이 `delay` 를 공유한다.** 예전 표(설득 job·delay / 자료 price·data /
+   압박 delay·price)는 설득과 자료 둘만 있어도 요구 4종을 전부 덮었다. `approachOf`
+   가 성격에서 접근을 뽑으므로, 승부사 아닌 intel 형 1명과 nego 형 1명만 넣으면
+   **적중률이 영구히 100%** 가 되어 테이블이 판단이 아니라 편성 한 번으로 끝났다
+   (계측: 위임 결렬률 49% vs 직접 21%).
+
+   지금은 어느 두 접근을 조합해도 3/4 만 덮인다 — 네 종을 다 덮으려면 세 접근을
+   전부 갖춰야 하고, 그러려면 협상력이 낮은 intel 형을 협상단에 넣어야 한다.
+   테이블 적중과 성공도 증가율(`teamPower` 는 nego 만 본다)이 서로를 물어뜯는
+   구조라, 편성 자체가 선택이 된다.
+
+   `delay`(시간 끌기)를 공유 축으로 고른 이유는 셋 중 유일하게 '무엇을 내주는가'
+   가 아니라 '언제 하는가' 라서다 — 어떤 접근으로도 받아칠 수 있는 게 자연스럽다. */
 const APPROACH = {
   persuade: { n: '설득', beats: ['job', 'delay'],   stat: 'nego' },
-  evidence: { n: '자료', beats: ['price', 'data'],  stat: 'intel' },
-  press:    { n: '압박', beats: ['delay', 'price'], stat: 'nego' },
+  evidence: { n: '자료', beats: ['data', 'delay'],  stat: 'intel' },
+  press:    { n: '압박', beats: ['price', 'delay'], stat: 'nego' },
 };
 
 /**

@@ -2,7 +2,7 @@ import { BAL } from '../core/balance.js';
 import { debtTotal } from '../core/derive.js';
 import { S } from '../core/state.js';
 import { $, esc, won } from '../core/util.js';
-import { loanLimit, repayLoan, takeLoan } from '../systems/bank.js';
+import { loanLimit, monthlyDue, repayLoan, takeLoan } from '../systems/bank.js';
 import { creditName, loanRate } from '../systems/company.js';
 import { completeAcq } from '../systems/mna.js';
 import { renderAll } from './index.js';
@@ -84,6 +84,4 @@ function openAcqLoan(tgt, price) {
   });
 }
 
-function monthlyDue(amt, rate) { const i = rate / 1200; return Math.round(amt * i / (1 - Math.pow(1 + i, -BAL.loanTermMonths))); }
-
-export { donateCost, monthlyDue, openAcqLoan, tabBank };
+export { donateCost, openAcqLoan, tabBank };
