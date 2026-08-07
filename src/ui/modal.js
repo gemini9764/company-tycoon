@@ -14,6 +14,24 @@ function openModal(cfg) {
 function closeModal() { modalStack.pop(); sfx('close'); renderModal(); }
 
 /**
+ * ✕ 버튼 · Esc 로 **선택하지 않고** 닫는 경로.
+ *
+ * `pause()` 한 뒤 열린 모달을 여기로 닫으면 `resume()` 이 선택지 핸들러 안에만
+ * 있어서 **시계가 0 에 멈춘 채 영영 안 돌아왔다.** 배속 버튼으로 억지로 풀면
+ * `pausedSpeed` 가 오염돼 그 뒤로는 모달이 떠도 게임이 안 멈춘다 —
+ * §13-1 이 `completeAcq` 예외로 겪었던 그 증상을, **Esc 한 번으로** 재현할 수
+ * 있었다. `safeRun` 이 예외만 막고 있었지 이 경로는 비어 있었다.
+ *
+ * 마지막 모달이 닫힐 때만 푼다. 중첩 모달의 위쪽만 닫는 경우에는 아래 모달이
+ * 여전히 결정을 기다리므로 멈춘 채로 두는 게 맞다.
+ */
+function dismissModal(cfg) {
+  closeModal();
+  safeRun(cfg?.onClose);
+  if (!modalStack.length) resume();
+}
+
+/**
  * 선택지 핸들러는 대부분 `pause()` 로 멈춘 상태에서 불리고 마지막 줄에서
  * `resume()` 한다. 중간에 예외가 나면 그 `resume()` 이 통째로 날아가
  * **시계가 죽고**(speed 0 고정) `pausedSpeed` 도 복원되지 않아 그 뒤로는
@@ -49,9 +67,9 @@ function renderModal() {
   $('modal').querySelectorAll('[data-a]').forEach(b => b.onclick = () => {
     const a = cfg.actions[+b.dataset.a]; closeModal(); safeRun(a.run);
   });
-  const x = $('mx'); if (x) x.onclick = () => { closeModal(); safeRun(cfg.onClose); };
+  const x = $('mx'); if (x) x.onclick = () => dismissModal(cfg);
   // 모달 본문에 직접 손을 대야 하는 화면(설정의 슬라이더 등)이 쓰는 훅
   safeRun(cfg.onOpen);
 }
 
-export { closeModal, modalStack, openModal, renderModal };
+export { closeModal, dismissModal, modalStack, openModal, renderModal };

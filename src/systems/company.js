@@ -126,8 +126,15 @@ function gainExp(s, e, amt, paid = false) {
  */
 function tickStaff(s) {
   const managing = s.co.subs.length > 0;
+  /* **자기 슬롯이 협상 중일 때만** 협상 경험치다. 2팀이 되면서 `s.nego`(단일)가
+     `s.negos`(배열)로 바뀌었는데 이 줄이 옛 필드를 그대로 보고 있었다.
+     `undefined` 는 falsy 라 조용히 통과했고, 결과적으로 **협상단 전원이
+     expNego(4) 가 아니라 expIdle(1) 을 받고 있었다** — '경험치는 실제로 한
+     일에서만 나온다'는 설계가 정반대로 뒤집혀 있었다.
+     스모크가 `S.nego` 를 직접 세워 검사하는 바람에 계속 통과했다 (§16-1). */
+  const busy = new Set((s.negos || []).map(n => n.slot || 0));
   for (const e of s.staff) {
-    const amt = (e.onTeam && s.nego) ? BAL.expNego
+    const amt = (e.onTeam && busy.has(e.slot || 0)) ? BAL.expNego
       : (e.atShop || (!e.onTeam && managing)) ? BAL.expManage   // 매장 근무도 일이다
         : BAL.expIdle;
     if (gainExp(s, e, amt)) {

@@ -110,6 +110,7 @@ function fire(s, c) {
   pause();
   news(`${c.name} 발생 — 시장 급락`);
   openModal({
+    dismissable: false,
     title: `${c.name}`,
     body: `<p>${c.desc}</p>
       <div class="kv" style="margin-top:10px"><span>계열사 수익</span><b class="c-blood">-${hit}%</b></div>

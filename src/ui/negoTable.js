@@ -1,7 +1,7 @@
 import { BAL } from '../core/balance.js';
 import { esc, pct, won } from '../core/util.js';
 import { applyTable, judgeNego } from '../systems/mna.js';
-import { APPROACH, DEMANDS, approachOf, delegateTable, tableRound } from '../systems/negoTable.js';
+import { APPROACH, DEMANDS, approachOf, tableRound } from '../systems/negoTable.js';
 import { openModal } from './modal.js';
 
 /* ══════════════════════════════════════════════════════════════
@@ -38,6 +38,7 @@ function openTable(s, n, tgt, team, demands, i = 0, acc = { dS: 0, dP: 0, log: [
   const nowP = Math.max(0.02, n.prem + acc.dP);
 
   openModal({
+    dismissable: false,
     title: `${tgt.name} — 협상 테이블`,
     body: `
       <p>상대 대표단이 말한다.<br><b class="c-blood">"${DEMANDS[dem].n}"</b></p>
@@ -60,12 +61,10 @@ function openTable(s, n, tgt, team, demands, i = 0, acc = { dS: 0, dP: 0, log: [
           },
         };
       }),
-      { label: '나머지는 협상단에 맡긴다', sub: '남은 라운드를 자동으로 처리합니다',
-        run: () => {
-          const rest = delegateTable(team, demands.slice(i));
-          acc.dS += rest.dS; acc.dP += rest.dP; acc.log.push(...rest.log);
-          n.tableView = null; applyTable(n, acc); judgeNego(s, n);
-        } },
+      /* '나머지는 협상단에 맡긴다' 는 다라운드 시절의 잔재라 뺐다.
+         단판에서는 '나머지' 가 없고, 위임 결과는 정확히 0 이므로 이 버튼은
+         **언제나 손해인 선택지**였다 — 파견 때 이미 개입 1회를 내고 직접
+         협상을 골랐는데 그 값을 버리는 셈이다. 맡길 거면 파견 단계에서 맡긴다. */
     ],
   });
 }

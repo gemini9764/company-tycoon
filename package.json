@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "node tools/serve.mjs",
     "build": "node tools/build.mjs",
-    "check": "node tools/modcheck.mjs",
+    "check": "node tools/modcheck.mjs && node tools/build.mjs >/dev/null && node tools/deadfield.mjs",
     "smoke": "npm run check && npm run build && node tools/smoke.mjs",
     "sim": "npm run build && node tools/sim.mjs",
     "test": "npm run smoke",

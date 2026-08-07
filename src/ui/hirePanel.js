@@ -2,6 +2,7 @@ import { HIRE_WAYS } from '../core/data.js';
 import { S } from '../core/state.js';
 import { $, clamp, esc, won } from '../core/util.js';
 import { applicants, hireCost, staffCap } from '../systems/company.js';
+import { negoInSlot } from '../systems/mna.js';
 import { renderHud } from './hud.js';
 import { toast } from './toast.js';
 
@@ -90,9 +91,9 @@ function viewFire(s) {
       <h4>${esc(e.name)} <span class="c-dim" style="font-size:10px;font-family:var(--f-sm)">Lv.${e.lv} · 종합 ${power(e)}</span></h4>
       ${stats(PENDING, e)}
       <div class="meta">${e.onTeam ? '협상단' : e.atShop ? '매장 근무' : '계열사 관리'} · 월 ${won(e.salary)}
-        ${e.onTeam && s.nego ? '<b class="c-blood"> · 협상 중이라 내보낼 수 없습니다</b>' : ''}</div>
+        ${negoInSlot(s, e) ? '<b class="c-blood"> · 협상 중이라 내보낼 수 없습니다</b>' : ''}</div>
       <div class="btn-row">
-        <button class="btn blood" data-swap="${e.id}" ${e.onTeam && s.nego ? 'disabled' : ''}>내보내고 들이기</button>
+        <button class="btn blood" data-swap="${e.id}" ${negoInSlot(s, e) ? 'disabled' : ''}>내보내고 들이기</button>
       </div></div>`).join('')}
     <button class="btn wide" data-cancel="1" style="margin-top:4px">이번엔 그만둔다</button>`;
 }
@@ -125,7 +126,7 @@ function renderHire() {
 
   R.querySelectorAll('[data-swap]').forEach(b => b.onclick = () => {
     const i = s.staff.findIndex(x => x.id === b.dataset.swap), out = s.staff[i];
-    if (s.nego && out.onTeam) return toast('협상 중인 인원은 내보낼 수 없습니다', 'bad');
+    if (negoInSlot(s, out)) return toast('협상 중인 인원은 내보낼 수 없습니다', 'bad');
     const fee = PENDING.salary * 3;
     if (s.co.cash < fee) return toast('계약금이 부족합니다', 'bad');
     s.co.cash -= fee;

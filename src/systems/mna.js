@@ -39,6 +39,14 @@ function freeSlot(s) {
 /** 이 매물을 지금 협상 중인가 */
 const negoFor = (s, id) => negosOf(s).find(n => n.id === id) || null;
 
+/**
+ * 이 직원이 **지금 협상에 나가 있는가.**
+ * 2팀이 되면서 `s.nego`(단일)가 사라졌는데 UI 세 곳과 경험치 계산이 옛 필드를
+ * 계속 보고 있었다 — `undefined` 라 조용히 전부 '협상 안 함' 으로 읽혔다.
+ * 판정을 여기 한 곳에 두고 UI 는 이걸 부른다.
+ */
+const negoInSlot = (s, e) => !!e?.onTeam && negosOf(s).some(n => (n.slot || 0) === (e.slot || 0));
+
 /** 협상을 목록에서 뺀다. 예전 `s.nego = null` 자리에 들어간다 */
 function dropNego(s, n) {
   const i = negosOf(s).indexOf(n);
@@ -257,6 +265,9 @@ function negoEvent(s, n, team) {
   const ev = pick(pool);
   pause();
   openModal({
+    /* 선택 자체가 판정이다. 닫아서 넘길 수 있으면 악재 이벤트를 공짜로
+       회피하게 된다 — 성공도가 안 깎이고 진행도만 흐른다. */
+    dismissable: false,
     title: `협상 이벤트 — ${ev.t}`,
     body: `<p>${ev.d}</p><div class="kv" style="margin-top:10px"><span>진행도</span><b>${pct(n.progress)}</b></div><div class="kv"><span>성공도</span><b>${pct(n.success)}</b></div>`,
     choices: ev.c.map(c => ({
@@ -313,6 +324,7 @@ function judgeNego(s, n = negosOf(s)[0]) {
     news(`${tgt.name} 인수 협상 결렬`);
     pause();
     return openModal({
+      dismissable: false,
       title: '협상 결렬',
       body: `<p><b>${tgt.name}</b> 인수 협상이 최종 결렬됐습니다.</p>
              <div class="kv" style="margin-top:10px"><span>최종 성공도</span><b>${pct(n.success)}</b></div>
@@ -325,6 +337,9 @@ function judgeNego(s, n = negosOf(s)[0]) {
   const short = Math.max(0, price - s.co.cash);
   pause();
   openModal({
+    /* '인수 포기' 가 이미 선택지에 있다. 닫기로 빠져나가면 같은 결과인데
+       뉴스도 안 나가고 무엇이 일어났는지 알 방법이 없다. */
+    dismissable: false,
     title: '협상 성사 — 인수가 확정',
     body: `<p><b>${tgt.name}</b> 인수 협상이 성사됐습니다. 인수가를 지불하면 인수가 완료됩니다.</p>
       <div class="kv" style="margin-top:10px"><span>대상 시가총액</span><b>${won(tgt.cap)}</b></div>
@@ -391,5 +406,5 @@ function checkDivisions(s) {
   }
 }
 
-export { applyTable, checkDivisions, completeAcq, dropNego, finishNego, freeSlot, judgeNego, loseToRival, negoEvent, negoFor, negoSlots, negosOf, startNego, tickNego };
+export { applyTable, checkDivisions, completeAcq, dropNego, finishNego, freeSlot, judgeNego, loseToRival, negoEvent, negoFor, negoInSlot, negoSlots, negosOf, startNego, tickNego };
 export { NEGO_ACTS, negoAct, negoLeft };

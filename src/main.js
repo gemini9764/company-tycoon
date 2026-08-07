@@ -10,7 +10,7 @@ import { capCeiling } from './systems/company.js';
 import { initCanvas, rotateCity, setMode, zoomBy, zoomInto } from './render/canvas.js';
 import { renderHud } from './ui/hud.js';
 import { closePanel, renderAll } from './ui/index.js';
-import { closeModal, modalStack, openModal } from './ui/modal.js';
+import { closeModal, dismissModal, modalStack, openModal } from './ui/modal.js';
 import { hideTitle, setExitHandler, showTitle } from './ui/title.js';
 import { news, pushInbox, toggleNews } from './ui/toast.js';
 
@@ -34,7 +34,10 @@ async function boot() {
     if (e.key === '+' || e.key === '=') zoomBy(1);
     if (e.key === '-' || e.key === '_') zoomBy(-1);
     if (e.key === 'Escape') {
-      if (modalStack.length) { if (modalStack[modalStack.length - 1].dismissable !== false) closeModal(); }
+      if (modalStack.length) {
+        const top = modalStack[modalStack.length - 1];
+        if (top.dismissable !== false) dismissModal(top);   // 닫기만 하면 시계가 죽는다
+      }
       else closePanel();
     }
   });

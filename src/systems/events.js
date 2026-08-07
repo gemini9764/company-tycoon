@@ -16,6 +16,9 @@ import { news, pushInbox, toast } from '../ui/toast.js';
 const bill = (s, capRatio, cashRatio) => Math.round(
   BAL.eventCostScale * Math.min(s.co.cap * capRatio, Math.max(1e6, s.co.cash * cashRatio)));
 
+/** 직전에 띄운 이벤트. 연속 중복만 피하려는 것이라 저장하지 않는다. */
+let lastEvent = null;
+
 function tickEvent(s) {
   if (s.day - s.lastEventDay < BAL.eventCooldown) return;
   if (!chance(BAL.eventChancePerDay)) return;
@@ -26,13 +29,19 @@ function tickEvent(s) {
   if (s.co.tier >= 4) pool.push(...EV_NATION);
   if (s.shaman.unlocked) pool.push(EV_SHAMAN[0], EV_SHAMAN[2]);
   if (s.co.mistrust >= 10) pool.push(EV_SHAMAN[1]);
-  /* 같은 이벤트가 연달아 뜨면 빈도를 올린 의미가 없다. 직전 것만 한 번 피한다. */
+  /* 같은 이벤트가 연달아 뜨면 빈도를 올린 의미가 없다. 직전 것만 한 번 피한다.
+     **상태가 아니라 모듈 지역 변수에 둔다** — 이건 함수 참조라 세이브에 JSON 으로
+     안 남는다. 상태에 얹어 두면 저장·복원되는 값처럼 읽혀, 이름이 바뀐 뒤 남은
+     죽은 참조와 구분이 안 된다 (tools/deadfield.mjs 를 만든 계기). */
   let ev = pick(pool);
-  if (pool.length > 1 && ev === s.lastEvent_) ev = pick(pool.filter(e => e !== ev));
-  s.lastEvent_ = ev;
+  if (pool.length > 1 && ev === lastEvent) ev = pick(pool.filter(e => e !== ev));
+  lastEvent = ev;
   pause();
   const built = ev(s);
   openModal({
+    /* 이벤트 선택지는 대가를 고르는 자리다. 닫아서 넘기면 비용을 안 내고
+       지나가게 된다 — 이벤트가 8.5일마다 오므로 그게 최적 플레이가 된다. */
+    dismissable: false,
     title: built.title, body: built.body,
     choices: built.choices.map(c => ({ ...c, run: () => { c.run(); resume(); checkEnding(s); } })),
   });

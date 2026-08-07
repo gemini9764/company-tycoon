@@ -757,18 +757,34 @@ try {
     const a = S.staff[0], b = S.staff[1];
     a.onTeam = true; b.onTeam = false;
 
-    S.nego = { id: 'x', name: 'x', progress: 0, success: 0, prem: 0.3, team: [a.id], marks: [], acts: 3, done: [] };
+    /* **상태를 손으로 세우지 말 것.** 예전에는 여기서 S.nego 를 직접
+       박았는데, 2팀 전환으로 그 필드가 S.negos 로 바뀐 뒤에도 이 케이스만
+       계속 통과했다. 실제 게임에서는 협상단 전원이 expNego(4) 대신
+       expIdle(1) 을 받고 있었다 — **테스트가 버그를 가린 것이다.**
+       실제 진입점(startNego)으로 협상을 만든다. */
+    S.co.cash = 1e13;
+    g.startNego(S, S.market.find(c => c.cap <= g.capCeiling(S)));
+    r.push(['협상이 실제로 걸렸다', g.negosOf(S).length === 1, '']);
+    a.slot = g.negosOf(S)[0].slot;
     S.co.subs.push({ id: 'sub1', sector: 'daily', cap: 1e9, pmi: 99 });
     const e0 = a.exp || 0, e1 = b.exp || 0;
     g.tickStaff(S);
     r.push(['협상단은 협상에서 경험치', a.exp - e0 === B.expNego, '+' + (a.exp - e0)]);
     r.push(['관리 인력은 계열사에서 경험치', b.exp - e1 === B.expManage, '+' + (b.exp - e1)]);
 
-    // 편성만 해 두고 협상이 없으면 대기 취급
-    S.nego = null;
+    /* 2팀 — **자기 슬롯이 협상 중일 때만** 협상 경험치다.
+       빈 팀에 편성만 해 두고 노는 것이 이득이 되면 안 된다. */
+    const idle = g.makeStaff(1); S.staff.push(idle);
+    idle.onTeam = true; idle.slot = 1 - (g.negosOf(S)[0].slot || 0);
+    const i0 = idle.exp || 0;
+    g.tickStaff(S);
+    r.push(['협상 안 하는 팀은 협상 경험치가 아니다', idle.exp - i0 !== B.expNego, '+' + (idle.exp - i0)]);
+
+    // 편성만 해 두고 협상이 아예 없으면 대기 취급
+    g.negosOf(S).slice().forEach(n => g.dropNego(S, n));
     const e2 = a.exp;
     g.tickStaff(S);
-    r.push(['협상 없으면 협상단도 대기', a.exp - e2 === B.expIdle, '+' + (a.exp - e2)]);
+    r.push(['협상 없으면 협상단도 대기', a.exp - e2 !== B.expNego, '+' + (a.exp - e2)]);
 
     // 경험치가 차면 레벨과 월급이 오른다
     const c = g.makeStaff(1); S.staff.push(c); c.lv = 1; c.exp = 0;
@@ -1072,6 +1088,45 @@ try {
     return r;
   })()`);
   divOk.forEach(([n, ok, d]) => check(n, ok, d));
+
+  /* ── 모달 — 닫기로 시계를 죽일 수 없다 ─────────────────────
+     `pause()` 뒤 열린 모달을 ✕/Esc 로 닫으면 `resume()` 이 선택지 핸들러
+     안에만 있어서 시계가 0 에 멈춘 채 안 돌아왔다. 배속 버튼으로 억지로 풀면
+     `pausedSpeed` 가 오염돼 그 뒤로는 모달이 떠도 게임이 안 멈춘다 —
+     §13-1 이 예외로 겪은 증상을 **Esc 한 번으로** 재현할 수 있었다. */
+  const dismissOk = win.eval(`(() => {
+    const g = window.game, r = [];
+    const S = g.setS(g.newState('닫기', 1001));
+    while (g.modalStack.length) g.closeModal();   // 앞 케이스가 남긴 모달 정리
+    g.clearPause();
+    S.speed = 2;
+
+    // 1) 안전망 — 닫을 수 있는 모달을 닫으면 배속이 복원된다
+    g.pause();
+    g.openModal({ title: '테스트', body: '', actions: [{ label: '확인' }] });
+    const paused = S.speed;
+    g.dismissModal(g.modalStack[g.modalStack.length - 1]);
+    r.push(['닫아도 배속이 복원된다', paused === 0 && S.speed === 2, paused + ' → ' + S.speed]);
+
+    // 2) 결정 모달은 애초에 닫히지 않는다
+    S.staff.forEach(e => e.onTeam = true);
+    S.co.cash = 1e13;
+    const t = S.market.find(c => c.cap <= g.capCeiling(S));
+    g.startNego(S, t);
+    for (let i = 0; i < 30 && g.negosOf(S).length; i++) {
+      g.tickDay();
+      const c = document.querySelector('#modal .choice:not([disabled])');
+      if (c && !/지불|대출|포기/.test(c.textContent)) c.click();
+    }
+    const head = document.querySelector('#modal .modal-head span')?.textContent || '';
+    r.push(['인수가 확정 모달이 떴다', head.includes('인수가 확정'), head]);
+    r.push(['결정 모달에는 닫기 버튼이 없다', !document.getElementById('mx'), '']);
+    const top = g.modalStack[g.modalStack.length - 1];
+    r.push(['결정 모달은 dismissable:false', !!top && top.dismissable === false, '']);
+    while (g.modalStack.length) g.closeModal();
+    return r;
+  })()`);
+  dismissOk.forEach(([n, ok, d]) => check(n, ok, d));
 
   /* 모달 핸들러가 던져도 시계는 살아 있어야 한다 — 단일 실패점 방어 */
   const guardOk = win.eval(`(() => {

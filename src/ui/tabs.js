@@ -6,7 +6,7 @@ import { $, clamp, esc, won } from '../core/util.js';
 import { expNeed, gainExp, staffCap, teamPower } from '../systems/company.js';
 import { renderHire, resetHire } from './hirePanel.js';
 import { managersHave, managersNeeded } from '../systems/economy.js';
-import { negoSlots, negosOf } from '../systems/mna.js';
+import { negoInSlot, negoSlots, negosOf } from '../systems/mna.js';
 import { useRumor } from '../systems/rumor.js';
 import { doGut, shamanFee } from '../systems/shaman.js';
 import { buyStock, sellStock } from '../systems/stock.js';
@@ -65,7 +65,7 @@ function tabStaff() {
       <h4>${esc(e.name)} <span style="font-size:10px;font-family:var(--f-sm)" class="${e.onTeam ? 'c-sky' : e.atShop ? 'c-jade' : 'c-dim'}">${e.onTeam ? '협상단' : e.atShop ? '매장' : 'Lv.' + e.lv}</span></h4>
       <div>${chip(e)}</div>
       <div class="meta">${e.trait.name} — ${e.trait.desc} · 월급 ${won(e.salary)}</div>
-      <div class="meta">${e.onTeam && s.nego ? '협상 중' : e.onTeam ? '협상 대기' : e.atShop ? '매장 근무' : s.co.subs.length ? '계열사 관리' : '대기'} · 숙련 ${e.lv >= BAL.expFreeCap ? '최고' : Math.round((e.exp || 0) / expNeed(e) * 100) + '%'}</div>
+      <div class="meta">${e.onTeam && negoInSlot(s, e) ? '협상 중' : e.onTeam ? '협상 대기' : e.atShop ? '매장 근무' : s.co.subs.length ? '계열사 관리' : '대기'} · 숙련 ${e.lv >= BAL.expFreeCap ? '최고' : Math.round((e.exp || 0) / expNeed(e) * 100) + '%'}</div>
       <div class="btn-row">
         ${e.onTeam
           ? `<button class="btn" data-team="${e.id}">${slots > 1 ? `${(e.slot || 0) + 1}팀 제외` : '협상단 제외'}</button>`
