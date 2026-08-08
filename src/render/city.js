@@ -462,9 +462,15 @@ function drawTerrain(e) {
     for (const [dx, dy] of [[-27, -3], [-9, -14], [6, 11], [-20, 12]]) drawTree(x + dx, y + dy, h2(e.tx + dx, e.ty + dy));
     drawBench(x - 5, y + 2);
   } else if (e.kind === 'farm') {
-    for (let i = 0; i < 5; i++) drawCrop(x - 30 + i * 14, y - 11 + i * 6);
-    for (let i = 0; i < 4; i++) drawCrop(x - 9 + i * 14, y + 8 + i * 6);
-    drawShed(x + 26, y - 8);
+    /* 이랑은 흙 블록 **안에** 있어야 한다. 블록은 2×2 타일이라 반폭 48 · 반높이
+       24 짜리 마름모이고, 중심은 `lotC` 보다 HH 위다. 즉 중심 기준 (dx, dy) 가
+       `|dx|/48 + |dy|/24 ≤ 1` 을 지켜야 흙을 밟는다.
+       예전 좌표는 9포기 중 6포기가 이 밖으로 나가 **도로 위에 심겨 있었다.**
+       `drawCrop` 은 (x, y) 가 포기 세 줄의 왼쪽 끝이라 중심은 x+7 이다. */
+    const fy = y - HH;
+    for (let i = 0; i < 4; i++) drawCrop(x - 28 + i * 14, fy - 10 + i * 7);
+    for (let i = 0; i < 4; i++) drawCrop(x - 40 + i * 14, fy - 4 + i * 7);
+    drawShed(x + 30, fy - 4);
   } else if (e.kind === 'houses') {
     drawHouse(x - 23, y - 8, h2(e.tx, e.ty));
     drawHouse(x + 14, y + 5, h2(e.ty, e.tx));

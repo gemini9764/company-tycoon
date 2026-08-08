@@ -557,7 +557,9 @@ function drawSitter(x, y, look, dir = 's', busy = 0) {
    글자는 월드 좌표에 그리면 배율에 눌려 뭉개지므로, 상자만 월드에 그리고
    글자는 `drawText` 의 화면 좌표 경로를 그대로 탄다. */
 function drawBubble(x, y, txt, tint = '#FFF8E6') {
-  const w = Math.max(20, Math.round(textW(txt, 9)) + 10), h = 14;
+  /* size 는 10/12/15 만 있다. 9 는 FONT 테이블에 없어 `X.font` 대입이 무시되고
+     Galmuri 가 아니라 시스템 기본 글꼴로 떨어졌다 (RENDER.md §1). */
+  const w = Math.max(20, Math.round(textW(txt, 10)) + 10), h = 15;
   const bx = Math.round(x - w / 2), by = Math.round(y - h);
   X.fillStyle = 'rgba(0,0,0,.18)';
   X.fillRect(bx + 1, by + 2, w, h);
@@ -567,7 +569,7 @@ function drawBubble(x, y, txt, tint = '#FFF8E6') {
   X.fillRect(Math.round(x) - 2, by + h - 1, 5, 2);
   X.fillRect(Math.round(x) - 1, by + h + 1, 3, 2);
   X.fillStyle = tint; X.fillRect(Math.round(x) - 1, by + h - 1, 3, 2);
-  drawText(x, by + 10, txt, { size: 9, color: '#4A4356' });
+  drawText(x, by + 11, txt, { size: 10, color: '#4A4356' });
 }
 
 /**

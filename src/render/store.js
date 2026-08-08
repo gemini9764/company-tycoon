@@ -22,6 +22,23 @@ const DOOR = { gx: 0, gy: 7 };          // 매장 서쪽 자동문
    '벽이 너무 두껍다' 의 원인이었다. */
 const WALL_T = 0.44;
 
+/**
+ * 얇은 벽의 **안쪽 면**을 `isoWin` 계열에 넘길 가상 타일 중심으로 바꾼다.
+ *
+ * `slab` 은 타일 한 칸이 아니라 두께 `WALL_T` 짜리 판이라, 그 안쪽 면은
+ * 타일의 옆면과 어긋나 있다. 문 유리·창·창틀을 타일 중심(`P(gx,gy)`)으로
+ * 그리면 **면 하나만큼 밀려 벽에서 떨어져 나온다** — 실제로 그랬다.
+ *
+ * 어긋남은 평행이동 하나로 정확히 맞는다. 안쪽 면의 밑변은
+ * `y = cy + (2t-1)·HH + (px-cx)/2` 이고, 이는 중심을 `(cx + dir·HW,
+ * cy + (2t-1)·HH)` 로 옮긴 타일의 옆면과 같은 직선이다.
+ *
+ * @param dir `slab` 에 준 것과 같다. +1 북동 벽, -1 북서 벽.
+ */
+function wallFace(x, y, dir) {
+  return { x: x + dir * HW, y: y + (2 * WALL_T - 1) * HH, side: dir < 0 ? 'r' : 'l' };
+}
+
 const STREET_GX = -3;                   // 인도 (gx -3, -2 두 열)
 const STREET_MIN = -9;                  // 인도에서 오갈 수 있는 위쪽 끝
 /* 함수다 — canvas.js 와 서로 물려 있어 최상위에서 roomH() 를 읽으면 초기화 전이다 */
@@ -184,7 +201,10 @@ function offFloorPal() {
   return [FLOOR_OFF, FLOOR_OFF2];
 }
 
-function inBossRoom(gx, gy) { return gx >= 13 && gy <= 2; }
+/* 사장실은 세로 벽(gx 11)과 가로 벽(gy 3, gx 12~) 으로 둘러싸인 **gx 12~15 ·
+   gy 0~2** 다. 바닥 판정이 `gx >= 13` 이라 벽 안쪽인 gx 12 열만 사무실 색으로
+   남아, 사장실 한 칸이 복도처럼 잘려 보였다. 벽에 맞춘다. */
+function inBossRoom(gx, gy) { return gx >= 12 && gy <= 2; }
 
 /* 사옥에도 클릭할 것을 둔다. 지금까지 사옥 캔버스는 판정이 아예 없어서
    보고만 있는 화면이었다. 사장실 책상 → 결재, 계산대 → 매장 창. */
@@ -508,6 +528,7 @@ function drawStore() {
   for (const o of SHOP_PROPS) items.push({ y: P(o.gx, o.gy).y, f: () => drawProp(o) });
   items.push({ y: P(COUNTER[1].gx, COUNTER[1].gy).y, f: drawCounter });
   addOffice(items);
+  addWhiteboard(items);
   addWindows(items);
   addShopStaff(items);
   addRooms(items);
@@ -532,7 +553,11 @@ function drawStore() {
  */
 function drawWalls(items) {
   /* 벽은 통짜 상자였다. 걸레받이와 허리 몰딩을 넣어 높이를 읽히게 한다. */
-  for (let gx = 0; gx < ROOM_W; gx++) {                 // 북동쪽 벽 (gy = -1)
+  /* gx 는 **-1 부터**다. 0 부터 돌면 모서리 타일(-1,-1)에 북서쪽 판만 서고
+     북동쪽 판이 없어, 두 벽 사이에 세로로 뚫린 틈이 남는다 (폭 4px · 벽 높이
+     전체). 바깥 하늘이 그대로 비쳐 보였다. 모서리에 두 방향 판을 겹쳐 세워야
+     ㄱ 자로 닫힌다. */
+  for (let gx = -1; gx < ROOM_W; gx++) {                // 북동쪽 벽 (gy = -1)
     const { x, y } = P(gx, -1);
     const shop = gx < SPLIT_GX;
     items.push({ y, f: () => {
@@ -552,12 +577,15 @@ function drawWalls(items) {
   }
   const d = P(-1, DOOR.gy);                              // 유리 자동문
   items.push({ y: d.y, f: () => {
-    /* 문도 벽과 같은 두께여야 한다 — 벽만 얇아지면 문만 툭 튀어나온다 */
-    slab(X, d.x, d.y, 51, WALL_T, -1, '#9AB8D0', '#8AB4D8', '#5C4E3C');
+    /* 문도 벽과 같은 두께여야 한다 — 벽만 얇아지면 문만 툭 튀어나온다.
+       **판 자체는 벽 색이다.** 유리색을 판에 칠하면 윗면과 끝면까지 파래져
+       벽에 파란 상자가 박힌 것처럼 보인다. 유리는 아래 glassPanel 이 맡는다. */
+    slab(X, d.x, d.y, 51, WALL_T, -1, '#6E5E48', '#5C4E3C', '#4A3E30');
     slabBand(X, d.x, d.y, WALL_T, -1, 0, 5, '#443A2C');
-    glassPanel(d.x, d.y, HW, HH, 'r', 4, 6, 8, 32, '#A8C8DC');     // 두 짝으로 나뉜 유리
-    glassPanel(d.x, d.y, HW, HH, 'r', 14, 6, 8, 32, '#A8C8DC');
-    faces(X, d.x, d.y, HW, HH, 42, 45, '#6B5B47', '#8A7659');      // 상부 문틀
+    const f = wallFace(d.x, d.y, -1);
+    glassPanel(f.x, f.y, HW, HH, f.side, 4, 6, 8, 32, '#A8C8DC');  // 두 짝으로 나뉜 유리
+    glassPanel(f.x, f.y, HW, HH, f.side, 14, 6, 8, 32, '#A8C8DC');
+    isoWin(X, f.x, f.y, HW, HH, f.side, 2, 42, 20, 3, '#8A7659');  // 상부 문틀
   } });
 
 }
@@ -571,7 +599,6 @@ function drawWalls(items) {
  */
 function drawWallFittings() {
   drawSignboard();
-  drawWhiteboard();
   drawLights();
 }
 
@@ -626,10 +653,11 @@ function addWindows(items) {
     if (gy >= roomH() || gy === DOOR.gy) continue;
     const { x, y } = P(-1, gy);
     items.push({ y: y + 0.4, f: () => {
-      glassPanel(x, y, HW, HH, 'r', 3, 24, 18, 18, '#B4D2E6');
-      X.fillStyle = '#6B5B47';                                  // 창틀 가로대
-      const m = P(-1, gy);
-      X.fillRect(Math.round(m.x) + 4, Math.round(m.y) - 34, 14, 2);
+      /* 벽면 좌표로 그린다. 타일 중심으로 그리면 유리가 벽 밖 허공에 뜬다.
+         `off` 는 짝수여야 한다 — `isoWin` 이 2px 단위로 훑는다 (RENDER.md §8). */
+      const f = wallFace(x, y, -1);
+      glassPanel(f.x, f.y, HW, HH, f.side, 4, 24, 16, 18, '#B4D2E6');
+      isoWin(X, f.x, f.y, HW, HH, f.side, 4, 32, 16, 2, '#6B5B47');   // 창틀 가로대
     } });
   }
 }
@@ -685,7 +713,9 @@ function addRooms(items) {
     }
     if (r.n === '탕비실') addPantry(items, r); else addMeeting(items, r);
     const lab = P(r.gx, r.gy - 1);
-    items.push({ y: lab.y + 0.5, f: () => drawText(lab.x, lab.y - 30, r.n, { size: 9, color: '#E8E2D2' }) });
+    /* size 는 10/12/15 만 있다 — FONT[9] 가 undefined 라 `X.font` 대입이
+       통째로 무시되고 시스템 기본 글꼴로 떨어졌다 (RENDER.md §1). */
+    items.push({ y: lab.y + 0.5, f: () => drawText(lab.x, lab.y - 30, r.n, { size: 10, color: '#E8E2D2' }) });
   }
 }
 
@@ -726,12 +756,16 @@ function addMeeting(items, r) {
       } });
     }
   }
-  const wb = P(r.gx + 1, r.gy);
-  items.push({ y: wb.y - 0.4, f: () => {
-    X.fillStyle = '#3A4254'; X.fillRect(Math.round(wb.x) - 22, Math.round(wb.y) - 46, 44, 20);
-    X.fillStyle = '#EDEAE0'; X.fillRect(Math.round(wb.x) - 20, Math.round(wb.y) - 44, 40, 16);
-    X.fillStyle = '#9FB4C8'; X.fillRect(Math.round(wb.x) - 15, Math.round(wb.y) - 39, 22, 2);
-    X.fillStyle = '#C4A2A2'; X.fillRect(Math.round(wb.x) - 15, Math.round(wb.y) - 34, 14, 2);
+  /* **벽 타일에 맞춘다.** 예전에는 방 안쪽 타일 기준 44px 폭이라 판의 절반이
+     옆 칸 — 그것도 벽을 세우지 않은 출입구 칸 — 위 허공에 떠 있었다.
+     벽 한 칸의 면은 가로 24px 이므로 판도 그 안에 들어가야 한다. */
+  const wb = P(r.gx + 1, r.gy - 1);
+  const bx = Math.round(wb.x) - 12, by = Math.round(wb.y) - 40;
+  items.push({ y: wb.y + 0.4, f: () => {
+    X.fillStyle = '#3A4254'; X.fillRect(bx - 12, by, 24, 20);
+    X.fillStyle = '#EDEAE0'; X.fillRect(bx - 10, by + 2, 20, 16);
+    X.fillStyle = '#9FB4C8'; X.fillRect(bx - 7, by + 6, 12, 2);
+    X.fillStyle = '#C4A2A2'; X.fillRect(bx - 7, by + 11, 8, 2);
   } });
 }
 
@@ -808,7 +842,11 @@ function addDeco(items) {
 function drawSignboard() {
   const a = P(1, -1), b = P(4, -1);
   const x = (a.x + b.x) / 2, y = (a.y + b.y) / 2;
-  const w = 74, h = 22, L = Math.round(x - w / 2), T = Math.round(y - 44);
+  /* 치수에 여유가 없다. 벽면은 화면에서 기울기 0.5 로 누운 띠(세로 두께 약
+     62px)라, 가로로 반듯한 판이 그 안에 들어가려면 **반폭 + 높이 ≤ 62** 여야
+     한다. 74×22 는 39+26=65 로 넘쳐서 우상단이 벽 위 하늘로 삐져나왔다.
+     64×20 이면 34+24=58 이라 위아래로 여유가 남는다. */
+  const w = 64, h = 20, L = Math.round(x - w / 2), T = Math.round(y - 44);
 
   X.save(); X.globalAlpha = 0.26;                       // 벽에 지는 그림자
   X.fillStyle = '#000000'; X.fillRect(L + 3, T + 3, w, h); X.restore();
@@ -817,40 +855,57 @@ function drawSignboard() {
   X.fillStyle = '#2E2A24'; X.fillRect(L, T, w, h);                       // 판
   X.fillStyle = '#C9A253'; X.fillRect(L, T, w, 3);                       // 놋쇠 윗단
   X.fillStyle = 'rgba(255,255,255,.06)'; X.fillRect(L, T + 3, w, 1);
-  for (const bx of [L + 10, L + w - 12]) {                               // 걸이
-    X.fillStyle = '#8A7659'; X.fillRect(bx, T - 8, 2, 7);
-    X.fillStyle = '#C9A253'; X.fillRect(bx - 1, T - 9, 4, 2);
+  /* 걸이는 판 위로 9px 더 솟는데, 그만큼이 그대로 벽 밖으로 나간다.
+     판 안쪽에 박는 고정 나사로 바꾼다 — 벽에 붙은 느낌은 그림자가 낸다. */
+  for (const bx of [L + 8, L + w - 10]) {                               // 고정 나사
+    X.fillStyle = '#8A7659'; X.fillRect(bx, T + 6, 2, 2);
   }
   drawText(x, T + 15, S.co.name, { size: 12, color: '#F0DFAE', shadow: false });
 }
 
-/** 사무실 화이트보드 — 협상 중이면 진행도/성공도, 아니면 다음 등급 목표 */
-function drawWhiteboard() {
-  const a = P(10, -1), b = P(11, -1);
-  const x = (a.x + b.x) / 2, y = (a.y + b.y) / 2;
-  /* 벽면 안쪽에 걸되 **직원 머리 위로** 올린다. y-46 에 두었더니 앞줄에 앉은
-     사원의 얼굴을 가렸다 — 벽에 붙은 것과 사람을 가리는 것은 다른 문제다.
-     폭도 줄여 뒤쪽 책상까지 덮지 않게 했다. */
-  const w = 82, h = 29, ty = Math.round(y - 60), L = Math.round(x - w / 2);
-  X.save(); X.globalAlpha = 0.24;
-  X.fillStyle = '#000000'; X.fillRect(L + 3, ty + 3, w, h); X.restore();
-  X.fillStyle = '#4A4436'; X.fillRect(L - 3, ty - 3, w + 6, h + 6);       // 알루미늄 틀
+/**
+ * 사무실 화이트보드 — 협상 중이면 진행도/성공도, 아니면 다음 등급 목표.
+ *
+ * **벽에 걸지 않는다.** 벽면은 화면에서 기울어진 띠라 가로로 반듯한 판은
+ * `반폭 + 높이 ≤ 62` 를 지켜야 들어가는데(상호판 주석 참고), 이 판은 글자
+ * 두 줄과 막대 두 개를 담느라 반폭 44 · 높이 35 다. 어디에 두든 우상단이
+ * 벽 위로 22px 솟아 **하늘에 떠 보였다.** 폭을 줄이면 글자가 안 들어간다.
+ *
+ * 그래서 바닥에 세우는 이젤로 바꿨다. 세워 두면 벽 띠의 제약을 안 받으므로
+ * **판 크기는 예전 그대로(82×29)** 두었고, 깊이 정렬에 들어가므로 앞의
+ * 집기·사람에 자연스럽게 가린다.
+ * 자리는 사무실 서쪽 빈 열(gx 10) — 책상도 화분도 없는 칸이다.
+ */
+function addWhiteboard(items) {
+  const p = P(10, 3);
+  items.push({ y: p.y, f: () => drawWhiteboard(p.x, p.y) });
+}
+
+function drawWhiteboard(px, py) {
+  const w = 82, h = 29;
+  const x = Math.round(px), ty = Math.round(py) - 46, L = Math.round(px - w / 2);
+  X.save(); X.globalAlpha = 0.18;                                        // 바닥 그림자
+  rhomb(X, px + 3, py + 2, 22, 11, '#000000'); X.restore();
+  X.fillStyle = '#4A4436';                                               // 다리
+  X.fillRect(L + 8, ty + h + 3, 3, 15);
+  X.fillRect(L + w - 11, ty + h + 3, 3, 15);
+  X.fillStyle = '#4A4436'; X.fillRect(L - 3, ty - 3, w + 6, h + 6);      // 알루미늄 틀
   X.fillStyle = '#635944'; X.fillRect(L - 3, ty - 3, w + 6, 2);
   X.fillStyle = '#EDEAE0'; X.fillRect(L, ty, w, h);
   X.fillStyle = '#C9C4B4'; X.fillRect(L, ty + h - 3, w, 3);
   const ns = S.negos || [];
   if (ns.length) {
-    /* 협상이 둘이면 이름 대신 건수를 적는다 — 이 판때기는 93px 라 두 줄이 안 들어간다.
+    /* 협상이 둘이면 이름 대신 건수를 적는다 — 판이 82px 라 두 줄이 안 들어간다.
        진행 막대는 가장 앞선 것을 보여 준다(먼저 끝날 것이 궁금하다). */
     const lead = ns.reduce((a, b2) => (b2.progress > a.progress ? b2 : a));
-    drawText(x, ty + 14, ns.length > 1 ? `협상 ${ns.length}건 진행 중` : `협상 · ${lead.name}`,
+    drawText(x, ty + 13, ns.length > 1 ? `협상 ${ns.length}건 진행 중` : `협상 · ${lead.name}`,
              { size: 10, color: '#26304A', shadow: false });
-    bar(x - w / 2 + 6, ty + 18, w - 12, 5, lead.progress / 100, '#4A86C7');
-    bar(x - w / 2 + 6, ty + 26, w - 12, 5, lead.success / 100, '#2FA37A');
+    bar(x - w / 2 + 6, ty + 16, w - 12, 5, lead.progress / 100, '#4A86C7');
+    bar(x - w / 2 + 6, ty + 23, w - 12, 5, lead.success / 100, '#2FA37A');
   } else {
     const t = TIERS[S.co.tier];
-    drawText(x, ty + 14, t.name, { size: 10, color: '#26304A', shadow: false });
-    drawText(x, ty + 29, t.goal, { size: 10, color: '#5C5340', shadow: false });
+    drawText(x, ty + 13, t.name, { size: 10, color: '#26304A', shadow: false });
+    drawText(x, ty + 26, t.goal, { size: 10, color: '#5C5340', shadow: false });
   }
 }
 
@@ -1188,4 +1243,4 @@ function drawFoot() {
   });
 }
 
-export { drawBackdrop, drawOutside, glassPanel, BOSS, CLERK, CLERK2, COUNTER, DESKS, DOOR, EXTRA_CLERK, EXTRA_COUNTER, EXTRA_FRIDGE, EXTRA_SHELF, FLATS, FREEZERS, FRIDGES, HOTSPOTS, P, QUEUE, SHELVES, SHOP_BLOCK, SHOP_PROPS, STREET_GX, STREET_MIN, addOffice, advancePhase, bar, blockedAt, clerksNow, countersNow, drawBossDesk, drawCounter, drawDesk, drawEmptyChair, drawFlat, drawFoot, drawFreezer, drawFridge, drawOfficeProp, drawPartition, drawProp, drawShelf, drawSignboard, drawStore, drawWallFittings, drawWalls, drawWhiteboard, facilKey, streetMax, streetSpot, findPath, fl, fridgesNow, inBossRoom, invRatio, newCustomer, offFloorPal, palette, retarget, shelvesNow, shopFloorPal, spawnCustomers, stepCustomers, stocked, storeFloor, storeHit, tileOf, walkable };
+export { drawBackdrop, drawOutside, glassPanel, BOSS, CLERK, CLERK2, COUNTER, DESKS, DOOR, EXTRA_CLERK, EXTRA_COUNTER, EXTRA_FRIDGE, EXTRA_SHELF, FLATS, FREEZERS, FRIDGES, HOTSPOTS, P, QUEUE, SHELVES, SHOP_BLOCK, SHOP_PROPS, STREET_GX, STREET_MIN, addOffice, addWhiteboard, advancePhase, bar, blockedAt, clerksNow, countersNow, drawBossDesk, drawCounter, drawDesk, drawEmptyChair, drawFlat, drawFoot, drawFreezer, drawFridge, drawOfficeProp, drawPartition, drawProp, drawShelf, drawSignboard, drawStore, drawWallFittings, drawWalls, drawWhiteboard, facilKey, streetMax, streetSpot, findPath, fl, fridgesNow, inBossRoom, invRatio, newCustomer, offFloorPal, palette, retarget, shelvesNow, shopFloorPal, spawnCustomers, stepCustomers, stocked, storeFloor, storeHit, tileOf, walkable };
