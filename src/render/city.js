@@ -4,7 +4,7 @@ import { S } from '../core/state.js';
 import { viewRand } from '../core/rng.js';
 import { $, clamp, vchance, vpick, vrnd } from '../core/util.js';
 import { HH, HW, faces, isoRoof, isoRotMat, isoWin, isoX, isoY, makeLayer, prism, rhomb, rhombEdge, rotFace, rotG, rotGf } from './iso.js';
-import { CITY_H, CITY_O, CITY_PAD_X, CITY_PAD_Y, CITY_W, MAP_H, MAP_W, X, bubbleTurn, drawBubble, drawLabel, drawPed, drawPops, drawText, frame, hoverId, mix, newLook, shade, textW } from './canvas.js';
+import { CITY_H, CITY_O, CITY_W, cityPadX, cityPadY, MAP_H, MAP_W, X, bubbleTurn, drawBubble, drawLabel, drawPed, drawPops, drawText, frame, hoverId, mix, newLook, shade, textW } from './canvas.js';
 
 /* ══════════════════════════════════════════════════════════════
    도시 (M&A) — 쿼터뷰
@@ -117,7 +117,7 @@ function drawGroundRot(layer, a, alpha) {
   X.translate(px, py);
   X.transform(m[0], m[1], m[2], m[3], 0, 0);
   X.translate(-px, -py);
-  X.drawImage(layer.c, -CITY_PAD_X, -CITY_PAD_Y);
+  X.drawImage(layer.c, -layer.padX, -layer.padY);
   X.restore();
 }
 
@@ -129,14 +129,18 @@ const plateBoxes = [];
 /* ── 지면 캐시 ───────────────────────────────────────────── */
 /* 타일 441장을 매 프레임 그리면 낭비다. 정지 화면이라 한 번 굽고 통째로 붙인다. */
 function cityGround() {
-  if (ground && builtFor === S && bakedView === viewOf()) return ground;
+  /* 패딩이 커지면(창을 넓혔다) 다시 굽는다 — 안 그러면 넓힌 만큼이 단색으로 남는다 */
+  if (ground && builtFor === S && bakedView === viewOf()
+      && ground.padX === cityPadX() && ground.padY === cityPadY()) return ground;
   builtFor = S; bakedView = viewOf();
   baking = true;
   buildEmpties();
   ensureTraffic();
-  const LW = CITY_W + CITY_PAD_X * 2, LH = CITY_H + CITY_PAD_Y * 2;
-  const O = { x: CITY_O.x + CITY_PAD_X, y: CITY_O.y + CITY_PAD_Y };
+  const pX = cityPadX(), pY = cityPadY();
+  const LW = CITY_W + pX * 2, LH = CITY_H + pY * 2;
+  const O = { x: CITY_O.x + pX, y: CITY_O.y + pY };
   const layer = makeLayer(LW, LH);
+  layer.padX = pX; layer.padY = pY;
   const g = layer.ctx;
   if (g) {
     g.fillStyle = '#8FBE8C'; g.fillRect(0, 0, LW, LH);
@@ -167,7 +171,12 @@ function cityGround() {
    전부 지면 레이어에 굽는다. 타일이 수천 장이어도 **프레임 비용은 0** 이다.
    ─────────────────────────────────────────────────────────── */
 function drawOutskirts(g, O, LW, LH) {
-  const R = 34;
+  /* 채울 고리의 두께. **34 로 박아 두면 패딩과 조용히 어긋난다.**
+     타일이 덮는 범위는 사각형이 아니라 마름모라, 레이어 모서리까지 닿으려면
+     `(|dx|/HW + |dy|/HH) / 2` 만큼의 타일이 필요하다. 옛 상수 34 는 지금
+     패딩(546/60)에 딱 맞게 맞춰진 값이었고 — 그래서 패딩을 키우는 순간
+     모서리가 맨바닥으로 드러났다. 레이어 크기에서 되짚어 구한다. */
+  const R = Math.ceil((LW / 2 / HW + LH / 2 / HH) / 2 - MAP_W / 2) + 2;
   const inMap = (gx, gy) => gx >= 0 && gx < MAP_W && gy >= 0 && gy < MAP_H;
   const cell = (gx, gy) => h2((gx >> 2) * 31 + 7, (gy >> 2) * 17 + 3);
 
@@ -395,7 +404,7 @@ function drawCity() {
     drawGroundRot(prevGround, -rot.dir * e * q, 1 - e);      // 이전 방향이 빠져나가고
     drawGroundRot(g, rot.dir * (1 - e) * q, e);              // 새 방향이 들어온다
   } else if (g && g.c) {
-    X.drawImage(g.c, -CITY_PAD_X, -CITY_PAD_Y);
+    X.drawImage(g.c, -g.padX, -g.padY);
   }
   moveTraffic();
 

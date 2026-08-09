@@ -338,6 +338,27 @@ canvas.zooming{transform:scale(1.8);opacity:0}
   .hud-id b{font-family:var(--f);font-size:12px}
   .dbtn,.mode-tab{width:56px;font-size:10px;font-family:var(--f-sm)}
 }
+/* 세로가 짧은 화면 — 상단 UI 를 눌러 맵 높이를 되찾는다.
+   도시 월드가 824px 인데 배율이 정수라(RENDER.md §3) **823 이면 그냥 잘린다.**
+   1080p 에서 브라우저 크롬을 빼면 뷰포트가 약 990px, 상단 UI 가 193px 라
+   남는 게 797px 이었다 — 세로 전체 보기가 애초에 성립하지 않았다.
+   브레이크포인트가 가로(1320/1120)에만 있고 세로에 없던 것이 원인이다.
+   기준값이 1080 이 아니라 1000 인 것은 크롬을 뺀 뷰포트를 재기 때문이다.
+   여기서 약 34px 을 돌려주면 797 → 831 로 824 를 넘긴다. */
+@media (max-height:1000px){
+  #app{gap:4px;padding:4px}
+  #hud .hud-id,#hud .hud-stat{padding-top:3px;padding-bottom:3px}
+  #dock{padding:4px 8px}
+  .mode-tab,.dbtn{padding:3px 4px}
+  #news{padding:5px 10px}
+}
+@media (max-height:860px){
+  .mode-tab,.dbtn{gap:1px}
+  #news{padding:3px 8px}
+  #news .tag{padding:2px 7px}
+  #news-toggle{padding:3px 7px}
+}
+
 @media (prefers-reduced-motion:reduce){
   *{animation-duration:.01ms!important;transition-duration:.01ms!important}
 }

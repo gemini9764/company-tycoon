@@ -41,7 +41,33 @@ const CITY_O = { x: MAP_H * HW, y: CITY_HEAD };
 /* 월드 밖 여백에도 시골 풍경을 깐다. 월드 변환은 캔버스를 자르지 않으므로,
    지면 레이어를 월드보다 크게 구워 음수 좌표에 붙이면 레터박스가 채워진다.
    월드 크기(=배율 계산의 분모)는 그대로라 좁은 창에서 배율이 떨어지지 않는다. */
-const CITY_PAD_X = 546, CITY_PAD_Y = 60;
+/* **크기는 화면에서 유도한다 — 상수로 박지 않는다.** 546/60 을 박아 두면
+   2560×1440 에서 세로로 224px 이 필요한데 60 밖에 없어 위아래에 단색 띠가
+   남는다. 여백이 시골로 안 채워지면 "맵이 화면을 안 채운다" 는 인상이 그대로
+   남으므로, 배율만 고쳐서는 반응형이 끝나지 않는다.
+
+   화면이 커질 때만 늘리고 64px 단위로 끊는다 — 리사이즈마다 지면을 다시
+   굽지 않으려는 것. 채우는 범위는 `drawOutskirts` 가 레이어 크기에서 되짚어
+   구하므로 여기 상한은 **메모리**로 정한다. 가로 1024 는 3440 울트라와이드가
+   기준이다(가로로 넓고 세로가 짧아 배율이 1에 묶이는 최악의 조합). 두 상한이
+   동시에 걸리는 화면은 없어 지면은 실제로 18MB 안쪽이다 — 회전 중에는 이전
+   레이어까지 두 장이 산다. */
+const PAD_X0 = 546, PAD_Y0 = 60;
+const PAD_X_MAX = 1024, PAD_Y_MAX = 448, PAD_STEP = 64;
+let padX = PAD_X0, padY = PAD_Y0;
+
+const cityPadX = () => padX;
+
+const cityPadY = () => padY;
+
+/* 지금 배율에서 화면을 덮는 데 필요한 만큼으로 넓힌다. **줄이지는 않는다** —
+   창을 오갈 때마다 지면을 다시 굽는 값이 아까워서다. */
+function growPad(viewW, viewH) {
+  const need = (half, world, cur, max) =>
+    Math.min(max, Math.max(cur, Math.ceil((half - world / 2) / PAD_STEP) * PAD_STEP));
+  padX = need(viewW / 2, CITY_W, padX, PAD_X_MAX);
+  padY = need(viewH / 2, CITY_H, padY, PAD_Y_MAX);
+}
 
 /* 사옥(경영) — 16×10 타일. gx 0..8 매장 / 9 칸막이 / 10..15 사무실 */
 const ROOM_W = 16, ROOM_H_MAX = 17;
@@ -169,7 +195,7 @@ function applyCamera() {
 }
 
 /* 맵이 화면보다 작으면 가운데 고정, 크면 가장자리 밖으로 못 나가게 잡는다.
-   여유는 지면 레이어가 구워진 만큼(CITY_PAD)만 허용한다 — 그 밖은 검은 화면이다. */
+   여유는 지면 레이어가 구워진 만큼(cityPadX/Y)만 허용한다 — 그 밖은 검은 화면이다. */
 
 /**
  * 지금 화면에 맞는 배율. **환경에서 유도한다 — 기준 해상도를 박아 두지 않는다.**
@@ -179,10 +205,11 @@ function applyCamera() {
  * 가로의 54% 만 덮어 **도시가 빈 벌판 위의 섬처럼 보였다.** CSS 는 좁은 쪽으로만
  * 브레이크포인트가 있고 넓은 쪽이 비어 있던 것과 같은 구멍이다.
  *
- * **축소 한계**를 여기서 정한다. 초기 배율만 맞춰 놓으면 휠로 한 단 줄이는
- * 순간 그대로 되돌아온다 — 시작값 조정은 반응형이 아니다. 그래서 이 값이
- * `ZOOM_MIN` 을 대신한다. 도시는 원래 화면보다 크고 끌어서 보는 물건이라
- * (1920 화면에서도 이미 세로가 잘린 채 돈다) 이게 원래 값에 가깝다.
+ * **이건 시작값이지 축소 한계가 아니다.** 예전엔 이 값을 `ZOOM_MIN` 자리에도
+ * 같이 썼는데, 그러면 휠을 끝까지 내려도 맵 전체가 안 보인다. 2560×1440 에서
+ * 가로 83% · 세로 70% 에 갇혔다 — **1920 보다 덜 보인다.** 화면이 커졌는데
+ * 보이는 맵이 줄어드는 건 어떤 기준으로도 반응형이 아니다. 바닥은
+ * `floorZoom()` 이 따로 쥔다.
  *
  * 두 값의 작은 쪽을 목표 배율로 삼는다.
  * - `cover` 화면을 덮는 데 필요한 배율. 반올림이라 조금 남는 정도(1920 화면의
@@ -194,23 +221,45 @@ function applyCamera() {
  * 절대값을 그대로 넘겼더니 3840×1900 에서 PX 가 6까지 튀어 맵의 40% 만 보였다.
  * 목표에 못 미치더라도 내림한다 — 넘치면 화면 밖으로 나가는 쪽이라 더 나쁘다.
  */
-function coverZoom() {
+function startZoom() {
   const cover = Math.round(Math.max(CV.width / CITY_W, CV.height / CITY_H));
   const keep = Math.floor(CV.height / (CITY_H * 0.5));
   const target = Math.max(1, Math.min(cover, keep));
   return Math.max(1, Math.floor(target / fitPX));
 }
 
-/* 휠이 오갈 수 있는 범위. 바닥은 화면이 정하고, 천장은 바닥에서 두 단 위다 —
-   큰 화면이라고 확대 여유까지 줄어들면 안 된다. */
+/* 휠이 오갈 수 있는 범위. 천장은 시작 배율에서 두 단 위다 — 큰 화면이라고
+   확대 여유까지 줄어들면 안 된다. */
 let zMin = ZOOM_MIN, zMax = ZOOM_MAX;
 
+/**
+ * 축소 바닥. **`PX ≥ DPR`, 즉 월드 도트 하나가 CSS 픽셀 하나 아래로 안 내려간다.**
+ *
+ * 배율을 디바이스 픽셀로만 재던 게 반응형이 DPR 에 흔들리던 지점이다.
+ * DPR 2 노트북에서는 `fitPX` 가 1로 잡히는데, 거기서 `PX = 1` 은 도트가
+ * CSS 반 픽셀이 된다는 뜻이다 — 맵 전체가 들어오긴 하지만 화면 한가운데
+ * 우표만 하게 박힌다. 쓸 일이 없는 칸을 휠 범위에 남겨 둘 이유가 없다.
+ *
+ * 같은 CSS 크기의 창이면 DPR 1 이든 2 든 같은 그림이 나온다 — 반응형이
+ * 물리 해상도가 아니라 **레이아웃 크기**를 따라가야 한다는 뜻이다.
+ */
+function floorZoom() { return Math.max(ZOOM_MIN, Math.ceil(DPR / fitPX)); }
+
+/* 플레이어가 배율을 직접 만졌는가. 안 만졌으면 창 크기가 바뀔 때마다 화면에
+   맞는 배율로 다시 잡아 준다 — **이게 실제로 "반응형" 인 부분이다.** 한 번이라도
+   만졌으면 그 뒤로는 건드리지 않는다. 창을 줄였다고 플레이어가 맞춰 둔 배율을
+   빼앗으면 그건 반응형이 아니라 참견이다. */
+let zoomUser = false;
+
 function applyCameraCity(w, h) {
-  zMin = coverZoom();
-  zMax = Math.max(ZOOM_MAX, zMin + 2);
-  if (camFor !== S) { camFor = S; zoom = zMin; camX = w / 2; camY = h / 2; }
-  zoom = clamp(zoom, zMin, zMax);            // 창이 커지면 바닥이 올라간다
+  zMin = floorZoom();
+  const z0 = Math.max(zMin, startZoom());
+  zMax = Math.max(ZOOM_MAX, z0 + 2);
+  if (camFor !== S) { camFor = S; zoomUser = false; camX = w / 2; camY = h / 2; }
+  if (!zoomUser) zoom = z0;                  // 창이 바뀌면 다시 맞춘다
+  zoom = clamp(zoom, zMin, zMax);
   PX = fitPX * zoom;
+  growPad(CV.width / (fitPX * zMin), CV.height / (fitPX * zMin));   // 가장 줄였을 때 기준
   clampCam();
   OX = Math.round(CV.width / 2 - camX * PX);
   OY = Math.round(CV.height / 2 - camY * PX);
@@ -221,8 +270,8 @@ function spanClamp(v, half, size, pad) {
 }
 
 function clampCam() {
-  camX = spanClamp(camX, CV.width / 2 / PX, CITY_W, CITY_PAD_X * 0.6);
-  camY = spanClamp(camY, CV.height / 2 / PX, CITY_H, CITY_PAD_Y * 0.6);
+  camX = spanClamp(camX, CV.width / 2 / PX, CITY_W, cityPadX() * 0.6);
+  camY = spanClamp(camY, CV.height / 2 / PX, CITY_H, cityPadY() * 0.6);
 }
 
 /** 휠 확대·축소. 포인터 밑에 있던 월드 좌표가 제자리에 남도록 카메라를 옮긴다. */
@@ -230,6 +279,7 @@ function zoomBy(dir, ev) {
   if (!S || S.mode !== 'city') return;
   const next = clamp(zoom + dir, zMin, zMax);
   if (next === zoom) return;
+  zoomUser = true;                                // 여기서부터는 플레이어가 쥔다
   const before = ev ? toLogical(ev) : null;
   zoom = next;
   applyCamera();
@@ -646,4 +696,4 @@ function shade(hex, amt) {
   return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`;
 }
 
-export { drawHair, drawLegs, rrect, applyCamera, zoomBy, CITY_HEAD, CITY_H, CITY_O, CITY_PAD_X, CITY_PAD_Y, CITY_W, CV, DPR, FONT, footY, HAIRS, MAP_H, MAP_W, OUT, OX, OY, PX, ROOM_H_MAX, ROOM_W, roomH, SHIRTS, SKINS, SPLIT_GX, storeH, storeO, storeW, X, customers, draw, drawHead, drawLabel, drawPed, drawPerson, drawBubble, bubbleTurn, drawPops, drawSitter, drawText, drawTorso, faceOf, fitCanvas, frame, hideTip, hitLot, hoverId, initCanvas, lotPos, mix, moveTip, newLook, onCanvasClick, onCanvasMove, pops, setMode, shade, showTip, textW, tipEl, toLogical, worldH, worldW, zoomInto, rotateCity };
+export { drawHair, drawLegs, rrect, applyCamera, zoomBy, CITY_HEAD, CITY_H, CITY_O, CITY_W, cityPadX, cityPadY, CV, DPR, FONT, footY, HAIRS, MAP_H, MAP_W, OUT, OX, OY, PX, ROOM_H_MAX, ROOM_W, roomH, SHIRTS, SKINS, SPLIT_GX, storeH, storeO, storeW, X, customers, draw, drawHead, drawLabel, drawPed, drawPerson, drawBubble, bubbleTurn, drawPops, drawSitter, drawText, drawTorso, faceOf, fitCanvas, frame, hideTip, hitLot, hoverId, initCanvas, lotPos, mix, moveTip, newLook, onCanvasClick, onCanvasMove, pops, setMode, shade, showTip, textW, tipEl, toLogical, worldH, worldW, zoomInto, rotateCity };
