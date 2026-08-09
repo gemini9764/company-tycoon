@@ -179,30 +179,37 @@ function applyCamera() {
  * 가로의 54% 만 덮어 **도시가 빈 벌판 위의 섬처럼 보였다.** CSS 는 좁은 쪽으로만
  * 브레이크포인트가 있고 넓은 쪽이 비어 있던 것과 같은 구멍이다.
  *
+ * **축소 한계**를 여기서 정한다. 초기 배율만 맞춰 놓으면 휠로 한 단 줄이는
+ * 순간 그대로 되돌아온다 — 시작값 조정은 반응형이 아니다. 그래서 이 값이
+ * `ZOOM_MIN` 을 대신한다. 도시는 원래 화면보다 크고 끌어서 보는 물건이라
+ * (1920 화면에서도 이미 세로가 잘린 채 돈다) 이게 원래 값에 가깝다.
+ *
  * 두 값의 작은 쪽을 목표 배율로 삼는다.
  * - `cover` 화면을 덮는 데 필요한 배율. 반올림이라 조금 남는 정도(1920 화면의
  *   가로 19%)는 그냥 두고, 절반 가까이 빌 때만 한 단 올라간다.
  * - `keep`  세로를 절반 미만으로 잘라먹지 않는 상한. 초광폭 화면에서 `cover`
- *   만 보면 맵이 띠처럼 잘린다.
+ *   만 보면 맵이 띠처럼 잘린다. 여기서는 덮는 것보다 맵을 읽는 게 먼저다.
  *
  * 돌려주는 값은 **절대 배율이 아니라 `fitPX` 에 곱할 배수**다. 이걸 헷갈려
  * 절대값을 그대로 넘겼더니 3840×1900 에서 PX 가 6까지 튀어 맵의 40% 만 보였다.
  * 목표에 못 미치더라도 내림한다 — 넘치면 화면 밖으로 나가는 쪽이라 더 나쁘다.
  */
-function fitZoom() {
+function coverZoom() {
   const cover = Math.round(Math.max(CV.width / CITY_W, CV.height / CITY_H));
   const keep = Math.floor(CV.height / (CITY_H * 0.5));
   const target = Math.max(1, Math.min(cover, keep));
-  return clamp(Math.max(1, Math.floor(target / fitPX)), ZOOM_MIN, ZOOM_MAX);
+  return Math.max(1, Math.floor(target / fitPX));
 }
 
-/* 창 크기가 바뀌면 다시 맞춘다 — 단 **사용자가 휠을 돌린 뒤로는 건드리지 않는다.**
-   직접 맞춰 둔 배율을 리사이즈가 되돌려 버리면 그게 더 성가시다. */
-let zoomTouched = false;
+/* 휠이 오갈 수 있는 범위. 바닥은 화면이 정하고, 천장은 바닥에서 두 단 위다 —
+   큰 화면이라고 확대 여유까지 줄어들면 안 된다. */
+let zMin = ZOOM_MIN, zMax = ZOOM_MAX;
 
 function applyCameraCity(w, h) {
-  if (camFor !== S) { camFor = S; zoomTouched = false; camX = w / 2; camY = h / 2; }
-  if (!zoomTouched) zoom = fitZoom();
+  zMin = coverZoom();
+  zMax = Math.max(ZOOM_MAX, zMin + 2);
+  if (camFor !== S) { camFor = S; zoom = zMin; camX = w / 2; camY = h / 2; }
+  zoom = clamp(zoom, zMin, zMax);            // 창이 커지면 바닥이 올라간다
   PX = fitPX * zoom;
   clampCam();
   OX = Math.round(CV.width / 2 - camX * PX);
@@ -221,11 +228,10 @@ function clampCam() {
 /** 휠 확대·축소. 포인터 밑에 있던 월드 좌표가 제자리에 남도록 카메라를 옮긴다. */
 function zoomBy(dir, ev) {
   if (!S || S.mode !== 'city') return;
-  const next = clamp(zoom + dir, ZOOM_MIN, ZOOM_MAX);
+  const next = clamp(zoom + dir, zMin, zMax);
   if (next === zoom) return;
   const before = ev ? toLogical(ev) : null;
   zoom = next;
-  zoomTouched = true;                              // 이후 리사이즈가 되돌리지 않게
   applyCamera();
   if (before) {
     const after = toLogical(ev);
