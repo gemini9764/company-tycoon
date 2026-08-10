@@ -51,13 +51,14 @@ import * as titleMod from './ui/title.js';
 import * as negoTableUiMod from './ui/negoTable.js';
 import * as subPanelMod from './ui/subPanel.js';
 import * as tabsMod from './ui/tabs.js';
+import * as tutorialMod from './ui/tutorial.js';
 
 const api = {
   ...audioMod, ...balanceMod, ...rngMod, ...clockMod, ...dataMod, ...deriveMod, ...loopMod, ...stateMod, ...storageMod, ...utilMod,
   ...tagsMod, ...rivalsMod, ...subsMod, ...subPanelMod, ...negoTableUiMod,
   ...canvasMod, ...cityMod, ...storeRenderMod, ...bankMod, ...companyMod, ...crisisMod, ...economyMod, ...endingMod, ...eventsMod, ...mnaMod,
   ...negoTableMod, ...rumorMod, ...shamanMod, ...stockMod,
-  ...bankPanelMod, ...companyPopupMod, ...dockMod, ...iconsMod, ...hudMod, ...panelLeftMod, ...shopPanelMod, ...deskMod, ...toastMod, ...uiMod, ...modalMod, ...settingsMod, ...tabsMod, ...titleMod,
+  ...bankPanelMod, ...companyPopupMod, ...dockMod, ...iconsMod, ...hudMod, ...panelLeftMod, ...shopPanelMod, ...deskMod, ...toastMod, ...uiMod, ...modalMod, ...settingsMod, ...tabsMod, ...titleMod, ...tutorialMod,
 };
 
 // S 는 교체되는 라이브 바인딩이라 스프레드로는 최신값이 안 잡힌다. getter로 노출한다.

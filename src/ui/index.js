@@ -6,6 +6,7 @@ import { renderLeft } from './panelLeft.js';
 import { renderShop } from './shopPanel.js';
 import { TAB, renderRight, setTab } from './tabs.js';
 import { renderNews } from './toast.js';
+import { renderTut } from './tutorial.js';
 
 /* ── 맵 위 안내문 ────────────────────────────────────────── */
 function renderTopBar() {
@@ -32,6 +33,6 @@ function renderPanel() {
 
 function closePanel() { setTab(null); }
 
-function renderAll() { renderHud(); renderDock(); renderPanel(); renderNews(); renderTopBar(); }
+function renderAll() { renderHud(); renderDock(); renderPanel(); renderNews(); renderTopBar(); renderTut(); }
 
 export { closePanel, renderAll, renderPanel, renderTopBar };

@@ -16,6 +16,7 @@ import { renderHud } from '../ui/hud.js';
 import { renderLeft } from '../ui/panelLeft.js';
 import { renderShop } from '../ui/shopPanel.js';
 import { TAB, renderRight } from '../ui/tabs.js';
+import { tutCheck } from '../ui/tutorial.js';
 
 /* ══════════════════════════════════════════════════════════════
    LOOP — 하루 진행 타이머 + 렌더 프레임 분리
@@ -53,6 +54,7 @@ function frameLoop(t) {
       if (S.speed === 0) { acc = 0; break; }   // 모달이 뜨면 즉시 멈춘다
     }
   }
+  tutCheck();   // 튜토리얼은 렌더 루프에 붙는다 — sim·smoke 는 tickDay 를 직접 부르므로 기준선이 안 흔들린다
   draw();
   requestAnimationFrame(frameLoop);
 }

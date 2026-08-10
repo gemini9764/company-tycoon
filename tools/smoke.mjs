@@ -1142,6 +1142,133 @@ try {
   // 위 케이스가 던진 것은 의도된 예외다. '런타임 에러 없음' 집계에서 뺀다
   for (let i = errors.length - 1; i >= 0; i--) if (errors[i].includes('의도된 예외')) errors.splice(i, 1);
 
+  /* ── 튜토리얼 — 구멍가게 ~ 첫 M&A ─────────────────────────
+     판정은 전부 상태만 본다(발주 훅 하나 제외). 그래서 UI 를 클릭하지 않고
+     상태를 직접 세워도 단계가 넘어가야 한다. 넘어가지 않으면 판정이 UI 흔적에
+     의존하고 있다는 뜻이고, 그러면 순서를 바꿔 플레이한 사람이 막힌다. */
+  const tutOk = win.eval(`(() => {
+    const g = window.game, r = [];
+    const S = g.setS(g.newState('튜토', 1001));
+    while (g.modalStack.length) g.closeModal();
+    g.clearPause();
+    const step = () => g.tutDoneN(S);          // 완료 단계 수 (포인터가 아니다)
+
+    r.push(['새 판이면 튜토리얼이 켜진다', g.tutOn(S) && step() === 0, '단계 ' + step()]);
+
+    /* **팝업이 시계를 죽이면 안 된다.** modal.js 는 선택하고 닫는 경로에서
+       resume() 을 대신 불러 주지 않는다 — ✕/Esc 만 복원한다. 안내 팝업은
+       하루 한 번꼴로 뜨므로 여기서 새면 게임이 통째로 멈춘 채 남는다. */
+    S.speed = 2;
+    g.tutCheck();
+    const paused = S.speed;
+    document.querySelector('#modal [data-a]').click();
+    r.push(['안내 팝업이 시계를 죽이지 않는다', paused === 0 && S.speed === 2,
+      paused + ' → ' + S.speed]);
+    while (g.modalStack.length) g.closeModal();
+
+    g.setMode('store');   g.tutCheck(); while (g.modalStack.length) g.closeModal();
+    r.push(['① 사옥 진입', step() === 1, '단계 ' + step()]);
+    g.tutDid('order');                   while (g.modalStack.length) g.closeModal();
+    r.push(['② 재고 발주', step() === 2, '단계 ' + step()]);
+    S.co.marketing = 1.12; g.tutCheck(); while (g.modalStack.length) g.closeModal();
+    r.push(['③ 인지도', step() === 3, '단계 ' + step()]);
+    S.staff[0].onTeam = true; S.staff[0].slot = 0;
+    g.tutCheck();                        while (g.modalStack.length) g.closeModal();
+    r.push(['④ 협상단 편성', step() === 4, '단계 ' + step()]);
+
+    /* 지금 단계는 '파견'(도시)이다 — 체크리스트가 그려지고, 눌러야 할 버튼의
+       키가 body 에 실려야 한다. 독은 매 틱 다시 그려지므로 클래스를 직접
+       붙이는 방식이면 여기서 잡히지 않는다. */
+    g.renderTut();
+    r.push(['체크리스트 렌더', document.getElementById('tut').classList.contains('on')
+      && /파견/.test(document.getElementById('tut').textContent), '']);
+    r.push(['하이라이트 키가 body 에 실린다', document.body.dataset.tut === 'city',
+      'data-tut=' + document.body.dataset.tut]);
+
+    S.negos.push({ id: 'x', slot: 0 });  g.tutCheck(); while (g.modalStack.length) g.closeModal();
+    r.push(['⑤ 파견', step() === 5, '단계 ' + step()]);
+
+    // 첫 인수로 종료. 종료하면 패널이 사라지고 하이라이트도 걷힌다
+    S.co.subs.push({ id: 'x', name: 'ㄱ', sector: 'food', cap: 1e7, diff: 0, day: 1, tags: [], seen: [] });
+    g.tutCheck();
+    const finModal = (document.querySelector('#modal .modal-head span') || {}).textContent || '';
+    while (g.modalStack.length) g.closeModal();
+    r.push(['⑥ 첫 인수에서 종료', !g.tutOn(S) && /튜토리얼 완료/.test(finModal), finModal]);
+    r.push(['종료 후 패널·하이라이트 제거', !document.getElementById('tut').classList.contains('on')
+      && !document.body.dataset.tut, '']);
+
+    // 이미 진행된 세이브(구버전)에는 튜토리얼이 켜지지 않는다
+    const S2 = g.setS(g.newState('구세이브', 2002));
+    S2.co.tier = 3; delete S2.flags.tut;
+    r.push(['진행된 세이브는 켜지지 않는다', !g.tutOn(S2), '']);
+
+    /* 튜토리얼 이전 세이브가 초반이면 켜지되, 이미 끝낸 단계는 조용히 건너뛴다.
+       안 그러면 불러오자마자 완료 토스트가 우수수 뜬다. */
+    const S4 = g.setS(g.newState('중간세이브', 2002));
+    delete S4.flags.tut;
+    S4.day = 30; S4.mode = 'store'; S4.co.autoOrder = true; S4.co.marketing = 1.4;
+    r.push(['진행 중 세이브는 끝낸 단계를 건너뛴다', g.tutOn(S4) && g.tutDoneN(S4) === 3,
+      '단계 ' + g.tutDoneN(S4)]);
+
+    /* ── 순서를 어겨도 완료로 잡힌다 ─────────────────────────
+       ② 발주를 건너뛰고 ④ 협상단을 먼저 편성하는 경로. 예전 순차 포인터에서는
+       이미 한 일이 ○ 로 남고, 나중에 ② 를 하는 순간 완료 토스트가 몰려 떴다. */
+    const S6 = g.setS(g.newState('역순', 5005));
+    while (g.modalStack.length) g.closeModal();
+    g.clearPause();
+    g.setMode('store');                                  // ①
+    S6.staff[0].onTeam = true; S6.staff[0].slot = 0;     // ④ 를 먼저
+    g.tutCheck(); while (g.modalStack.length) g.closeModal();
+    const st6 = g.tutState(S6);
+    r.push(['앞을 건너뛰고 뒤를 먼저 해도 ✓ 가 찍힌다', !!st6.done.team && !st6.done.order,
+      JSON.stringify(st6.done)]);
+    r.push(['안내는 남은 것 중 가장 앞으로 간다', g.tutCur(S6).id === 'order', g.tutCur(S6).id]);
+    g.renderTut();
+    r.push(['체크리스트가 순서와 무관하게 표시된다',
+      (document.querySelectorAll('#tut .tut-list li.done') || []).length === 2
+      && document.querySelector('#tut .tut-list li.now').textContent.includes('발주'),
+      document.querySelectorAll('#tut .tut-list li.done').length + '개 완료']);
+
+    /* 순차 포인터 시절 세이브가 들어와도 죽지 않는다 (필드 모양이 바뀌었다) */
+    const S7 = g.setS(g.newState('구포맷', 6006));
+    S7.mode = 'store'; S7.co.marketing = 1.5;
+    S7.flags.tut = { i: 1, shown: 1, off: false, order: false };   // 옛 모양
+    r.push(['옛 포맷 세이브를 상태에서 다시 읽는다',
+      g.tutDoneN(S7) === 2 && g.tutState(S7).i === undefined,
+      '완료 ' + g.tutDoneN(S7)]);
+
+    // 건너뛰기 — 한 번 묻고, 확인하면 다시 안 뜬다
+    const S3 = g.setS(g.newState('스킵', 3003));
+    g.tutSkip();
+    const btns = [...document.querySelectorAll('#modal [data-a]')];
+    btns[btns.length - 1].click();
+    while (g.modalStack.length) g.closeModal();
+    g.tutCheck();
+    r.push(['건너뛰면 다시 안 뜬다', !g.tutOn(S3) && !g.modalStack.length, '']);
+
+    /* 체크리스트의 건너뛰기 버튼은 팝업을 닫아야 보인다. 안내가 필요 없는
+       사람이 첫 화면에서 바로 나갈 수 있어야 하므로 팝업에도 붙어 있다.
+       확인 모달이 한 단계 더 열리므로 시계 복원 경로도 같이 본다. */
+    const S5 = g.setS(g.newState('팝업스킵', 4004));
+    g.clearPause();
+    S5.speed = 2;
+    g.tutCheck();                                   // ① 팝업
+    const acts = [...document.querySelectorAll('#modal [data-a]')];
+    r.push(['안내 팝업에 건너뛰기가 있다', /건너뛰기/.test(acts.map(b => b.textContent).join('')),
+      acts.map(b => b.textContent.trim()).join('/')]);
+    acts[acts.length - 1].click();                  // 건너뛰기 → 확인 모달
+    const conf = [...document.querySelectorAll('#modal [data-a]')];
+    conf[conf.length - 1].click();                  // 건너뛴다
+    while (g.modalStack.length) g.closeModal();
+    g.tutCheck();
+    r.push(['팝업에서 바로 건너뛴다', !g.tutOn(S5) && S5.speed === 2 && !g.modalStack.length,
+      'speed ' + S5.speed]);
+
+    g.clearPause();
+    return r;
+  })()`);
+  tutOk.forEach(([n, ok, d]) => check(n, ok, d));
+
   check('출력 무결성', !/NaN|undefined|Infinity/.test(all),
         (all.match(/.{0,30}(NaN|undefined|Infinity)/) || [''])[0]);
 } catch (e) {

@@ -98,6 +98,42 @@ button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--gold);outl
   background:rgba(11,15,27,.72);border:2px solid var(--ink);
   padding:5px 9px;font-family:var(--f-sm);font-size:10px;color:#B8C2E0;
 }
+/* ── 튜토리얼 ──────────────────────────────────
+   맵 좌하단 상시 체크리스트. 눌러야 할 버튼은 body[data-tut] 로 깜빡인다 —
+   독은 매 틱 innerHTML 이 새로 그려지므로 클래스를 직접 붙이면 날아간다. */
+#tut{
+  position:absolute;left:8px;bottom:8px;z-index:3;display:none;
+  background:rgba(11,15,27,.86);border:2px solid var(--gold);
+  box-shadow:var(--shadow-sm);width:206px;
+}
+#tut.on{display:block}
+.tut-head{
+  display:flex;align-items:center;gap:5px;padding:5px 7px;
+  border-bottom:2px solid var(--ink-3);
+}
+.tut-head b{font-size:12px;font-weight:normal;color:var(--gold)}
+.tut-head span{flex:1 1 auto;font-family:var(--f-sm);font-size:10px;color:#7C86A8}
+.tut-head button{
+  font-family:var(--f-sm);font-size:10px;color:#98A4CC;
+  border:2px solid var(--ink-3);padding:2px 5px;
+}
+.tut-head button:hover{border-color:var(--gold);color:var(--gold)}
+.tut-list{list-style:none;padding:6px 7px}
+.tut-list li{
+  font-family:var(--f-sm);font-size:10px;line-height:1.7;color:#7C86A8;
+  display:flex;gap:5px;padding:1px 0;
+}
+.tut-list li i{font-style:normal;flex:0 0 10px;text-align:center}
+.tut-list li.done{color:var(--jade);text-decoration:line-through}
+.tut-list li.now{font-family:var(--f);font-size:12px;color:var(--paper);line-height:1.5;padding:3px 0}
+.tut-list li.now i{color:var(--gold)}
+
+body[data-tut="store"] .mode-tab[data-mode="store"],
+body[data-tut="city"] .mode-tab[data-mode="city"],
+body[data-tut="shop"] .dbtn[data-t="shop"],
+body[data-tut="staff"] .dbtn[data-t="staff"]{animation:tutpulse 1s steps(1) infinite}
+@keyframes tutpulse{0%{box-shadow:0 0 0 3px var(--gold)}50%{box-shadow:none}}
+
 #canvas-wrap{
   flex:1 1 auto;min-height:0;position:relative;overflow:hidden;
 }

@@ -8,6 +8,7 @@ import { renderHud } from './hud.js';
 import { TAB } from './tabs.js';
 import { openModal } from './modal.js';
 import { toast } from './toast.js';
+import { tutDid } from './tutorial.js';
 
 /* ══════════════════════════════════════════════════════════════
    매장 창 — 사옥 모드 전용
@@ -170,6 +171,7 @@ function bind(s) {
     const got = orderInv(s, +b.dataset.order, false);
     if (!got) return toast('자금이 부족합니다', 'bad');
     sfx('coin'); toast(`재고 +${got}%`, 'good');
+    tutDid('order');   // 발주 직후와 자연 회복을 상태만으로는 못 가른다 — 튜토리얼이 유일하게 쓰는 훅
     renderShop(); renderHud();
   });
 
