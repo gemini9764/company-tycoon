@@ -124,14 +124,18 @@ const QUEUE = { gx: 6, gy: 3 };         // 손님이 계산 줄 서는 자리
 /* 사장실 옆에 붙어 있던 자리를 없애고 **전부 가운데로** 모았다. 통로는 gx 12,
    양옆 gx 11 · 13 에 마주 놓는다. 벽에 붙어 혼자 앉는 자리가 사라져
    사무실이 한 덩이로 읽힌다. */
+/* 책상은 `(gx, gy)`, 그 직원은 **`(gx, gy-1)`** 에 앉는다. 그래서 같은 열에서
+   책상 줄 간격이 1이면 뒷줄 직원이 앞줄 책상 위에 겹쳐 앉는다 — 예전 배치가
+   gy 4·5, 7·8 로 붙어 있어 그랬다. **줄 간격은 2 이상이어야 한다.**
+   첫 줄도 gy 4 가 아니라 5 다. gy 4 면 직원이 gy 3 에 앉는데 거기는 사장실
+   가로 벽(gx 12~15)이라 벽 속에 박힌다.
+   열은 11 · 13 · 15 를 쓰고 10 은 앞뒤 두 자리만 쓴다. 12 · 14 는 통로 겸
+   집기 자리로 비워 둔다 — 집기와 사람이 같은 열을 다투지 않게 하는 게 핵심이다. */
 const DESKS = [
-  { gx: 11, gy: 4 }, { gx: 13, gy: 4 },
-  { gx: 11, gy: 5 }, { gx: 13, gy: 5 },
-  { gx: 11, gy: 7 }, { gx: 13, gy: 7 },
-  { gx: 11, gy: 8 }, { gx: 13, gy: 8 },
-  { gx: 11, gy: 10 }, { gx: 13, gy: 10 },
-  { gx: 14, gy: 4 }, { gx: 15, gy: 4 },
-  { gx: 14, gy: 7 }, { gx: 15, gy: 7 },
+  { gx: 11, gy: 5 }, { gx: 13, gy: 5 }, { gx: 15, gy: 5 }, { gx: 10, gy: 5 },
+  { gx: 11, gy: 7 }, { gx: 13, gy: 7 }, { gx: 15, gy: 7 },
+  { gx: 11, gy: 9 }, { gx: 13, gy: 9 }, { gx: 15, gy: 9 }, { gx: 10, gy: 9 },
+  { gx: 11, gy: 11 }, { gx: 13, gy: 11 }, { gx: 15, gy: 11 },
 ];
 
 const BOSS = { desk: { gx: 14, gy: 1 }, seat: { gx: 14, gy: 0 } };   // 사장실 고정
@@ -776,11 +780,13 @@ function addMeeting(items, r) {
  * 등급이 오를수록(방이 깊어질수록) 늘어난다.
  */
 function addOfficeFill(items) {
+  /* 자리는 **책상 열(11·13·15)을 피해** 통로 열에 둔다. 예전에는 14·15 열에
+     깔려 있어 책상 위에 정수기와 캐비닛이 올라앉았다. */
   const rows = [
-    { gx: 15, gy: 4, k: 'cab' }, { gx: 15, gy: 5, k: 'cab' },
-    { gx: 14, gy: 4, k: 'water' }, { gx: 15, gy: 7, k: 'copier' },
-    { gx: 15, gy: 8, k: 'cab' }, { gx: 14, gy: 8, k: 'plant' },
-    { gx: 15, gy: 10, k: 'cab' }, { gx: 14, gy: 11, k: 'plant' },
+    { gx: 14, gy: 4, k: 'water' }, { gx: 14, gy: 6, k: 'copier' },
+    { gx: 14, gy: 8, k: 'cab' }, { gx: 14, gy: 10, k: 'cab' },
+    { gx: 12, gy: 6, k: 'plant' }, { gx: 12, gy: 10, k: 'plant' },
+    { gx: 10, gy: 6, k: 'cab' }, { gx: 10, gy: 10, k: 'plant' },
   ];
   for (const o of rows) {
     if (o.gy >= roomH() - 1) continue;
@@ -1112,9 +1118,12 @@ function drawProp(o) {
 /* 직원은 책상 북쪽(뒤)에 앉는다. 책상이 나중에 그려져 하반신을 가리고
    얼굴은 그대로 보인다 — 탑다운에서 모니터가 얼굴을 덮던 문제가 사라진다. */
 function addOffice(items) {
-  const staff = S.staff.slice(0, DESKS.length);
+  /* 방 밖으로 나가는 자리는 아예 빼고 앞줄부터 채운다 — 예전에는 gy 10 짜리
+     책상이 등급 낮을 때(roomH 9) 바닥 없는 허공에 놓였다. */
+  const seats = DESKS.filter(d => d.gy < roomH());
+  const staff = S.staff.slice(0, seats.length);
   staff.forEach((e, i) => {
-    const d = DESKS[i], seat = P(d.gx, d.gy - 1), desk = P(d.gx, d.gy);
+    const d = seats[i], seat = P(d.gx, d.gy - 1), desk = P(d.gx, d.gy);
     if (!e.look) e.look = newLook(e.trait.id === 'star' ? '#F2B233' : null);
     items.push({ y: seat.y, f: () => e.onTeam ? drawEmptyChair(seat, d) : drawSitter(seat.x, seat.y, e.look, 's', Math.floor(frame / 30 + i) % 2) });
     items.push({ y: desk.y, f: () => drawDesk(desk, !e.onTeam, i) });
@@ -1123,14 +1132,18 @@ function addOffice(items) {
   const bd = P(BOSS.desk.gx, BOSS.desk.gy), bs = P(BOSS.seat.gx, BOSS.seat.gy);
   items.push({ y: bs.y, f: () => drawSitter(bs.x, bs.y, boss, 's', Math.floor(frame / 40) % 2) });
   items.push({ y: bd.y, f: () => drawBossDesk(bd) });
-  const extraOff = [{ gx: 13, gy: 9, k: 'cabinet' }, { gx: 10, gy: 5, k: 'plant' }, { gx: 12, gy: 9, k: 'copier' }]
+  /* 아래 두 목록도 통로 열(12 · 14)과 10 열 빈칸만 쓴다. 책상 열에 두면
+     사람 위에 집기가 얹힌다. roomH 를 넘는 자리는 건너뛴다. */
+  const extraOff = [{ gx: 12, gy: 4, k: 'cabinet' }, { gx: 10, gy: 7, k: 'plant' }, { gx: 12, gy: 8, k: 'copier' }]
     .slice(0, fl('office'));
   for (const o of extraOff) {
+    if (o.gy >= roomH() - 1) continue;
     const p = P(o.gx, o.gy);
     items.push({ y: p.y, f: () => drawOfficeProp(p, o.k) });
   }
   for (const o of [{ gx: 13, gy: 0, k: 'shelf' }, { gx: 15, gy: 2, k: 'sofa' }, { gx: 13, gy: 2, k: 'plant' },
-                   { gx: 13, gy: 5, k: 'copier' }, { gx: 13, gy: 8, k: 'cooler' }, { gx: 15, gy: 9, k: 'cabinet' }, { gx: 10, gy: 9, k: 'plant' }]) {
+                   { gx: 12, gy: 5, k: 'copier' }, { gx: 14, gy: 9, k: 'cooler' }, { gx: 12, gy: 9, k: 'cabinet' }, { gx: 10, gy: 11, k: 'plant' }]) {
+    if (o.gy >= roomH() - 1) continue;
     const p = P(o.gx, o.gy);
     items.push({ y: p.y, f: () => drawOfficeProp(p, o.k) });
   }
